@@ -1,14 +1,3 @@
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PRISM — Supabase Database Schema
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Single migration file. Apply once via Supabase SQL editor
-# or via `supabase db push` if using the Supabase CLI.
-#
-# Seed data is at the bottom, COMMENTED OUT by default.
-# Uncomment and run once to populate the initial 84 trucks,
-# 125 sites, 2 geofences, and app_config row.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 -- ━─ Enable extensions ━─────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS postgis;

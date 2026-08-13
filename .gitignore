@@ -1,0 +1,26 @@
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Supabase CLI local state
+supabase/.env
+supabase/.supabase
+
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

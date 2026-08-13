@@ -25,6 +25,13 @@ export async function Topbar({ profile }: { profile: Awaited<ReturnType<typeof g
             Dashboard
           </Link>
 
+          <Link
+            href="/dispatch"
+            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
+          >
+            Dispatch
+          </Link>
+
           {profile?.role === "admin" && (
             <Link
               href="/admin"

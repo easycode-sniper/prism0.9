@@ -3,6 +3,9 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 
 interface MarkerData {
   lat: number;
@@ -16,7 +19,7 @@ interface MarkerData {
 export function MapView({ markers }: { markers: MarkerData[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const layerRef = useRef<L.LayerGroup | null>(null);
+  const layerRef = useRef<L.MarkerClusterGroup | null>(null);
 
   // Initialize map once
   useEffect(() => {
@@ -33,7 +36,13 @@ export function MapView({ markers }: { markers: MarkerData[] }) {
       maxZoom: 19,
     }).addTo(map);
 
-    layerRef.current = L.layerGroup().addTo(map);
+    // Marker clustering — needed at this fleet's scale (84 trucks can
+    // overlap heavily at low zoom). Disabled below zoom 11 so individual
+    // trucks are still selectable once zoomed in on a site/convoy.
+    layerRef.current = L.markerClusterGroup({
+      disableClusteringAtZoom: 11,
+      spiderfyOnMaxZoom: true,
+    }).addTo(map);
     mapRef.current = map;
 
     // Force resize after mount
@@ -73,7 +82,7 @@ export function MapView({ markers }: { markers: MarkerData[] }) {
         </div>`
       );
 
-      marker.addTo(layer);
+      layer.addLayer(marker);
     }
   }, [markers]);
 

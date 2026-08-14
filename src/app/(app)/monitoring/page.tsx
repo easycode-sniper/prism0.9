@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { getMonitoringData } from "@/lib/supabase/monitoring";
 import { checkPositionForDispatch } from "@/lib/supabase/positions";
 import type { MonitoringTruck, MonitoringData } from "@/lib/supabase/monitoring";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
-import { MapView } from "@/components/map/MapView";
+
+// Leaflet touches `window` at import time, so it can't be part of the
+// server-rendered bundle for this ("use client") page.
+const MapView = dynamic(() => import("@/components/map/MapView").then((m) => m.MapView), { ssr: false });
 
 type FilterType = "all" | "dispatched" | "moving" | "idle" | "offline";
 

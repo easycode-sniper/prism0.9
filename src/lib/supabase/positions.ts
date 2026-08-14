@@ -15,11 +15,17 @@ export interface PositionCheckResult {
   etaSeconds: number | null;
   etaBasis: "osrm-speed" | "fallback-speed" | null;
   etaLabel: string;
+  isSpeeding: boolean;
+  driverName: string | null;
   timestamp: Date;
 }
 
 const ROUTE_BUFFER_METERS = 400;
 const FALLBACK_AVG_SPEED_KMH = 65;
+
+// Speed limit — drivers must not exceed this. Matches the same rule as
+// the original single-file app.
+const SPEED_LIMIT_KMH = 90;
 
 export async function checkPositionForDispatch(
   truckId: string,
@@ -29,23 +35,27 @@ export async function checkPositionForDispatch(
   const user = await supabase.auth.getUser();
   if (!user.data.user) return { error: "Not authenticated" };
 
-  // Get dispatch info
+  // Get dispatch info — including CURRENT off-route/speeding state, so we
+  // can tell whether this check represents a NEW violation (false → true)
+  // or a continuation of one already notified about.
   const { data: dispatch, error: dispatchError } = await supabase
     .from("dispatches")
-    .select("id, truck_id, site_id, route_geometry, route_total_distance_meters, route_total_time_seconds")
+    .select(
+      "id, truck_id, site_id, route_geometry, route_total_distance_meters, route_total_time_seconds, is_off_route, is_speeding"
+    )
     .eq("id", dispatchId)
     .single();
 
   if (dispatchError || !dispatch) return { error: "Dispatch not found" };
 
-  // Get site coordinates for fallback
+  // Get site info for fallback + notification messages
   const { data: site } = await supabase
     .from("construction_sites")
-    .select("lat, lng")
+    .select("name, lat, lng")
     .eq("id", dispatch.site_id)
     .single();
 
-  // Get live position from Wialon
+  // Get live position (+ driver, if resolvable) from Wialon
   const config = getWialonConfig();
   if (!config?.token) return { error: "Wialon not configured" };
 
@@ -92,6 +102,8 @@ export async function checkPositionForDispatch(
     }
   }
 
+  const isSpeeding = unit.pos.speed > SPEED_LIMIT_KMH;
+
   const result: PositionCheckResult = {
     truckId,
     lat: unit.pos.lat,
@@ -103,10 +115,51 @@ export async function checkPositionForDispatch(
     etaSeconds,
     etaBasis,
     etaLabel: formatDuration(etaSeconds),
+    isSpeeding,
+    driverName: unit.driverName,
     timestamp: new Date(),
   };
 
-  // Update dispatch record
+  // ── Notifications: fire only on a false → true transition ──
+  const siteName = site?.name || "destination";
+  const wasOffRoute = dispatch.is_off_route === true;
+  const wasSpeeding = dispatch.is_speeding === true;
+  const nowOffRoute = deviationBasis === "route" && onRoute === false;
+  const nowSpeeding = isSpeeding;
+
+  const notificationsToInsert: {
+    dispatch_id: string;
+    truck_id: string;
+    kind: "off_route" | "speeding";
+    title: string;
+    message: string;
+  }[] = [];
+
+  if (nowOffRoute && !wasOffRoute) {
+    notificationsToInsert.push({
+      dispatch_id: dispatchId,
+      truck_id: truckId,
+      kind: "off_route",
+      title: "🔴 Truck left assigned route",
+      message: `${truckId} has deviated from its route to ${siteName} (${(deviationMeters! / 1000).toFixed(1)}km off).`,
+    });
+  }
+  if (nowSpeeding && !wasSpeeding) {
+    notificationsToInsert.push({
+      dispatch_id: dispatchId,
+      truck_id: truckId,
+      kind: "speeding",
+      title: "🟠 Speed limit exceeded",
+      message: `${truckId} is going ${Math.round(unit.pos.speed)}km/h on the run to ${siteName} (limit ${SPEED_LIMIT_KMH}km/h).`,
+    });
+  }
+
+  if (notificationsToInsert.length > 0) {
+    await supabase.from("notifications").insert(notificationsToInsert);
+  }
+
+  // Update dispatch record — current state (resettable) + lifetime flags
+  // (never reset, used for history/ratings) + driver name snapshot.
   await supabase
     .from("dispatches")
     .update({
@@ -118,7 +171,11 @@ export async function checkPositionForDispatch(
       last_deviation_basis: result.deviationBasis,
       last_eta_seconds: result.etaSeconds,
       last_eta_basis: result.etaBasis,
-      ever_off_route: result.onRoute === false ? true : undefined,
+      is_off_route: nowOffRoute,
+      is_speeding: nowSpeeding,
+      ever_off_route: nowOffRoute ? true : undefined,
+      ever_speeding: nowSpeeding ? true : undefined,
+      driver_name: result.driverName ?? undefined,
     })
     .eq("id", dispatchId);
 

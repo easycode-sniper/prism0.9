@@ -5,6 +5,41 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { getDriverRatings, DriverRating } from "@/lib/supabase/history";
+import { listGeofences } from "@/lib/supabase/geofences";
+import type { GeofenceRecord } from "@/lib/supabase/geofences";
+import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
+
+const GEOFENCE_EDGE_BUFFER_METERS = 150;
+
+function isWithinCircle(lat: number, lng: number, centerLat: number, centerLng: number, radiusMeters: number): boolean {
+  return haversineMeters(lat, lng, centerLat, centerLng) <= radiusMeters;
+}
+
+function classifyTruckLocation(
+  lat: number,
+  lng: number,
+  geofences: GeofenceRecord[]
+): "factory" | "base" | "customer_site" | "in_transit" {
+  const factory = geofences.find((g) => g.kind === "factory");
+  if (factory) {
+    if (factory.ring && isWithinGeofence([lat, lng], factory.ring, GEOFENCE_EDGE_BUFFER_METERS)) return "factory";
+    if (!factory.ring && factory.centerLat != null && factory.centerLng != null) {
+      if (isWithinCircle(lat, lng, factory.centerLat, factory.centerLng, factory.radiusMeters ?? 300)) return "factory";
+    }
+  }
+
+  for (const g of geofences) {
+    if (g.kind !== "site") continue;
+    const within = g.ring
+      ? isWithinGeofence([lat, lng], g.ring, GEOFENCE_EDGE_BUFFER_METERS)
+      : g.centerLat != null && g.centerLng != null
+        ? isWithinCircle(lat, lng, g.centerLat, g.centerLng, g.radiusMeters ?? GEOFENCE_EDGE_BUFFER_METERS)
+        : false;
+    if (within) return g.siteId ? "customer_site" : "base";
+  }
+
+  return "in_transit";
+}
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -13,6 +48,7 @@ export default function DashboardPage() {
   const [connectionStatus, setConnectionStatus] = useState<string>("—");
   const [ratings, setRatings] = useState<DriverRating[]>([]);
   const [ratingsError, setRatingsError] = useState<string | null>(null);
+  const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
 
   useEffect(() => {
     if (fleetData.error) {
@@ -27,6 +63,10 @@ export default function DashboardPage() {
       setRatings(data);
       setRatingsError(error);
     });
+  }, []);
+
+  useEffect(() => {
+    listGeofences().then(({ data }) => setGeofences(data));
   }, []);
 
   const trucks = fleetData.trucks;
@@ -44,11 +84,17 @@ export default function DashboardPage() {
     }],
   };
 
+  const trucksWithPosition = trucks.filter((t) => t.lat != null && t.lng != null);
+  const occupancy = { factory: 0, base: 0, customer_site: 0, in_transit: 0 };
+  for (const t of trucksWithPosition) {
+    occupancy[classifyTruckLocation(t.lat!, t.lng!, geofences)]++;
+  }
+
   const geofenceChart = {
-    labels: ["At PARC OMD 🔵", "At Customer Sites", "In Transit", "At Gas Stations"],
+    labels: ["At Factory 🔵", "At Base (PARC OMD)", "At Customer Site", "In Transit"],
     datasets: [{
-      data: [Math.floor(offline * 0.6), 0, moving, Math.floor(idle * 0.4)],
-      backgroundColor: ["#3b82f6", "#8b5cf6", "#06b6d4", "#f97316"],
+      data: [occupancy.factory, occupancy.base, occupancy.customer_site, occupancy.in_transit],
+      backgroundColor: ["#3b82f6", "#8b5cf6", "#22c55e", "#06b6d4"],
       borderWidth: 0,
     }],
   };

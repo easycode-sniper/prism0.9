@@ -131,16 +131,71 @@ function classifyStatus(unit: WialonUnit | undefined): "moving" | "idle" | "offl
 }
 
 // Find a single unit by truck ID
-export async function findWialonUnit(truckId: string): Promise<{ id: number; name: string; pos: WialonPosition | null } | null> {
+export async function findWialonUnit(truckId: string): Promise<{ id: number; name: string; pos: WialonPosition | null; driverName: string | null } | null> {
   const units = await fetchAllUnits();
   const matched = matchTrucksToUnits([truckId], units);
   const unit = matched.get(truckId);
   if (!unit) return null;
+
+  const driverMaps = await fetchWialonDriverMaps().catch((err) => {
+    console.warn("Driver library fetch failed — proceeding without driver name:", err.message);
+    return { driverByUnitId: {}, driverByCode: {} };
+  });
+
   return {
     id: unit.id,
     name: unit.name,
     pos: unit.pos,
+    driverName: resolveDriverName(unit, driverMaps),
   };
+}
+
+// ── Driver resolution ──
+// Wialon stores drivers under a "resource" (account-level), each with an
+// optional "bound unit" (bu) — the truck they're currently assigned to.
+// We match on that binding first, falling back to a driver code found on
+// the unit's own last-message data if present.
+
+interface WialonDriverMaps {
+  driverByUnitId: Record<number, string>;
+  driverByCode: Record<string, string>;
+}
+
+async function fetchWialonDriverMaps(): Promise<WialonDriverMaps> {
+  const sid = await wialonLogin();
+
+  const data = await wialonCall(
+    "core/search_items",
+    {
+      spec: { itemsType: "avl_resource", propName: "sys_name", propValueMask: "*", sortType: "sys_name" },
+      force: 1,
+      flags: 0x0001ffff,
+      from: 0,
+      to: 0,
+    },
+    sid
+  );
+  if (data.error) throw new Error(`Wialon resource search failed (code ${data.error})`);
+
+  const driverByUnitId: Record<number, string> = {};
+  const driverByCode: Record<string, string> = {};
+
+  for (const resource of data.items || []) {
+    const drvrs = resource.drvrs || {};
+    for (const drv of Object.values(drvrs) as any[]) {
+      if (drv.bu) driverByUnitId[drv.bu] = drv.n;
+      if (drv.c) driverByCode[drv.c] = drv.n;
+    }
+  }
+
+  return { driverByUnitId, driverByCode };
+}
+
+function resolveDriverName(unit: WialonUnit, maps: WialonDriverMaps): string | null {
+  if (maps.driverByUnitId[unit.id]) return maps.driverByUnitId[unit.id];
+  const code = (unit as any).lmsg?.p?.drv || (unit as any).pos?.p?.drv || (unit as any).drv;
+  if (code && maps.driverByCode[code]) return maps.driverByCode[code];
+  return null; // graceful — caller falls back to showing just the truck ID
 }
 
 // Get config

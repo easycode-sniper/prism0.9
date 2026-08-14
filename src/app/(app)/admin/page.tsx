@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { uploadKmlZones, listGeofences } from "@/lib/supabase/geofences";
 import type { KmlUploadReport, GeofenceRecord } from "@/lib/supabase/geofences";
 
@@ -44,8 +45,17 @@ export default function AdminPage() {
       <div>
         <h1 className="text-2xl font-semibold text-white">Admin</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>
-          Geofence management — upload Wialon zone exports (KML) and match them to sites.
+          Geofence management, user accounts, and connection settings.
         </p>
+      </div>
+
+      <div className="flex gap-3">
+        <Link href="/admin/users" className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)" }}>
+          👥 User Management
+        </Link>
+        <Link href="/admin/settings" className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)" }}>
+          ⚙️ Wialon Settings
+        </Link>
       </div>
 
       <div className="panel p-6">

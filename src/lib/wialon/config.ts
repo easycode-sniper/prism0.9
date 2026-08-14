@@ -1,10 +1,39 @@
-// Wialon configuration — embedded in source, never expires
-export const WIALON_CONFIG = {
-  relay: "https://wialon-relay1.ferdjellahsouhaibomd.workers.dev",
-  server: "hst-api.wialon.eu",
-  token: "320891517e06a26d588d3174f9414638811A365C73F5F3BAB3B16EFC1BA0D39D393E777C",
-  pollIntervalMs: 60_000,
-};
+"use server";
+
+// Wialon configuration is loaded from app_config (Supabase), not hardcoded.
+// This file is "use server" specifically so it's never bundled into client
+// JS — the token must not ship to the browser. Client components (e.g.
+// FleetProvider) call these as server actions instead of importing the
+// config directly.
+
+import { createClient } from "@/lib/supabase/server";
+
+const DEFAULT_RELAY = "https://wialon-relay1.ferdjellahsouhaibomd.workers.dev";
+const DEFAULT_SERVER = "hst-api.wialon.eu";
+
+interface ResolvedWialonConfig {
+  relay: string;
+  server: string;
+  token: string;
+}
+
+export async function getWialonConfig(): Promise<ResolvedWialonConfig | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("app_config")
+    .select("config_value")
+    .eq("config_key", "wialon")
+    .single();
+
+  const cfg = data?.config_value as { relay?: string; server?: string; token?: string } | undefined;
+  if (!cfg?.token) return null;
+
+  return {
+    relay: cfg.relay || DEFAULT_RELAY,
+    server: cfg.server || DEFAULT_SERVER,
+    token: cfg.token,
+  };
+}
 
 export interface WialonPosition {
   lat: number;
@@ -39,8 +68,8 @@ export interface FleetData {
 }
 
 // Call Wialon via the relay
-async function wialonCall(svc: string, params: object, sid?: string): Promise<any> {
-  let url = `${WIALON_CONFIG.relay}/?server=${encodeURIComponent(WIALON_CONFIG.server)}&svc=${encodeURIComponent(svc)}&params=${encodeURIComponent(JSON.stringify(params))}`;
+async function wialonCall(config: ResolvedWialonConfig, svc: string, params: object, sid?: string): Promise<any> {
+  let url = `${config.relay}/?server=${encodeURIComponent(config.server)}&svc=${encodeURIComponent(svc)}&params=${encodeURIComponent(JSON.stringify(params))}`;
   if (sid) url += `&sid=${encodeURIComponent(sid)}`;
 
   const resp = await fetch(url);
@@ -48,17 +77,18 @@ async function wialonCall(svc: string, params: object, sid?: string): Promise<an
 }
 
 // Login and get session ID
-async function wialonLogin(): Promise<string> {
-  const data = await wialonCall("token/login", { token: WIALON_CONFIG.token });
+async function wialonLogin(config: ResolvedWialonConfig): Promise<string> {
+  const data = await wialonCall(config, "token/login", { token: config.token });
   if (data.error) throw new Error(`Wialon login failed: ${data.error}`);
   return data.eid;
 }
 
 // Get all fleet units
-async function fetchAllUnits(): Promise<WialonUnit[]> {
-  const sid = await wialonLogin();
+async function fetchAllUnits(config: ResolvedWialonConfig): Promise<WialonUnit[]> {
+  const sid = await wialonLogin(config);
 
   const data = await wialonCall(
+    config,
     "core/search_items",
     {
       spec: {
@@ -132,12 +162,15 @@ function classifyStatus(unit: WialonUnit | undefined): "moving" | "idle" | "offl
 
 // Find a single unit by truck ID
 export async function findWialonUnit(truckId: string): Promise<{ id: number; name: string; pos: WialonPosition | null; driverName: string | null } | null> {
-  const units = await fetchAllUnits();
+  const config = await getWialonConfig();
+  if (!config) return null;
+
+  const units = await fetchAllUnits(config);
   const matched = matchTrucksToUnits([truckId], units);
   const unit = matched.get(truckId);
   if (!unit) return null;
 
-  const driverMaps = await fetchWialonDriverMaps().catch((err) => {
+  const driverMaps = await fetchWialonDriverMaps(config).catch((err) => {
     console.warn("Driver library fetch failed — proceeding without driver name:", err.message);
     return { driverByUnitId: {}, driverByCode: {} };
   });
@@ -161,10 +194,11 @@ interface WialonDriverMaps {
   driverByCode: Record<string, string>;
 }
 
-async function fetchWialonDriverMaps(): Promise<WialonDriverMaps> {
-  const sid = await wialonLogin();
+async function fetchWialonDriverMaps(config: ResolvedWialonConfig): Promise<WialonDriverMaps> {
+  const sid = await wialonLogin(config);
 
   const data = await wialonCall(
+    config,
     "core/search_items",
     {
       spec: { itemsType: "avl_resource", propName: "sys_name", propValueMask: "*", sortType: "sys_name" },
@@ -198,15 +232,29 @@ function resolveDriverName(unit: WialonUnit, maps: WialonDriverMaps): string | n
   return null; // graceful — caller falls back to showing just the truck ID
 }
 
-// Get config
-export function getWialonConfig() {
-  return WIALON_CONFIG;
-}
-
 // Main export: get fleet data
 export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
+  const config = await getWialonConfig();
+  if (!config) {
+    return {
+      trucks: allTruckIds.map((truck_id) => ({
+        truck_id,
+        matched: false,
+        lat: null,
+        lng: null,
+        speed: 0,
+        course: 0,
+        age_minutes: null,
+        status: "offline",
+        unit_name: null,
+      })),
+      lastUpdated: null,
+      error: "Wialon is not configured — set the API token in Admin → Settings.",
+    };
+  }
+
   try {
-    const units = await fetchAllUnits();
+    const units = await fetchAllUnits(config);
     const matched = matchTrucksToUnits(allTruckIds, units);
 
     const now = Date.now() / 1000;

@@ -68,7 +68,7 @@ export async function checkPositionForDispatch(
     .single();
 
   // Get live position (+ driver, if resolvable) from Wialon
-  const config = getWialonConfig();
+  const config = await getWialonConfig();
   if (!config?.token) return { error: "Wialon not configured" };
 
   const unit = await findWialonUnit(truckId);

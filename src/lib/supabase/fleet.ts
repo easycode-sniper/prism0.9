@@ -1,20 +1,8 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 import { getFleetData } from "@/lib/wialon/config";
 
-let supabase: ReturnType<typeof createSupabaseClient> | null = null;
-
-function getClient(): any {
-  if (!supabase) {
-    supabase = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-  }
-  return supabase;
-}
-
 export async function getFleetLiveData() {
-  const client = getClient();
+  const client = createClient();
 
   const { data: truckRows } = await client
     .from("fleet_trucks")

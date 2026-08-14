@@ -28,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Last update <strong style={{ color: 'var(--text)', fontSize: '.78rem' }}>Not yet synced</strong>
           </div>
         </div>
-        <main style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }}>{children}</main>
+        <main style={{ flex: 1, position: 'relative', overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>{children}</main>
       </div>
     </FleetProvider>
   );

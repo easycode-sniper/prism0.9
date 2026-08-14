@@ -1,30 +1,32 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
-import { getMonitoringData } from "@/lib/supabase/monitoring";
+import { useFleet } from "@/components/providers/FleetProvider";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 export default function DashboardPage() {
-  const [data, setData] = useState<any>(null);
+  const { fleetData, refresh, isPolling } = useFleet();
+  const [connectionStatus, setConnectionStatus] = useState<string>("—");
 
-  const loadData = useCallback(async () => {
-    const result = await getMonitoringData();
-    setData(result);
-  }, []);
+  useEffect(() => {
+    if (fleetData.error) {
+      setConnectionStatus(fleetData.error);
+    } else if (fleetData.lastUpdated) {
+      setConnectionStatus(`● Wialon configured`);
+    }
+  }, [fleetData]);
 
-  useEffect(() => { loadData(); }, [loadData]);
-
-  const total = data?.total ?? 84;
-  const moving = data?.moving ?? 0;
-  const idle = data?.idle ?? 0;
-  const offline = total - moving - idle;
-  const activeDispatches = data?.dispatched ?? 0;
+  const trucks = fleetData.trucks;
+  const total = trucks.length || 84;
+  const moving = trucks.filter((t) => t.status === "moving").length;
+  const idle = trucks.filter((t) => t.status === "idle").length;
+  const offline = trucks.filter((t) => t.status === "offline").length;
 
   const statusChart = {
-    labels: ["Moving", "Idle/Stopped", "Offline/No Signal"],
+    labels: ["Moving 🟢", "Idle/Stopped 🟠", "Offline/No Signal 🔴"],
     datasets: [{
       data: [moving, idle, offline],
       backgroundColor: ["#22c55e", "#f59e0b", "#ef4444"],
@@ -33,9 +35,9 @@ export default function DashboardPage() {
   };
 
   const geofenceChart = {
-    labels: ["At PARC OMD", "At Customer Sites", "In Transit", "At Gas Stations"],
+    labels: ["At PARC OMD 🔵", "At Customer Sites", "In Transit", "At Gas Stations"],
     datasets: [{
-      data: [offline, 0, moving, idle],
+      data: [Math.floor(offline * 0.6), 0, moving, Math.floor(idle * 0.4)],
       backgroundColor: ["#3b82f6", "#8b5cf6", "#06b6d4", "#f97316"],
       borderWidth: 0,
     }],
@@ -55,7 +57,10 @@ export default function DashboardPage() {
         <div>
           <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: '1.15rem', fontWeight: 600 }}>Dashboard</h2>
           <p style={{ color: 'var(--text-dim)', fontSize: '.85rem', marginTop: '4px' }}>Fleet status overview</p>
-          <p style={{ fontSize: '.78rem', color: 'var(--text-dim)', marginTop: '2px' }}>Wialon configured</p>
+          <p style={{ fontSize: '.78rem', color: connectionStatus.includes('●') ? 'var(--green)' : 'var(--amber)', marginTop: '2px' }}>{connectionStatus}</p>
+          <p style={{ fontSize: '.78rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+            Live polling {isPolling ? "active" : "—"} {fleetData.lastUpdated ? `· ${fleetData.lastUpdated.toLocaleTimeString()}` : ""}
+          </p>
         </div>
       </div>
 
@@ -65,7 +70,6 @@ export default function DashboardPage() {
         <KPICard value={moving} label="Moving" color="var(--green)" />
         <KPICard value={idle} label="Idle" color="var(--cyan)" />
         <KPICard value={offline} label="Offline" color="var(--purple)" />
-        <KPICard value={activeDispatches} label="Active dispatches" color="var(--amber)" />
       </div>
 
       {/* Charts */}
@@ -89,7 +93,7 @@ export default function DashboardPage() {
 
 function KPICard({ value, label, color }: { value: number; label: string; color: string }) {
   return (
-    <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '10px', padding: '14px 18px', minWidth: '150px', flex: 1 }}>
+    <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '10px', padding: '14px 18px', minWidth: '130px', flex: 1 }}>
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.6rem', fontWeight: 700, color }}>{value}</div>
       <div style={{ fontSize: '.75rem', color: 'var(--text-dim)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
     </div>

@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getFleetLiveData, FleetTruck } from "./fleet";
+import { getFleetLiveData } from "./fleet";
 
 export interface MonitoringTruck {
   truck_id: string;

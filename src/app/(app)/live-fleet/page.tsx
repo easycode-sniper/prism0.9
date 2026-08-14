@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getFleetLiveData } from "@/lib/supabase/fleet";
-import type { FleetTruck } from "@/lib/supabase/fleet";
+import type { FleetTruck } from "@/lib/wialon/config";
 
 const POLL_INTERVAL_MS = 60_000;
 

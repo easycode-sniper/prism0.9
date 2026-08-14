@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { findWialonUnit, getWialonConfig } from "@/lib/wialon";
+import { findWialonUnit, getWialonConfig } from "@/lib/wialon/config";
 import { projectPointOntoRoute, haversineMeters, formatDuration } from "@/lib/geometry";
 
 export interface PositionCheckResult {
@@ -46,10 +46,10 @@ export async function checkPositionForDispatch(
     .single();
 
   // Get live position from Wialon
-  const config = await getWialonConfig();
+  const config = getWialonConfig();
   if (!config?.token) return { error: "Wialon not configured" };
 
-  const unit = await findWialonUnit(config, truckId);
+  const unit = await findWialonUnit(truckId);
   if (!unit) return { error: `Truck ${truckId} not found in Wialon` };
   if (!unit.pos) return { error: `No position data for ${truckId}` };
 

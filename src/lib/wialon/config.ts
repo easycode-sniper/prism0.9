@@ -1,0 +1,213 @@
+// Wialon configuration — embedded in source, never expires
+export const WIALON_CONFIG = {
+  relay: "https://wialon-relay1.ferdjellahsouhaibomd.workers.dev",
+  server: "hst-api.wialon.eu",
+  token: "320891517e06a26d588d3174f9414638811A365C73F5F3BAB3B16EFC1BA0D39D393E777C",
+  pollIntervalMs: 60_000,
+};
+
+export interface WialonPosition {
+  lat: number;
+  lng: number;
+  speed: number;
+  course: number;
+  timestamp: number;
+}
+
+export interface WialonUnit {
+  id: number;
+  name: string;
+  pos: WialonPosition | null;
+}
+
+export interface FleetTruck {
+  truck_id: string;
+  matched: boolean;
+  lat: number | null;
+  lng: number | null;
+  speed: number;
+  course: number;
+  age_minutes: number | null;
+  status: "moving" | "idle" | "offline";
+  unit_name: string | null;
+}
+
+export interface FleetData {
+  trucks: FleetTruck[];
+  lastUpdated: Date | null;
+  error: string | null;
+}
+
+// Call Wialon via the relay
+async function wialonCall(svc: string, params: object, sid?: string): Promise<any> {
+  let url = `${WIALON_CONFIG.relay}/?server=${encodeURIComponent(WIALON_CONFIG.server)}&svc=${encodeURIComponent(svc)}&params=${encodeURIComponent(JSON.stringify(params))}`;
+  if (sid) url += `&sid=${encodeURIComponent(sid)}`;
+
+  const resp = await fetch(url);
+  return resp.json();
+}
+
+// Login and get session ID
+async function wialonLogin(): Promise<string> {
+  const data = await wialonCall("token/login", { token: WIALON_CONFIG.token });
+  if (data.error) throw new Error(`Wialon login failed: ${data.error}`);
+  return data.eid;
+}
+
+// Get all fleet units
+async function fetchAllUnits(): Promise<WialonUnit[]> {
+  const sid = await wialonLogin();
+
+  const data = await wialonCall(
+    "core/search_items",
+    {
+      spec: {
+        itemsType: "avl_unit",
+        propName: "sys_name",
+        propValueMask: "*",
+        sortType: "sys_name",
+      },
+      force: 1,
+      flags: 1439,
+      from: 0,
+      to: 0,
+    },
+    sid
+  );
+
+  if (data.error) throw new Error(`Wialon search failed: ${data.error}`);
+
+  return (data.items || []).map((item: any) => ({
+    id: item.id,
+    name: item.nm,
+    pos: item.pos
+      ? {
+          lat: item.pos.y,
+          lng: item.pos.x,
+          speed: item.pos.s || 0,
+          course: item.pos.c || 0,
+          timestamp: item.pos.t,
+        }
+      : null,
+  }));
+}
+
+// Match our truck IDs against Wialon units
+function matchTrucksToUnits(
+  allTruckIds: string[],
+  units: WialonUnit[]
+): Map<string, WialonUnit> {
+  const results = new Map<string, WialonUnit>();
+
+  for (const truckId of allTruckIds) {
+    const candidates = [
+      truckId,
+      truckId.replace(/^0+/, ""),
+      truckId.split("-")[0],
+    ];
+
+    for (const candidate of candidates) {
+      const match = units.find(
+        (u) => u.name && u.name.toLowerCase().includes(candidate.toLowerCase())
+      );
+      if (match) {
+        results.set(truckId, match);
+        break;
+      }
+    }
+  }
+
+  return results;
+}
+
+// Classify truck status based on speed and age
+function classifyStatus(unit: WialonUnit | undefined): "moving" | "idle" | "offline" {
+  if (!unit || !unit.pos) return "offline";
+
+  const ageMinutes = (Date.now() / 1000 - unit.pos.timestamp) / 60;
+  if (ageMinutes >= 30) return "offline";
+  if (unit.pos.speed > 5) return "moving";
+  return "idle";
+}
+
+// Find a single unit by truck ID
+export async function findWialonUnit(truckId: string): Promise<{ id: number; name: string; pos: WialonPosition | null } | null> {
+  const units = await fetchAllUnits();
+  const matched = matchTrucksToUnits([truckId], units);
+  const unit = matched.get(truckId);
+  if (!unit) return null;
+  return {
+    id: unit.id,
+    name: unit.name,
+    pos: unit.pos,
+  };
+}
+
+// Get config
+export function getWialonConfig() {
+  return WIALON_CONFIG;
+}
+
+// Main export: get fleet data
+export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
+  try {
+    const units = await fetchAllUnits();
+    const matched = matchTrucksToUnits(allTruckIds, units);
+
+    const now = Date.now() / 1000;
+    const trucks: FleetTruck[] = allTruckIds.map((truckId) => {
+      const unit = matched.get(truckId);
+
+      if (!unit || !unit.pos) {
+        return {
+          truck_id: truckId,
+          matched: !!unit,
+          lat: null,
+          lng: null,
+          speed: 0,
+          course: 0,
+          age_minutes: null,
+          status: "offline",
+          unit_name: unit?.name || null,
+        };
+      }
+
+      const ageMinutes = Math.round((now - unit.pos.timestamp) / 60);
+      const status = classifyStatus(unit);
+
+      return {
+        truck_id: truckId,
+        matched: true,
+        lat: unit.pos.lat,
+        lng: unit.pos.lng,
+        speed: unit.pos.speed,
+        course: unit.pos.course,
+        age_minutes: ageMinutes,
+        status,
+        unit_name: unit.name,
+      };
+    });
+
+    return {
+      trucks,
+      lastUpdated: new Date(),
+      error: null,
+    };
+  } catch (err: any) {
+    return {
+      trucks: allTruckIds.map((truck_id) => ({
+        truck_id,
+        matched: false,
+        lat: null,
+        lng: null,
+        speed: 0,
+        course: 0,
+        age_minutes: null,
+        status: "offline",
+        unit_name: null,
+      })),
+      lastUpdated: null,
+      error: err.message,
+    };
+  }
+}

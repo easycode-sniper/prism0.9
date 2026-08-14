@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   listSites,
@@ -9,6 +9,7 @@ import {
   createDispatch,
   stopDispatch,
 } from "@/lib/supabase/actions";
+import { createClient } from "@/lib/supabase/client";
 import type { SiteRecord, TruckRecord, DispatchRecord } from "@/lib/supabase/actions";
 
 export default function DispatchPage() {
@@ -22,11 +23,7 @@ export default function DispatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const [sitesRes, trucksRes, dispatchesRes] = await Promise.all([
       listSites(),
       listTrucks(),
@@ -36,7 +33,31 @@ export default function DispatchPage() {
     if (sitesRes.data) setSites(sitesRes.data);
     if (trucksRes.data) setTrucks(trucksRes.data);
     if (dispatchesRes.data) setDispatches(dispatchesRes.data);
-  }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Subscribe to realtime changes on dispatches table so other users'
+  // updates appear immediately without refresh
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("dispatches-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dispatches" },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadData]);
 
   async function handleCreateDispatch(e: React.FormEvent) {
     e.preventDefault();

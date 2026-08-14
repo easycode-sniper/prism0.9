@@ -325,8 +325,11 @@ hr {
 .leaflet-container { font-family: var(--font-sans); background: var(--bg); }
 
 /* Print */
+@media screen {
+  #print-area { display: none; }
+}
 @media print {
   body * { visibility: hidden; }
   #print-area, #print-area * { visibility: visible; }
-  #print-area { position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; padding: 24px; }
+  #print-area { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; padding: 24px; }
 }

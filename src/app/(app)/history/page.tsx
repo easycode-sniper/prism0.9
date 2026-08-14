@@ -20,9 +20,10 @@ export default function HistoryPage() {
 
   function exportCsv() {
     if (records.length === 0) return;
-    const header = ["Truck", "Client", "Destination", "Dispatched", "Stopped", "Duration (min)", "Status", "Off Route", "Speeding", "Dispatcher"];
+    const header = ["Truck", "Driver", "Client", "Destination", "Dispatched", "Stopped", "Duration (min)", "Status", "Off Route", "Speeding", "Dispatcher"];
     const rows = records.map((r) => [
       r.truck_id,
+      r.driver_name || "",
       r.client || "",
       r.site_name || "",
       r.dispatched_at,
@@ -42,6 +43,25 @@ export default function HistoryPage() {
     a.download = `dispatch-history-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function isToday(iso: string): boolean {
+    const d = new Date(iso);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  }
+
+  const todaysRecords = records.filter((r) => isToday(r.dispatched_at));
+  const todaysStats = {
+    total: todaysRecords.length,
+    completed: todaysRecords.filter((r) => r.status === "completed").length,
+    stopped: todaysRecords.filter((r) => r.status === "stopped").length,
+    offRoute: todaysRecords.filter((r) => r.ever_off_route).length,
+    speeding: todaysRecords.filter((r) => r.ever_speeding).length,
+  };
+
+  function printDailySummary() {
+    window.print();
   }
 
   function csvEscape(s: string | null | undefined): string {
@@ -66,14 +86,22 @@ export default function HistoryPage() {
             {records.length} completed run{records.length === 1 ? "" : "s"}
           </p>
         </div>
-        {records.length > 0 && (
+        <div className="flex gap-2">
           <button
-            onClick={exportCsv}
+            onClick={printDailySummary}
             className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-800"
           >
-            ⬇ Export CSV
+            🖨 Print Daily Summary
           </button>
-        )}
+          {records.length > 0 && (
+            <button
+              onClick={exportCsv}
+              className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-800"
+            >
+              ⬇ Export CSV
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="mt-4 rounded-md bg-red-900/50 p-3 text-sm text-red-300">{error}</div>}
@@ -119,6 +147,68 @@ export default function HistoryPage() {
           </table>
         </div>
       )}
+
+      {/* Print-only daily summary — hidden on screen, shown via @media print (#print-area rule in globals.css) */}
+      <div id="print-area">
+        <h1 style={{ fontSize: "20px", fontWeight: 700, marginBottom: 4 }}>OMD Transport — Daily Dispatch Summary</h1>
+        <p style={{ fontSize: "13px", marginBottom: 16 }}>{new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 20, fontSize: "13px" }}>
+          <tbody>
+            <tr>
+              <td style={{ padding: "4px 12px 4px 0" }}>Total runs today</td>
+              <td style={{ fontWeight: 700 }}>{todaysStats.total}</td>
+              <td style={{ padding: "4px 12px 4px 24px" }}>Completed</td>
+              <td style={{ fontWeight: 700 }}>{todaysStats.completed}</td>
+            </tr>
+            <tr>
+              <td style={{ padding: "4px 12px 4px 0" }}>Stopped</td>
+              <td style={{ fontWeight: 700 }}>{todaysStats.stopped}</td>
+              <td style={{ padding: "4px 12px 4px 24px" }}>Off-route incidents</td>
+              <td style={{ fontWeight: 700 }}>{todaysStats.offRoute}</td>
+            </tr>
+            <tr>
+              <td style={{ padding: "4px 12px 4px 0" }}>Speeding incidents</td>
+              <td style={{ fontWeight: 700 }}>{todaysStats.speeding}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        {todaysRecords.length === 0 ? (
+          <p style={{ fontSize: "13px" }}>No completed or stopped runs today.</p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #000", textAlign: "left" }}>
+                <th style={{ padding: "4px" }}>Truck</th>
+                <th style={{ padding: "4px" }}>Driver</th>
+                <th style={{ padding: "4px" }}>Destination</th>
+                <th style={{ padding: "4px" }}>Dispatched</th>
+                <th style={{ padding: "4px" }}>Duration</th>
+                <th style={{ padding: "4px" }}>Status</th>
+                <th style={{ padding: "4px" }}>Alerts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todaysRecords.map((r) => (
+                <tr key={r.id} style={{ borderBottom: "1px solid #ccc" }}>
+                  <td style={{ padding: "4px" }}>{r.truck_id}</td>
+                  <td style={{ padding: "4px" }}>{r.driver_name || "—"}</td>
+                  <td style={{ padding: "4px" }}>{r.site_name || "—"}</td>
+                  <td style={{ padding: "4px" }}>{new Date(r.dispatched_at).toLocaleTimeString()}</td>
+                  <td style={{ padding: "4px" }}>{r.duration_minutes != null ? `${r.duration_minutes} min` : "—"}</td>
+                  <td style={{ padding: "4px" }}>{r.status}</td>
+                  <td style={{ padding: "4px" }}>
+                    {[r.ever_off_route && "Off route", r.ever_speeding && "Speeding"].filter(Boolean).join(", ") || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

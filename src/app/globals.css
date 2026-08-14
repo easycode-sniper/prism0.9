@@ -1,17 +1,127 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a14;
-  --foreground: #e7e7f5;
+  /* Backgrounds */
+  --bg-base: #0a0a14;
+  --bg-surface: #12121f;
+  --bg-surface-2: #191929;
+  --bg-surface-3: #1f1f34;
+  --bg-hover: #22223a;
+  --bg-active: #2a2a45;
+
+  /* Lines */
+  --line: #26263c;
+  --line-subtle: rgba(38, 38, 60, 0.5);
+
+  /* Text */
+  --text: #e7e7f5;
+  --text-dim: #8f8fb0;
+  --text-muted: #62626f;
+
+  /* Accent */
+  --indigo: #6d5bff;
+  --indigo-hover: #7c6bff;
+  --indigo-subtle: rgba(109, 91, 255, 0.12);
+
+  /* Status */
+  --green: #4ade80;
+  --green-subtle: rgba(74, 222, 128, 0.12);
+  --cyan: #22d3ee;
+  --cyan-subtle: rgba(34, 211, 238, 0.12);
+  --amber: #ffb703;
+  --amber-subtle: rgba(255, 183, 3, 0.12);
+  --red: #f87171;
+  --red-subtle: rgba(248, 113, 113, 0.12);
+  --purple: #a855f7;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+
+  /* Transitions */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text);
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* {
+  border-color: var(--line);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth transitions for interactive elements */
+a, button, input, select {
+  transition: background-color 0.15s var(--ease),
+              border-color 0.15s var(--ease),
+              color 0.15s var(--ease),
+              box-shadow 0.15s var(--ease);
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 3px var(--indigo);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Selection */
+::selection {
+  background: var(--indigo);
+  color: white;
+}
+
+/* Print */
+@media print {
+  body * { visibility: hidden; }
+  #print-area, #print-area * { visibility: visible; }
+  #print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    color: #000;
+    background: #fff;
+    padding: 24px;
+  }
+}
+
+/* Leaflet container fix */
+.leaflet-container {
+  background: var(--bg-surface);
+  font-family: var(--font-sans);
+}
+
+/* Cluster markers */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+  background: transparent;
 }

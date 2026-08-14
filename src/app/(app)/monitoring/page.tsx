@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getMonitoringData } from "@/lib/supabase/monitoring";
+import { checkPositionForDispatch } from "@/lib/supabase/positions";
 import type { MonitoringTruck, MonitoringData } from "@/lib/supabase/monitoring";
+import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { MapView } from "@/components/map/MapView";
 
 type FilterType = "all" | "dispatched" | "moving" | "idle" | "offline";
@@ -13,6 +15,8 @@ export default function MonitoringPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState(true);
   const [selectedTruck, setSelectedTruck] = useState<string | null>(null);
+  const [checkResults, setCheckResults] = useState<Map<string, PositionCheckResult>>(new Map());
+  const [checking, setChecking] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -21,11 +25,17 @@ export default function MonitoringPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 60_000);
-    return () => clearInterval(interval);
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
+
+  async function handleCheckPosition(dispatchId: string, truckId: string) {
+    setChecking(truckId);
+    const result = await checkPositionForDispatch(truckId, dispatchId);
+    if (result.result) {
+      setCheckResults(prev => new Map(prev).set(dispatchId, result.result!));
+    }
+    setChecking(null);
+    await loadData();
+  }
 
   if (loading && !data) {
     return (
@@ -38,7 +48,6 @@ export default function MonitoringPage() {
   const trucks = data?.trucks ?? [];
 
   const filteredTrucks = trucks.filter((t) => {
-    // Search
     if (search) {
       const s = search.toLowerCase();
       const matchTruck = t.truck_id.toLowerCase().includes(s);
@@ -46,8 +55,6 @@ export default function MonitoringPage() {
       const matchClient = t.client?.toLowerCase().includes(s) ?? false;
       if (!matchTruck && !matchSite && !matchClient) return false;
     }
-
-    // Filter
     if (filter === "dispatched") return t.dispatched;
     if (filter === "moving") return t.status === "moving";
     if (filter === "idle") return t.status === "idle";
@@ -68,7 +75,6 @@ export default function MonitoringPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="border-b border-gray-800 bg-gray-900/50 p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -78,7 +84,6 @@ export default function MonitoringPage() {
               {data?.idle ?? 0} idle · {data?.offline ?? 0} offline
             </p>
           </div>
-
           <div className="flex items-center gap-3">
             <input
               type="text"
@@ -88,34 +93,22 @@ export default function MonitoringPage() {
               className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
             />
             <div className="flex gap-1">
-              {(["all", "dispatched", "moving", "idle", "offline"] as const).map(
-                (f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`rounded px-2 py-1 text-xs transition ${
-                      filter === f
-                        ? "bg-indigo-600 text-white"
-                        : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                )
-              )}
+              {(["all", "dispatched", "moving", "idle", "offline"] as const).map((f) => (
+                <button key={f} onClick={() => setFilter(f)}
+                  className={`rounded px-2 py-1 text-xs transition ${filter === f ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"}`}>
+                  {f}
+                </button>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex flex-1 min-h-0">
-        {/* Map */}
         <div className="w-1/2 border-r border-gray-800">
           <MapView markers={mapMarkers} />
         </div>
 
-        {/* Table */}
         <div className="w-1/2 overflow-y-auto">
           <table className="w-full">
             <thead className="sticky top-0 bg-gray-900">
@@ -125,54 +118,48 @@ export default function MonitoringPage() {
                 <th className="px-4 py-2">Speed</th>
                 <th className="px-4 py-2">Destination</th>
                 <th className="px-4 py-2">Route</th>
+                <th className="px-4 py-2">ETA</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
-              {filteredTrucks.map((t) => (
-                <tr
-                  key={t.truck_id}
-                  onClick={() => setSelectedTruck(t.truck_id)}
-                  className={`cursor-pointer text-sm transition hover:bg-gray-800/50 ${
-                    selectedTruck === t.truck_id ? "bg-gray-800/50" : ""
-                  }`}
-                >
-                  <td className="px-4 py-2 font-mono text-cyan-400">
-                    {t.truck_id}
-                  </td>
-                  <td className="px-4 py-2">
-                    <StatusBadge status={t.status} />
-                  </td>
-                  <td className="px-4 py-2 text-gray-300">
-                    {t.lat != null ? `${t.speed} km/h` : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-gray-400">
-                    {t.site_name ? (
-                      <span className="text-white">{t.site_name}</span>
-                    ) : (
-                      <span className="text-gray-600">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    {t.dispatched ? (
-                      t.last_on_route === false ? (
-                        <span className="text-red-400">⚠ Off</span>
-                      ) : t.last_on_route === true ? (
-                        <span className="text-green-400">✓ On</span>
-                      ) : (
-                        <span className="text-amber-400">Pending</span>
-                      )
-                    ) : (
-                      <span className="text-gray-600">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {filteredTrucks.map((t) => {
+                const check = t.dispatch_id ? checkResults.get(t.dispatch_id) : null;
+                return (
+                  <tr key={t.truck_id} onClick={() => setSelectedTruck(t.truck_id)}
+                    className={`cursor-pointer text-sm transition hover:bg-gray-800/50 ${selectedTruck === t.truck_id ? "bg-gray-800/50" : ""}`}>
+                    <td className="px-4 py-2 font-mono text-cyan-400">{t.truck_id}</td>
+                    <td className="px-4 py-2"><StatusBadge status={t.status} /></td>
+                    <td className="px-4 py-2 text-gray-300">{t.lat != null ? `${t.speed} km/h` : "—"}</td>
+                    <td className="px-4 py-2 text-gray-400">
+                      {t.site_name ? <span className="text-white">{t.site_name}</span> : <span className="text-gray-600">—</span>}
+                    </td>
+                    <td className="px-4 py-2">
+                      {t.dispatched ? (
+                        t.last_on_route === false ? <span className="text-red-400" title={check ? `${(check.deviationMeters! / 1000).toFixed(1)}km off` : ""}>⚠ Off</span>
+                        : t.last_on_route === true ? <span className="text-green-400">✓ On</span>
+                        : <button onClick={(e) => { e.stopPropagation(); t.dispatch_id && handleCheckPosition(t.dispatch_id, t.truck_id); }}
+                          disabled={checking === t.truck_id}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50">
+                          {checking === t.truck_id ? "..." : "Check"}
+                        </button>
+                      ) : <span className="text-gray-600">—</span>}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-gray-400">
+                      {check?.etaSeconds != null ? (
+                        <span className={check.onRoute ? "text-green-400" : "text-amber-400"}>
+                          {check.etaLabel}{check.etaBasis === "fallback-speed" ? "*" : ""}
+                        </span>
+                      ) : t.last_eta_seconds != null ? (
+                        <span>{formatEta(t.last_eta_seconds)}</span>
+                      ) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {filteredTrucks.length === 0 && (
-            <div className="p-8 text-center text-sm text-gray-500">
-              No trucks match the current filter.
-            </div>
+            <div className="p-8 text-center text-sm text-gray-500">No trucks match the current filter.</div>
           )}
         </div>
       </div>
@@ -181,17 +168,14 @@ export default function MonitoringPage() {
 }
 
 function StatusBadge({ status }: { status: MonitoringTruck["status"] }) {
-  const styles = {
-    moving: "bg-green-900/50 text-green-400",
-    idle: "bg-cyan-900/50 text-cyan-400",
-    offline: "bg-gray-800 text-gray-500",
-  };
+  const styles = { moving: "bg-green-900/50 text-green-400", idle: "bg-cyan-900/50 text-cyan-400", offline: "bg-gray-800 text-gray-500" };
+  return <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${styles[status]}`}>{status}</span>;
+}
 
-  return (
-    <span
-      className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${styles[status]}`}
-    >
-      {status}
-    </span>
-  );
+function formatEta(seconds: number): string {
+  if (seconds < 0) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  if (h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
 }

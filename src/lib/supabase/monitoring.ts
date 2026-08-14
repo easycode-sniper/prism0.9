@@ -18,6 +18,7 @@ export interface MonitoringTruck {
   client: string | null;
   dispatched_at: string | null;
   last_on_route: boolean | null;
+  last_eta_seconds: number | null;
 }
 
 export interface MonitoringData {
@@ -55,6 +56,7 @@ export async function getMonitoringData(): Promise<MonitoringData> {
       truck_id,
       dispatched_at,
       last_on_route,
+      last_eta_seconds,
       site:construction_sites(name, client)
     `
     )
@@ -87,6 +89,7 @@ export async function getMonitoringData(): Promise<MonitoringData> {
         : dispatch?.site?.client || null,
       dispatched_at: dispatch?.dispatched_at || null,
       last_on_route: dispatch?.last_on_route ?? null,
+      last_eta_seconds: dispatch?.last_eta_seconds ?? null,
     };
   });
 

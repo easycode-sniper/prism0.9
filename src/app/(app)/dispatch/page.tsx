@@ -13,8 +13,10 @@ import { checkPositionForDispatch } from "@/lib/supabase/positions";
 import { createClient } from "@/lib/supabase/client";
 import type { SiteRecord, TruckRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 export default function DispatchPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [trucks, setTrucks] = useState<TruckRecord[]>([]);
@@ -88,9 +90,9 @@ export default function DispatchPage() {
   return (
     <div className="mx-auto max-w-6xl p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-white">Dispatch</h1>
+        <h1 className="text-2xl font-semibold text-white">{t("dispatch.title")}</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>
-          Assign trucks to destinations and check route compliance.
+          {t("dispatch.subtitle")}
         </p>
       </div>
 

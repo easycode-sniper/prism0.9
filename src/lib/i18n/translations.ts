@@ -1,0 +1,85 @@
+// Chrome-level translations (nav, page headers, common actions). Deep
+// content — notification message text, error strings, form field values —
+// stays English, matching the original single-file app's own scope
+// decision for Arabic support.
+
+export type Language = "en" | "fr" | "ar";
+
+export const translations: Record<Language, Record<string, string>> = {
+  en: {
+    "brand.title": "Fleet Route Monitor",
+    "brand.subtitle": "OMD Transport · Amouda Line",
+    "nav.dashboard": "🏠 Dashboard",
+    "nav.dispatch": "🗺️ Dispatch",
+    "nav.monitoring": "🔎 Monitoring",
+    "nav.liveFleet": "📡 Live Fleet",
+    "nav.history": "📜 History",
+    "nav.notifications": "🔔 Notifications",
+    "nav.admin": "⚙️ Admin",
+    "common.signOut": "Sign Out",
+    "common.language": "Language",
+    "dashboard.title": "Dashboard",
+    "dashboard.subtitle": "Fleet status overview",
+    "dispatch.title": "Dispatch",
+    "dispatch.subtitle": "Assign trucks to destinations and check route compliance.",
+    "monitoring.title": "Monitoring",
+    "liveFleet.title": "Live Fleet",
+    "liveFleet.subtitle": "Real-time truck telemetry from Wialon.",
+    "history.title": "History",
+    "notifications.title": "Notifications",
+    "admin.title": "Admin",
+    "admin.subtitle": "Geofence management, user accounts, and connection settings.",
+  },
+  fr: {
+    "brand.title": "Suivi des itinéraires",
+    "brand.subtitle": "OMD Transport · Ligne Amouda",
+    "nav.dashboard": "🏠 Tableau de bord",
+    "nav.dispatch": "🗺️ Répartition",
+    "nav.monitoring": "🔎 Surveillance",
+    "nav.liveFleet": "📡 Flotte en direct",
+    "nav.history": "📜 Historique",
+    "nav.notifications": "🔔 Notifications",
+    "nav.admin": "⚙️ Admin",
+    "common.signOut": "Déconnexion",
+    "common.language": "Langue",
+    "dashboard.title": "Tableau de bord",
+    "dashboard.subtitle": "Vue d'ensemble de l'état de la flotte",
+    "dispatch.title": "Répartition",
+    "dispatch.subtitle": "Assigner des camions aux destinations et vérifier le respect de l'itinéraire.",
+    "monitoring.title": "Surveillance",
+    "liveFleet.title": "Flotte en direct",
+    "liveFleet.subtitle": "Télémétrie des camions en temps réel depuis Wialon.",
+    "history.title": "Historique",
+    "notifications.title": "Notifications",
+    "admin.title": "Admin",
+    "admin.subtitle": "Gestion des géorepérages, comptes utilisateurs et paramètres de connexion.",
+  },
+  ar: {
+    "brand.title": "مراقبة مسارات الأسطول",
+    "brand.subtitle": "OMD للنقل · خط أموداء",
+    "nav.dashboard": "🏠 لوحة التحكم",
+    "nav.dispatch": "🗺️ الإرسال",
+    "nav.monitoring": "🔎 المراقبة",
+    "nav.liveFleet": "📡 الأسطول المباشر",
+    "nav.history": "📜 السجل",
+    "nav.notifications": "🔔 الإشعارات",
+    "nav.admin": "⚙️ الإدارة",
+    "common.signOut": "تسجيل الخروج",
+    "common.language": "اللغة",
+    "dashboard.title": "لوحة التحكم",
+    "dashboard.subtitle": "نظرة عامة على حالة الأسطول",
+    "dispatch.title": "الإرسال",
+    "dispatch.subtitle": "تعيين الشاحنات للوجهات والتحقق من الالتزام بالمسار.",
+    "monitoring.title": "المراقبة",
+    "liveFleet.title": "الأسطول المباشر",
+    "liveFleet.subtitle": "بيانات تتبع الشاحنات المباشرة من Wialon.",
+    "history.title": "السجل",
+    "notifications.title": "الإشعارات",
+    "admin.title": "الإدارة",
+    "admin.subtitle": "إدارة الجيوفنس وحسابات المستخدمين وإعدادات الاتصال.",
+  },
+};
+
+export function translate(lang: Language, key: string): string {
+  return translations[lang]?.[key] ?? translations.en[key] ?? key;
+}

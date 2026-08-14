@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getHistoryData, HistoryRecord } from "@/lib/supabase/history";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 export default function HistoryPage() {
+  const { t } = useTranslation();
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +83,7 @@ export default function HistoryPage() {
     <div className="mx-auto max-w-6xl p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">History</h1>
+          <h1 className="text-2xl font-semibold text-white">{t("history.title")}</h1>
           <p className="mt-1 text-sm text-gray-400">
             {records.length} completed run{records.length === 1 ? "" : "s"}
           </p>

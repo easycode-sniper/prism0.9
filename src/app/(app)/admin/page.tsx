@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { uploadKmlZones, listGeofences } from "@/lib/supabase/geofences";
 import type { KmlUploadReport, GeofenceRecord } from "@/lib/supabase/geofences";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 export default function AdminPage() {
+  const { t } = useTranslation();
   const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
   const [uploading, setUploading] = useState(false);
   const [report, setReport] = useState<KmlUploadReport | null>(null);
@@ -43,9 +45,9 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-4xl p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-white">Admin</h1>
+        <h1 className="text-2xl font-semibold text-white">{t("admin.title")}</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>
-          Geofence management, user accounts, and connection settings.
+          {t("admin.subtitle")}
         </p>
       </div>
 

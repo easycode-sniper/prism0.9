@@ -6,6 +6,7 @@ import { getMonitoringData } from "@/lib/supabase/monitoring";
 import { checkPositionForDispatch } from "@/lib/supabase/positions";
 import type { MonitoringTruck, MonitoringData } from "@/lib/supabase/monitoring";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 // Leaflet touches `window` at import time, so it can't be part of the
 // server-rendered bundle for this ("use client") page.
@@ -14,6 +15,7 @@ const MapView = dynamic(() => import("@/components/map/MapView").then((m) => m.M
 type FilterType = "all" | "dispatched" | "moving" | "idle" | "offline";
 
 export default function MonitoringPage() {
+  const { t } = useTranslation();
   const [data, setData] = useState<MonitoringData | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
@@ -82,7 +84,7 @@ export default function MonitoringPage() {
       <div className="border-b border-gray-800 bg-gray-900/50 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-white">Monitoring</h1>
+            <h1 className="text-lg font-semibold text-white">{t("monitoring.title")}</h1>
             <p className="text-xs text-gray-500">
               {data?.total ?? 0} trucks · {data?.moving ?? 0} moving ·{" "}
               {data?.idle ?? 0} idle · {data?.offline ?? 0} offline

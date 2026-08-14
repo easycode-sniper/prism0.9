@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { getFleetLiveData } from "@/lib/supabase/fleet";
 import type { FleetTruck } from "@/lib/wialon/config";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 const POLL_INTERVAL_MS = 60_000;
 
 export default function LiveFleetPage() {
+  const { t } = useTranslation();
   const [trucks, setTrucks] = useState<FleetTruck[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,9 +45,9 @@ export default function LiveFleetPage() {
     <div className="mx-auto max-w-6xl p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Live Fleet</h1>
+          <h1 className="text-2xl font-semibold text-white">{t("liveFleet.title")}</h1>
           <p className="mt-1 text-sm text-gray-400">
-            Real-time truck telemetry from Wialon.
+            {t("liveFleet.subtitle")}
             {lastUpdated && (
               <span className="ml-2">
                 Last update: {lastUpdated.toLocaleTimeString()}

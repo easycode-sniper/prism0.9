@@ -8,6 +8,7 @@ import { getDriverRatings, DriverRating } from "@/lib/supabase/history";
 import { listGeofences } from "@/lib/supabase/geofences";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 const GEOFENCE_EDGE_BUFFER_METERS = 150;
 
@@ -44,6 +45,7 @@ function classifyTruckLocation(
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const { fleetData, refresh, isPolling } = useFleet();
   const [connectionStatus, setConnectionStatus] = useState<string>("—");
   const [ratings, setRatings] = useState<DriverRating[]>([]);
@@ -111,8 +113,8 @@ export default function DashboardPage() {
     <div style={{ padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '18px' }}>
         <div>
-          <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: '1.15rem', fontWeight: 600 }}>Dashboard</h2>
-          <p style={{ color: 'var(--text-dim)', fontSize: '.85rem', marginTop: '4px' }}>Fleet status overview</p>
+          <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: '1.15rem', fontWeight: 600 }}>{t("dashboard.title")}</h2>
+          <p style={{ color: 'var(--text-dim)', fontSize: '.85rem', marginTop: '4px' }}>{t("dashboard.subtitle")}</p>
           <p style={{ fontSize: '.78rem', color: connectionStatus.includes('●') ? 'var(--green)' : 'var(--amber)', marginTop: '2px' }}>{connectionStatus}</p>
           <p style={{ fontSize: '.78rem', color: 'var(--text-dim)', marginTop: '2px' }}>
             Live polling {isPolling ? "active" : "—"} {fleetData.lastUpdated ? `· ${fleetData.lastUpdated.toLocaleTimeString()}` : ""}

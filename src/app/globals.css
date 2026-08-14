@@ -324,6 +324,14 @@ hr {
 .leaflet-popup-tip { background: var(--panel); }
 .leaflet-container { font-family: var(--font-sans); background: var(--bg); }
 
+/* RTL (Arabic) — targeted overrides, not a full pixel-perfect mirror,
+   matching the same scope decision the original single-file app made. */
+html[dir="rtl"] body { text-align: right; }
+html[dir="rtl"] #topbar { flex-direction: row-reverse; }
+html[dir="rtl"] #tabs { flex-direction: row-reverse; }
+html[dir="rtl"] #topbar-stats { flex-direction: row-reverse; }
+html[dir="rtl"] table { text-align: right; }
+
 /* Print */
 @media screen {
   #print-area { display: none; }

@@ -7,8 +7,10 @@ import {
   markAllNotificationsRead,
   NotificationRecord,
 } from "@/lib/supabase/history";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 export default function NotificationsPage() {
+  const { t } = useTranslation();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export default function NotificationsPage() {
     <div className="mx-auto max-w-4xl p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Notifications</h1>
+          <h1 className="text-2xl font-semibold text-white">{t("notifications.title")}</h1>
           <p className="mt-1 text-sm text-gray-400">
             {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
           </p>

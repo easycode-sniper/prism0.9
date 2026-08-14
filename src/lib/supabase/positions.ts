@@ -2,7 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { findWialonUnit, getWialonConfig } from "@/lib/wialon/config";
-import { projectPointOntoRoute, haversineMeters, formatDuration } from "@/lib/geometry";
+import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence } from "@/lib/geometry";
+import { listGeofences } from "@/lib/supabase/geofences";
 
 export interface PositionCheckResult {
   truckId: string;
@@ -27,6 +28,17 @@ const FALLBACK_AVG_SPEED_KMH = 65;
 // the original single-file app.
 const SPEED_LIMIT_KMH = 90;
 
+// Geofence arrival buffers — edge buffer for real polygon geofences
+// (GPS noise near the boundary), and a plain-distance buffer for sites
+// that don't have an uploaded polygon yet.
+const GEOFENCE_EDGE_BUFFER_METERS = 150;
+const ARRIVAL_DISTANCE_BUFFER_METERS = 300;
+
+// Usine Amouda Ciment, El Baida — verified via Google Places. Used as the
+// factory arrival fallback when no factory geofence polygon is loaded.
+const FACTORY_LAT = 34.4368063;
+const FACTORY_LNG = 2.058655;
+
 export async function checkPositionForDispatch(
   truckId: string,
   dispatchId: string
@@ -41,7 +53,7 @@ export async function checkPositionForDispatch(
   const { data: dispatch, error: dispatchError } = await supabase
     .from("dispatches")
     .select(
-      "id, truck_id, site_id, route_geometry, route_total_distance_meters, route_total_time_seconds, is_off_route, is_speeding"
+      "id, truck_id, site_id, route_geometry, route_total_distance_meters, route_total_time_seconds, is_off_route, is_speeding, site_arrival_notified, factory_arrival_notified"
     )
     .eq("id", dispatchId)
     .single();
@@ -120,6 +132,32 @@ export async function checkPositionForDispatch(
     timestamp: new Date(),
   };
 
+  // ── Geofence arrival: real polygon if uploaded, distance buffer otherwise ──
+  const { data: geofences } = await listGeofences();
+  const siteGeofence = geofences.find((g) => g.kind === "site" && g.siteId === dispatch.site_id);
+  const factoryGeofence = geofences.find((g) => g.kind === "factory");
+
+  const wasSiteArrived = dispatch.site_arrival_notified === true;
+  const wasFactoryArrived = dispatch.factory_arrival_notified === true;
+
+  let nowSiteArrived = false;
+  if (!wasSiteArrived) {
+    if (siteGeofence?.ring) {
+      nowSiteArrived = isWithinGeofence(point, siteGeofence.ring, GEOFENCE_EDGE_BUFFER_METERS);
+    } else if (site?.lat != null && site?.lng != null) {
+      nowSiteArrived = haversineMeters(point[0], point[1], site.lat, site.lng) <= ARRIVAL_DISTANCE_BUFFER_METERS;
+    }
+  }
+
+  let nowFactoryArrived = false;
+  if (!wasFactoryArrived) {
+    if (factoryGeofence?.ring) {
+      nowFactoryArrived = isWithinGeofence(point, factoryGeofence.ring, GEOFENCE_EDGE_BUFFER_METERS);
+    } else {
+      nowFactoryArrived = haversineMeters(point[0], point[1], FACTORY_LAT, FACTORY_LNG) <= ARRIVAL_DISTANCE_BUFFER_METERS;
+    }
+  }
+
   // ── Notifications: fire only on a false → true transition ──
   const siteName = site?.name || "destination";
   const wasOffRoute = dispatch.is_off_route === true;
@@ -130,7 +168,7 @@ export async function checkPositionForDispatch(
   const notificationsToInsert: {
     dispatch_id: string;
     truck_id: string;
-    kind: "off_route" | "speeding";
+    kind: "off_route" | "speeding" | "site_arrival" | "factory_arrival";
     title: string;
     message: string;
   }[] = [];
@@ -151,6 +189,24 @@ export async function checkPositionForDispatch(
       kind: "speeding",
       title: "🟠 Speed limit exceeded",
       message: `${truckId} is going ${Math.round(unit.pos.speed)}km/h on the run to ${siteName} (limit ${SPEED_LIMIT_KMH}km/h).`,
+    });
+  }
+  if (nowSiteArrived) {
+    notificationsToInsert.push({
+      dispatch_id: dispatchId,
+      truck_id: truckId,
+      kind: "site_arrival",
+      title: "🟢 Arrived at destination",
+      message: `${truckId} has arrived at ${siteName}.`,
+    });
+  }
+  if (nowFactoryArrived) {
+    notificationsToInsert.push({
+      dispatch_id: dispatchId,
+      truck_id: truckId,
+      kind: "factory_arrival",
+      title: "🟣 Arrived at factory",
+      message: `${truckId} has arrived at Usine Amouda Ciment.`,
     });
   }
 
@@ -176,6 +232,9 @@ export async function checkPositionForDispatch(
       ever_off_route: nowOffRoute ? true : undefined,
       ever_speeding: nowSpeeding ? true : undefined,
       driver_name: result.driverName ?? undefined,
+      site_arrival_notified: nowSiteArrived ? true : undefined,
+      factory_arrival_notified: nowFactoryArrived ? true : undefined,
+      arrived_at: nowSiteArrived ? result.timestamp.toISOString() : undefined,
     })
     .eq("id", dispatchId);
 

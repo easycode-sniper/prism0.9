@@ -56,6 +56,46 @@ export function projectPointOntoRoute(
   return { distanceToRoute: minDist, distanceCovered: cumulativeAtClosest, totalRouteLength: cumulative };
 }
 
+// Ray casting point-in-polygon. `ring` is a closed or unclosed list of
+// [lat, lng] vertices.
+export function pointInPolygon(point: [number, number], ring: [number, number][]): boolean {
+  const [py, px] = point;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [yi, xi] = ring[i];
+    const [yj, xj] = ring[j];
+    const intersects =
+      yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function distanceToPolygonBoundaryMeters(point: [number, number], ring: [number, number][]): number {
+  let minDist = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const closest = closestPointOnSegment(point, a, b);
+    const d = haversineMeters(point[0], point[1], closest[0], closest[1]);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
+
+// Arrival check against a real geofence polygon: inside counts as arrived,
+// and so does being within `edgeBufferMeters` of the boundary (GPS noise
+// near the edge shouldn't produce a false negative).
+export function isWithinGeofence(
+  point: [number, number],
+  ring: [number, number][],
+  edgeBufferMeters: number
+): boolean {
+  if (ring.length < 3) return false;
+  if (pointInPolygon(point, ring)) return true;
+  return distanceToPolygonBoundaryMeters(point, ring) <= edgeBufferMeters;
+}
+
 export function formatDuration(totalSeconds: number | null | undefined): string {
   if (totalSeconds == null || !isFinite(totalSeconds) || totalSeconds < 0) return "—";
   const h = Math.floor(totalSeconds / 3600);

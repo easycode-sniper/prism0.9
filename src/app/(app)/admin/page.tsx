@@ -1,33 +1,112 @@
-import Link from "next/link";
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { uploadKmlZones, listGeofences } from "@/lib/supabase/geofences";
+import type { KmlUploadReport, GeofenceRecord } from "@/lib/supabase/geofences";
 
 export default function AdminPage() {
+  const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [report, setReport] = useState<KmlUploadReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadGeofences = useCallback(async () => {
+    const result = await listGeofences();
+    if (result.data) setGeofences(result.data);
+  }, []);
+
+  useEffect(() => { loadGeofences(); }, [loadGeofences]);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null); setReport(null); setUploading(true);
+
+    try {
+      const text = await file.text();
+      const result = await uploadKmlZones(text);
+      if (result.error) { setError(result.error); setUploading(false); return; }
+      setReport(result.report ?? null);
+      await loadGeofences();
+    } catch {
+      setError("Failed to read the KML file");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  const siteGeofences = geofences.filter((g) => g.kind === "site");
+  const factoryGeofences = geofences.filter((g) => g.kind === "factory");
+
   return (
-    <div className="mx-auto max-w-4xl p-8">
-      <h1 className="text-2xl font-semibold text-white">Admin Panel</h1>
-      <p className="mt-2 text-sm text-gray-400">
-        Manage users, roles, and application settings.
-      </p>
+    <div className="mx-auto max-w-4xl p-6 space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-white">Admin</h1>
+        <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>
+          Geofence management — upload Wialon zone exports (KML) and match them to sites.
+        </p>
+      </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link
-          href="/admin/users"
-          className="rounded-lg border border-gray-800 bg-gray-900 p-5 transition hover:border-indigo-600 hover:bg-gray-800"
-        >
-          <h3 className="text-base font-medium text-white">User Management</h3>
-          <p className="mt-1 text-sm text-gray-400">
-            Invite, disable, and manage user accounts and roles.
-          </p>
-        </Link>
+      <div className="panel p-6">
+        <div className="section-label mb-4">Upload Zone Export (KML)</div>
+        <p className="text-sm mb-3" style={{ color: "var(--text-dim)" }}>
+          The Wialon account export typically contains 500+ zones, most stale or belonging to
+          other companies. Only zones whose name closely matches a known construction site are
+          applied — everything else is reported as unmatched, nothing is silently dropped.
+        </p>
+        <input type="file" accept=".kml" onChange={handleFileChange} disabled={uploading} />
+        {uploading && <p className="mt-2 text-sm" style={{ color: "var(--text-dim)" }}>Parsing and matching…</p>}
+        {error && (
+          <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "var(--red-subtle, rgba(248,113,113,0.08))", border: "1px solid rgba(248,113,113,0.35)", color: "var(--red)" }}>
+            {error}
+          </div>
+        )}
+        {report && (
+          <div className="mt-4 space-y-3">
+            <div className="text-sm" style={{ color: "var(--text-dim)" }}>
+              Matched <strong style={{ color: "#159c83" }}>{report.matched.length}</strong> zone(s),
+              {" "}<strong style={{ color: "var(--red)" }}>{report.unmatched.length}</strong> unmatched.
+            </div>
+            {report.matched.length > 0 && (
+              <div>
+                <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-dim)" }}>Matched</div>
+                <ul className="text-sm space-y-1 max-h-40 overflow-y-auto">
+                  {report.matched.map((m, i) => (
+                    <li key={i}>
+                      <span className="text-white">{m.zoneName}</span>
+                      <span style={{ color: "var(--text-dim)" }}> → {m.siteName}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {report.unmatched.length > 0 && (
+              <div>
+                <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-dim)" }}>Unmatched (not applied)</div>
+                <ul className="text-sm space-y-1 max-h-40 overflow-y-auto" style={{ color: "var(--text-dim)" }}>
+                  {report.unmatched.map((m, i) => <li key={i}>{m.zoneName}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
-        <Link
-          href="/admin/settings"
-          className="rounded-lg border border-gray-800 bg-gray-900 p-5 transition hover:border-indigo-600 hover:bg-gray-800"
-        >
-          <h3 className="text-base font-medium text-white">Wialon Settings</h3>
-          <p className="mt-1 text-sm text-gray-400">
-            Configure Wialon relay, server, and API token.
+      <div className="panel p-6">
+        <div className="section-label mb-4">Active Geofences</div>
+        <p className="text-sm mb-3" style={{ color: "var(--text-dim)" }}>
+          Factory: {factoryGeofences.length} · Sites with a real polygon: {siteGeofences.length}
+        </p>
+        {siteGeofences.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--text-dim)" }}>
+            No site geofences yet. Sites without one fall back to a 300m radius buffer for arrival detection.
           </p>
-        </Link>
+        ) : (
+          <ul className="text-sm space-y-1 max-h-64 overflow-y-auto">
+            {siteGeofences.map((g) => <li key={g.id} className="text-white">{g.name}</li>)}
+          </ul>
+        )}
       </div>
     </div>
   );

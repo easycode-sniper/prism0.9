@@ -52,30 +52,24 @@ export function MapView({ markers }: { markers: MarkerData[] }) {
 
     layer.clearLayers();
 
-    const statusColors = {
-      moving: "#4ade80",
-      idle: "#22d3ee",
-      offline: "#6b7280",
-    };
-
     for (const m of markers) {
-      const color = statusColors[m.status];
-      const radius = m.offRoute ? 8 : 6;
+      const isOffRoute = m.offRoute;
+      const color = isOffRoute ? "#d92d42" : m.status === "moving" ? "#159c83" : m.status === "idle" ? "#167d8d" : "#6b7280";
+      const radius = isOffRoute ? 8 : 6;
 
       const marker = L.circleMarker([m.lat, m.lng], {
         radius,
         fillColor: color,
-        color: m.offRoute ? "#f87171" : "#fff",
-        weight: m.offRoute ? 3 : 1,
+        color: isOffRoute ? "#f87171" : "rgba(255,255,255,0.85)",
+        weight: isOffRoute ? 3 : 1,
         fillOpacity: 0.9,
       });
 
       marker.bindPopup(
-        `<div style="font-family: system-ui; font-size: 12px;">
-          <strong>${m.label}</strong><br>
-          Status: ${m.status}<br>
-          ${m.dispatched ? "Dispatched" : "Not dispatched"}
-          ${m.offRoute ? "<br><span style='color:#f87171'>⚠ Off route</span>" : ""}
+        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5;">
+          <strong style="color: #22d3ee;">${m.label}</strong><br>
+          Status: <span style="color: ${color};">${m.status}</span>
+          ${m.offRoute ? "<br><span style='color: #f87171;'>⚠ Off route</span>" : ""}
         </div>`
       );
 

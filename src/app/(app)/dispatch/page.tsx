@@ -80,92 +80,99 @@ export default function DispatchPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <h1 className="text-2xl font-semibold text-white">Dispatch</h1>
-      <p className="mt-1 text-sm text-gray-400">
-        Assign trucks to destinations and check route compliance.
-      </p>
+    <div className="mx-auto max-w-6xl p-6 space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-white">Dispatch</h1>
+        <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>
+          Assign trucks to destinations and check route compliance.
+        </p>
+      </div>
 
       {/* Dispatch Form */}
-      <form onSubmit={handleCreateDispatch} className="mt-6 rounded-lg border border-gray-800 bg-gray-900 p-6">
-        <h2 className="text-lg font-medium text-white">New Dispatch</h2>
-        {error && <div className="mt-4 rounded-md bg-red-900/50 p-3 text-sm text-red-300">{error}</div>}
-        {success && <div className="mt-4 rounded-md bg-green-900/50 p-3 text-sm text-green-300">{success}</div>}
+      <form onSubmit={handleCreateDispatch} className="panel p-6">
+        <div className="section-label mb-4">
+          <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--indigo)" }}>1</span>
+          New Dispatch
+        </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {error && <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: "var(--red-subtle, rgba(248,113,113,0.08))", border: "1px solid rgba(248,113,113,0.35)", color: "var(--red)" }}>{error}</div>}
+        {success && <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: "rgba(21,156,131,0.08)", border: "1px solid rgba(21,156,131,0.18)", color: "#159c83" }}>{success}</div>}
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="truck" className="block text-sm font-medium text-gray-300">Truck</label>
-            <select id="truck" value={selectedTruck} onChange={(e) => setSelectedTruck(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none">
+            <label className="block text-sm font-medium" style={{ color: "var(--text-dim)" }}>Truck</label>
+            <select value={selectedTruck} onChange={(e) => setSelectedTruck(e.target.value)} className="mt-1">
               <option value="">-- Select Truck --</option>
               {trucks.map((t) => <option key={t.truck_id} value={t.truck_id}>{t.truck_id}</option>)}
             </select>
           </div>
           <div>
-            <label htmlFor="site" className="block text-sm font-medium text-gray-300">Destination</label>
-            <select id="site" value={selectedSite} onChange={(e) => setSelectedSite(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none">
+            <label className="block text-sm font-medium" style={{ color: "var(--text-dim)" }}>Destination</label>
+            <select value={selectedSite} onChange={(e) => setSelectedSite(e.target.value)} className="mt-1">
               <option value="">-- Select Destination --</option>
               {sites.map((s) => <option key={s.id} value={s.id}>{s.name}{s.client ? ` — ${s.client}` : ""}{s.lat == null ? " (no coords)" : ""}</option>)}
             </select>
           </div>
         </div>
 
-        <button type="submit" disabled={loading}
-          className="mt-4 rounded-md bg-indigo-600 px-4 py-2 font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
-          {loading ? "Creating..." : "Create Dispatch"}
+        <button type="submit" disabled={loading} className="btn-primary mt-4">
+          {loading ? "Creating..." : "Start Tracking Run"}
         </button>
       </form>
 
       {/* Active Dispatches */}
-      <div className="mt-8">
-        <h2 className="text-lg font-medium text-white">Active Dispatches</h2>
+      <div>
+        <div className="section-label mb-4">
+          <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--indigo)" }}>2</span>
+          Active Dispatches ({dispatches.length})
+        </div>
+
         {dispatches.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-500">No active dispatches.</p>
+          <p className="text-sm" style={{ color: "var(--text-dim)" }}>No active dispatches. Create one above.</p>
         ) : (
-          <div className="mt-4 space-y-3">
+          <div className="space-y-3">
             {dispatches.map((d) => {
               const check = checkResults.get(d.id);
+              const siteName = Array.isArray(d.site) ? d.site[0]?.name : "Unknown";
+              const dispName = Array.isArray(d.dispatcher) ? d.dispatcher[0]?.full_name : "Unknown";
+
               return (
-                <div key={d.id} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-sm text-cyan-400">{d.truck_id}</span>
-                        <span className="text-gray-600">→</span>
-                        <span className="text-sm text-white">{Array.isArray(d.site) ? d.site[0]?.name : "Unknown"}</span>
-                      </div>
-                      <div className="mt-1 flex gap-3 text-xs text-gray-500">
-                        <span>Dispatched: {new Date(d.dispatched_at).toLocaleString()}</span>
-                        <span>By: {Array.isArray(d.dispatcher) ? d.dispatcher[0]?.full_name || "Unknown" : "Unknown"}</span>
-                        {d.last_on_route === false && <span className="text-red-400">⚠ Off route</span>}
-                      </div>
-                      {/* Check result display */}
-                      {check && (
-                        <div className="mt-2 flex gap-3 text-xs">
-                          <span className={check.onRoute ? "text-green-400" : check.onRoute === false ? "text-red-400" : "text-amber-400"}>
-                            {check.onRoute ? "✓ On route" : check.onRoute === false ? `⚠ Off route (${(check.deviationMeters! / 1000).toFixed(1)}km)` : "Pending"}
+                <div key={d.id} className="panel-2 p-4 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <span className="truck-id text-sm">{d.truck_id}</span>
+                      <span style={{ color: "var(--text-dim)" }}>→</span>
+                      <span className="text-sm text-white">{siteName}</span>
+                      {d.last_on_route === false && <span className="status-pill off-route ml-2">Off route</span>}
+                    </div>
+                    <div className="mt-1 flex gap-3 text-xs" style={{ color: "var(--text-dim)" }}>
+                      <span>Dispatched: {new Date(d.dispatched_at).toLocaleString()}</span>
+                      <span>By: {dispName}</span>
+                    </div>
+                    {check && (
+                      <div className="mt-2 flex gap-3 text-xs items-center">
+                        <span className={`status-pill ${check.onRoute ? "on-route" : check.onRoute === false ? "off-route" : "pending"}`}>
+                          {check.onRoute ? "On route" : check.onRoute === false ? `Off route (${(check.deviationMeters! / 1000).toFixed(1)}km)` : "Pending"}
+                        </span>
+                        {check.etaSeconds != null && (
+                          <span style={{ color: "var(--text-dim)" }}>
+                            ETA: {check.etaLabel}{check.etaBasis === "fallback-speed" ? " (est.)" : ""}
                           </span>
-                          {check.etaSeconds != null && (
-                            <span className="text-gray-400">
-                              ETA: {check.etaLabel}{check.etaBasis === "fallback-speed" ? " (est.)" : ""}
-                            </span>
-                          )}
-                          <span className="text-gray-500">{check.speed} km/h</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleCheckPosition(d.id, d.truck_id)}
-                        disabled={checking === d.truck_id}
-                        className="rounded-md border border-indigo-700 px-3 py-1.5 text-sm text-indigo-400 transition hover:bg-indigo-900/30 disabled:opacity-50">
-                        {checking === d.truck_id ? "Checking..." : "Check Position"}
-                      </button>
-                      <button onClick={() => handleStop(d.id)}
-                        className="rounded-md border border-red-900 px-3 py-1.5 text-sm text-red-400 transition hover:bg-red-900/30">
-                        Stop
-                      </button>
-                    </div>
+                        )}
+                        <span style={{ color: "var(--text-dim)" }}>{check.speed} km/h</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <button onClick={() => handleCheckPosition(d.id, d.truck_id)}
+                      disabled={checking === d.truck_id}
+                      className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)" }}>
+                      {checking === d.truck_id ? "..." : "Check Position"}
+                    </button>
+                    <button onClick={() => handleStop(d.id)}
+                      className="btn-sm danger">
+                      Stop
+                    </button>
                   </div>
                 </div>
               );

@@ -28,55 +28,48 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-sm space-y-6 rounded-lg border border-gray-800 bg-gray-900 p-8">
+    <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--bg)" }}>
+      <div className="w-full max-w-sm space-y-6 p-8" style={{ background: "linear-gradient(180deg, var(--panel) 0%, #0d0d18 100%)", border: "1px solid var(--line)", borderRadius: "10px" }}>
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-white">Prism</h1>
-          <p className="mt-1 text-sm text-gray-400">Fleet Operations</p>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl" style={{ background: "linear-gradient(135deg, var(--indigo), var(--purple))" }}>
+            <span className="text-2xl font-bold text-white">P</span>
+          </div>
+          <h1 className="text-xl font-semibold text-white">Prism</h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>Fleet Operations</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300">
-              Email
-            </label>
+            <label className="block text-sm font-medium" style={{ color: "var(--text-dim)" }}>Email</label>
             <input
-              id="email"
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               placeholder="you@company.com"
+              className="mt-1"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300">
-              Password
-            </label>
+            <label className="block text-sm font-medium" style={{ color: "var(--text-dim)" }}>Password</label>
             <input
-              id="password"
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               placeholder="••••••••"
+              className="mt-1"
             />
           </div>
 
           {error && (
-            <div className="rounded-md bg-red-900/50 p-3 text-sm text-red-300">
+            <div className="rounded-lg p-3 text-sm" style={{ background: "var(--red-subtle, rgba(248,113,113,0.08))", border: "1px solid rgba(248,113,113,0.35)", color: "var(--red)" }}>
               {error}
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-indigo-600 px-4 py-2 font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading} className="btn-primary">
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>

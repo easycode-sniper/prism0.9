@@ -9,84 +9,42 @@ export async function Topbar({ profile }: { profile: Awaited<ReturnType<typeof g
   }
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-gray-800 bg-gray-900 px-6">
+    <header className="flex h-14 items-center justify-between px-5" style={{ background: "linear-gradient(180deg, var(--panel) 0%, #0d0d18 100%)", borderBottom: "1px solid var(--line)" }}>
       <div className="flex items-center gap-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-600 text-sm font-bold text-white">
-          P
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ background: "linear-gradient(135deg, var(--indigo), var(--purple))" }}>
+          <span className="text-sm font-bold text-white">P</span>
         </div>
-        <span className="text-sm font-semibold text-white">Prism</span>
+        <div className="flex flex-col">
+          <span className="text-sm font-semibold text-white">Prism</span>
+          <span className="text-xs" style={{ color: "var(--text-dim)" }}>Fleet Operations</span>
+        </div>
 
-        {/* Navigation */}
-        <nav className="ml-6 flex gap-1">
-          <Link
-            href="/dashboard"
-            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-          >
-            Dashboard
-          </Link>
-
-          <Link
-            href="/dispatch"
-            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-          >
-            Dispatch
-          </Link>
-
-          <Link
-            href="/live-fleet"
-            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-          >
-            Live Fleet
-          </Link>
-
-          <Link
-            href="/monitoring"
-            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-          >
-            Monitoring
-          </Link>
-
-          <Link
-            href="/history"
-            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-          >
-            History
-          </Link>
-
-          <Link
-            href="/notifications"
-            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-          >
-            Notifications
-          </Link>
-
+        <nav className="ml-6 flex gap-1 p-1 rounded-lg" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+          <Link href="/dashboard" className="px-4 py-1.5 text-sm font-medium rounded-md" style={{ color: "var(--text-dim)" }}>Dashboard</Link>
+          <Link href="/dispatch" className="px-4 py-1.5 text-sm font-medium rounded-md" style={{ color: "var(--text-dim)" }}>Dispatch</Link>
+          <Link href="/live-fleet" className="px-4 py-1.5 text-sm font-medium rounded-md" style={{ color: "var(--text-dim)" }}>Live Fleet</Link>
+          <Link href="/monitoring" className="px-4 py-1.5 text-sm font-medium rounded-md" style={{ color: "var(--text-dim)" }}>Monitoring</Link>
+          <Link href="/history" className="px-4 py-1.5 text-sm font-medium rounded-md" style={{ color: "var(--text-dim)" }}>History</Link>
+          <Link href="/notifications" className="px-4 py-1.5 text-sm font-medium rounded-md" style={{ color: "var(--text-dim)" }}>Notifications</Link>
           {profile?.role === "admin" && (
-            <Link
-              href="/admin"
-              className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-            >
-              Admin
-            </Link>
+            <Link href="/admin" className="px-4 py-1.5 text-sm font-medium rounded-md" style={{ color: "var(--text-dim)" }}>Admin</Link>
           )}
         </nav>
       </div>
 
       <div className="flex items-center gap-4">
         {profile && (
-          <span className="text-sm text-gray-400">
+          <span className="text-sm" style={{ color: "var(--text-dim)" }}>
             {profile.full_name || profile.email}
             {profile.role === "admin" && (
-              <span className="ml-2 rounded bg-indigo-900 px-1.5 py-0.5 text-xs text-indigo-300">
+              <span className="ml-2 rounded px-1.5 py-0.5 text-xs text-white" style={{ background: "linear-gradient(135deg, var(--indigo), var(--purple))" }}>
                 admin
               </span>
             )}
           </span>
         )}
         <form action={handleSignOut}>
-          <button
-            type="submit"
-            className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-800"
-          >
+          <button type="submit" className="btn-secondary" style={{ padding: "6px 14px", fontSize: "0.8rem" }}>
             Sign Out
           </button>
         </form>

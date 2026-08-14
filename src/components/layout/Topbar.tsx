@@ -46,6 +46,20 @@ export async function Topbar({ profile }: { profile: Awaited<ReturnType<typeof g
             Monitoring
           </Link>
 
+          <Link
+            href="/history"
+            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
+          >
+            History
+          </Link>
+
+          <Link
+            href="/notifications"
+            className="rounded-md px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
+          >
+            Notifications
+          </Link>
+
           {profile?.role === "admin" && (
             <Link
               href="/admin"

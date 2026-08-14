@@ -22,12 +22,16 @@ export async function signOut() {
 
 // ── Dispatches ──
 
-export async function createDispatch(truckId: string, siteId: string) {
+export async function createBatchDispatch(truckIds: string[], siteId: string) {
   const supabase = await createClient();
   const user = await supabase.auth.getUser();
 
   if (!user.data.user) {
     return { error: "Not authenticated" };
+  }
+
+  if (truckIds.length === 0) {
+    return { error: "Select at least one truck" };
   }
 
   const site = await supabase
@@ -44,14 +48,16 @@ export async function createDispatch(truckId: string, siteId: string) {
     return { error: "Site has no coordinates" };
   }
 
+  const rows = truckIds.map((truckId) => ({
+    truck_id: truckId,
+    site_id: siteId,
+    dispatched_by: user.data.user!.id,
+    status: "active",
+  }));
+
   const dispatch = await supabase
     .from("dispatches")
-    .insert({
-      truck_id: truckId,
-      site_id: siteId,
-      dispatched_by: user.data.user.id,
-      status: "active",
-    })
+    .insert(rows)
     .select(
       `
       id,
@@ -62,14 +68,13 @@ export async function createDispatch(truckId: string, siteId: string) {
       site:construction_sites(name, client, lat, lng),
       dispatcher:profiles!dispatches_dispatched_by_fkey(full_name)
     `
-    )
-    .single();
+    );
 
   if (dispatch.error) {
     return { error: dispatch.error.message };
   }
 
-  return { data: dispatch.data as unknown as DispatchRecord };
+  return { data: dispatch.data as unknown as DispatchRecord[] };
 }
 
 export async function listActiveDispatches() {

@@ -6,7 +6,7 @@ import {
   listSites,
   listTrucks,
   listActiveDispatches,
-  createDispatch,
+  createBatchDispatch,
   stopDispatch,
 } from "@/lib/supabase/actions";
 import { checkPositionForDispatch } from "@/lib/supabase/positions";
@@ -19,7 +19,7 @@ export default function DispatchPage() {
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [trucks, setTrucks] = useState<TruckRecord[]>([]);
   const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
-  const [selectedTruck, setSelectedTruck] = useState("");
+  const [selectedTrucks, setSelectedTrucks] = useState<string[]>([]);
   const [selectedSite, setSelectedSite] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
@@ -49,15 +49,21 @@ export default function DispatchPage() {
     return () => { supabase.removeChannel(channel); };
   }, [loadData]);
 
+  function toggleTruck(truckId: string) {
+    setSelectedTrucks((prev) =>
+      prev.includes(truckId) ? prev.filter((id) => id !== truckId) : [...prev, truckId]
+    );
+  }
+
   async function handleCreateDispatch(e: React.FormEvent) {
     e.preventDefault();
     setError(null); setSuccess(null); setLoading(true);
-    if (!selectedTruck || !selectedSite) { setError("Select both a truck and a destination"); setLoading(false); return; }
-    const result = await createDispatch(selectedTruck, selectedSite);
+    if (selectedTrucks.length === 0 || !selectedSite) { setError("Select at least one truck and a destination"); setLoading(false); return; }
+    const result = await createBatchDispatch(selectedTrucks, selectedSite);
     if (result.error) { setError(result.error); setLoading(false); return; }
-    const siteName = Array.isArray(result.data?.site) ? result.data?.site[0]?.name : "site";
-    setSuccess(`Dispatched ${selectedTruck} → ${siteName}`);
-    setSelectedTruck(""); setSelectedSite("");
+    const siteName = Array.isArray(result.data?.[0]?.site) ? result.data![0].site[0]?.name : "site";
+    setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} → ${siteName}`);
+    setSelectedTrucks([]); setSelectedSite("");
     setLoading(false); await loadData(); router.refresh();
   }
 
@@ -100,11 +106,32 @@ export default function DispatchPage() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium" style={{ color: "var(--text-dim)" }}>Truck</label>
-            <select value={selectedTruck} onChange={(e) => setSelectedTruck(e.target.value)} className="mt-1">
-              <option value="">-- Select Truck --</option>
-              {trucks.map((t) => <option key={t.truck_id} value={t.truck_id}>{t.truck_id}</option>)}
-            </select>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium" style={{ color: "var(--text-dim)" }}>
+                Trucks {selectedTrucks.length > 0 ? `(${selectedTrucks.length} selected)` : ""}
+              </label>
+              {selectedTrucks.length > 0 && (
+                <button type="button" onClick={() => setSelectedTrucks([])} className="text-xs" style={{ color: "var(--indigo)" }}>
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="mt-1 max-h-56 overflow-y-auto rounded-md p-2" style={{ border: "1px solid var(--line)", background: "var(--panel-2)" }}>
+              {trucks.length === 0 ? (
+                <p className="text-xs p-2" style={{ color: "var(--text-dim)" }}>No active trucks.</p>
+              ) : (
+                trucks.map((t) => (
+                  <label key={t.truck_id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm cursor-pointer hover:bg-black/20">
+                    <input
+                      type="checkbox"
+                      checked={selectedTrucks.includes(t.truck_id)}
+                      onChange={() => toggleTruck(t.truck_id)}
+                    />
+                    <span className="truck-id">{t.truck_id}</span>
+                  </label>
+                ))
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium" style={{ color: "var(--text-dim)" }}>Destination</label>
@@ -116,7 +143,7 @@ export default function DispatchPage() {
         </div>
 
         <button type="submit" disabled={loading} className="btn-primary mt-4">
-          {loading ? "Creating..." : "Start Tracking Run"}
+          {loading ? "Creating..." : selectedTrucks.length > 1 ? `Start Tracking Run (${selectedTrucks.length} trucks)` : "Start Tracking Run"}
         </button>
       </form>
 

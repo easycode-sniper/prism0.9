@@ -1,12 +1,14 @@
 import { getCurrentProfile } from "@/lib/supabase/auth";
 import { Topbar } from "@/components/layout/Topbar";
 import { FleetProvider } from "@/components/providers/FleetProvider";
+import { NotificationSoundListener } from "@/components/providers/NotificationSoundListener";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile();
 
   return (
     <FleetProvider>
+      <NotificationSoundListener />
       <div id="app-shell" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
         <Topbar profile={profile} />
         <div id="operations-strip" aria-label="Operational status" style={{ display: 'flex', alignItems: 'center', gap: '18px', minHeight: '36px', padding: '7px 20px', background: 'var(--panel-2)', borderBottom: '1px solid var(--line)', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '.72rem' }}>

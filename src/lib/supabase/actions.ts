@@ -189,6 +189,6 @@ export interface DispatchRecord {
   last_on_route: boolean | null;
   last_deviation_meters: number | null;
   last_eta_seconds: number | null;
-  site: { name: string; client: string | null; lat: number | null; lng: number | null }[];
-  dispatcher: { full_name: string | null }[];
+  site: { name: string; client: string | null; lat: number | null; lng: number | null } | null;
+  dispatcher: { full_name: string | null } | null;
 }

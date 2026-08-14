@@ -61,7 +61,7 @@ export default function DispatchPage() {
     if (selectedTrucks.length === 0 || !selectedSite) { setError("Select at least one truck and a destination"); setLoading(false); return; }
     const result = await createBatchDispatch(selectedTrucks, selectedSite);
     if (result.error) { setError(result.error); setLoading(false); return; }
-    const siteName = Array.isArray(result.data?.[0]?.site) ? result.data![0].site[0]?.name : "site";
+    const siteName = result.data?.[0]?.site?.name ?? "site";
     setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} → ${siteName}`);
     setSelectedTrucks([]); setSelectedSite("");
     setLoading(false); await loadData(); router.refresh();
@@ -160,8 +160,8 @@ export default function DispatchPage() {
           <div className="space-y-3">
             {dispatches.map((d) => {
               const check = checkResults.get(d.id);
-              const siteName = Array.isArray(d.site) ? d.site[0]?.name : "Unknown";
-              const dispName = Array.isArray(d.dispatcher) ? d.dispatcher[0]?.full_name : "Unknown";
+              const siteName = d.site?.name ?? "Unknown";
+              const dispName = d.dispatcher?.full_name ?? "Unknown";
 
               return (
                 <div key={d.id} className="panel-2 p-4 flex items-center justify-between">

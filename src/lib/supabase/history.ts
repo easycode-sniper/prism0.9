@@ -35,6 +35,7 @@ export async function getHistoryData(): Promise<{ data: HistoryRecord[]; error: 
       dispatched_at,
       stopped_at,
       status,
+      driver_name,
       ever_off_route,
       ever_speeding,
       last_deviation_meters,
@@ -65,7 +66,7 @@ export async function getHistoryData(): Promise<{ data: HistoryRecord[]; error: 
       truck_id: d.truck_id,
       site_name: Array.isArray(d.site) ? d.site[0]?.name : d.site?.name || null,
       client: Array.isArray(d.site) ? d.site[0]?.client : d.site?.client || null,
-      driver_name: null,
+      driver_name: d.driver_name || null,
       dispatched_at: d.dispatched_at,
       stopped_at: d.stopped_at,
       status: d.status,
@@ -83,6 +84,50 @@ export async function getHistoryData(): Promise<{ data: HistoryRecord[]; error: 
   });
 
   return { data: records, error: null };
+}
+
+// ── Driver Ratings ──
+// Score = % of completed runs with NEITHER a route deviation NOR a
+// speeding violation. A run only counts as "clean" if both are true.
+
+export interface DriverRating {
+  name: string;
+  totalRuns: number;
+  deviations: number;
+  speedingCount: number;
+  cleanRuns: number;
+  score: number;
+}
+
+export async function getDriverRatings(): Promise<{ data: DriverRating[]; error: string | null }> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("dispatches")
+    .select("truck_id, driver_name, ever_off_route, ever_speeding")
+    .in("status", ["stopped", "completed"]);
+
+  if (error) return { data: [], error: error.message };
+
+  const byDriver = new Map<string, DriverRating>();
+
+  for (const r of (data ?? []) as any[]) {
+    const name = r.driver_name || `(${r.truck_id})`;
+    if (!byDriver.has(name)) {
+      byDriver.set(name, { name, totalRuns: 0, deviations: 0, speedingCount: 0, cleanRuns: 0, score: 100 });
+    }
+    const entry = byDriver.get(name)!;
+    entry.totalRuns++;
+    if (r.ever_off_route) entry.deviations++;
+    if (r.ever_speeding) entry.speedingCount++;
+    if (!r.ever_off_route && !r.ever_speeding) entry.cleanRuns++;
+  }
+
+  const ratings = Array.from(byDriver.values())
+    .map((d) => ({ ...d, score: d.totalRuns > 0 ? Math.round((d.cleanRuns / d.totalRuns) * 100) : 100 }))
+    .sort((a, b) => b.totalRuns - a.totalRuns);
+
+  return { data: ratings, error: null };
 }
 
 // ── Notifications ──

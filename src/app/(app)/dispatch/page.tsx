@@ -36,10 +36,12 @@ export default function DispatchPage() {
   const searchParams = useSearchParams();
   const focusLat = searchParams.get("lat");
   const focusLng = searchParams.get("lng");
-  const focusPoint = useMemo<[number, number] | null>(
+  const urlFocusPoint = useMemo<[number, number] | null>(
     () => (focusLat && focusLng ? [parseFloat(focusLat), parseFloat(focusLng)] : null),
     [focusLat, focusLng]
   );
+  const [truckFocus, setTruckFocus] = useState<[number, number] | null>(null);
+  const focusPoint = truckFocus ?? urlFocusPoint;
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [trucks, setTrucks] = useState<TruckRecord[]>([]);
   const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
@@ -342,25 +344,39 @@ export default function DispatchPage() {
                   <p className="text-xs p-2" style={{ color: "var(--text-dim)" }}>No matching trucks.</p>
                 ) : (
                   filteredFleet.map((tr) => (
-                    <button
-                      type="button"
+                    <div
                       key={tr.truck_id}
-                      onClick={() => toggleTruck(tr.truck_id)}
-                      className="w-full flex items-center justify-between rounded-md p-2 text-left"
+                      className="w-full flex items-center gap-1 rounded-md p-2"
                       style={{
                         background: selectedTrucks.includes(tr.truck_id) ? "rgba(109,91,255,0.12)" : "var(--panel-2)",
                         border: `1px solid ${selectedTrucks.includes(tr.truck_id) ? "var(--indigo)" : "var(--line)"}`,
                       }}
                     >
-                      <div>
-                        <div className="text-sm text-white font-medium">{tr.driver_name || "—"}</div>
-                        <div className="flex items-center gap-1 text-xs" style={{ color: "var(--text-dim)" }}>
-                          <span style={{ color: tr.status === "moving" ? "#4ade80" : tr.status === "idle" ? "#22d3ee" : "var(--text-dim)" }}>●</span>
-                          {tr.status} {tr.speed} km/h
+                      <button
+                        type="button"
+                        onClick={() => toggleTruck(tr.truck_id)}
+                        className="flex-1 min-w-0 flex items-center justify-between text-left"
+                      >
+                        <div>
+                          <div className="text-sm text-white font-medium">{tr.driver_name || "—"}</div>
+                          <div className="flex items-center gap-1 text-xs" style={{ color: "var(--text-dim)" }}>
+                            <span style={{ color: tr.status === "moving" ? "#4ade80" : tr.status === "idle" ? "#22d3ee" : "var(--text-dim)" }}>●</span>
+                            {tr.status} {tr.speed} km/h
+                          </div>
                         </div>
-                      </div>
-                      <span className="truck-id text-xs">{tr.truck_id}</span>
-                    </button>
+                        <span className="truck-id text-xs">{tr.truck_id}</span>
+                      </button>
+                      <button
+                        type="button"
+                        title="Show on map"
+                        disabled={tr.lat == null || tr.lng == null}
+                        onClick={() => tr.lat != null && tr.lng != null && setTruckFocus([tr.lat, tr.lng])}
+                        className="flex-shrink-0 rounded-md p-1.5 disabled:opacity-30"
+                        style={{ color: "var(--indigo)" }}
+                      >
+                        📍
+                      </button>
+                    </div>
                   ))
                 )}
               </div>

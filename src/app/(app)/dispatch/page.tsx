@@ -43,6 +43,10 @@ export default function DispatchPage() {
   const [destinationMode, setDestinationMode] = useState<"same" | "different">("same");
   const [truckSites, setTruckSites] = useState<Record<string, SiteRecord | null>>({});
 
+  const [liveFleetOn, setLiveFleetOn] = useState(true);
+  const [fleetFilter, setFleetFilter] = useState<"all" | "dispatched" | "idle" | "offline">("all");
+  const [fleetSearch, setFleetSearch] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
   const [checkResults, setCheckResults] = useState<Map<string, PositionCheckResult>>(new Map());
@@ -70,6 +74,8 @@ export default function DispatchPage() {
   useEffect(() => {
     loadData();
     loadMapData();
+    const interval = setInterval(loadMapData, 60_000);
+    return () => clearInterval(interval);
   }, [loadData, loadMapData]);
 
   useEffect(() => {
@@ -98,6 +104,21 @@ export default function DispatchPage() {
   function setTruckSite(truckId: string, site: SiteRecord | null) {
     setTruckSites((prev) => ({ ...prev, [truckId]: site }));
   }
+
+  const filteredFleet = useMemo(() => {
+    let list = fleetTrucks;
+    if (fleetFilter === "dispatched") list = list.filter((tr) => tr.dispatched);
+    else if (fleetFilter === "idle") list = list.filter((tr) => tr.status === "idle");
+    else if (fleetFilter === "offline") list = list.filter((tr) => tr.status === "offline");
+
+    const q = fleetSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (tr) => tr.truck_id.toLowerCase().includes(q) || (tr.driver_name && tr.driver_name.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [fleetTrucks, fleetFilter, fleetSearch]);
 
   const filteredTrucks = useMemo(() => {
     const q = truckSearch.trim().toLowerCase();
@@ -231,6 +252,69 @@ export default function DispatchPage() {
 
         {error && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.35)", color: "var(--red)" }}>{error}</div>}
         {success && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(21,156,131,0.08)", border: "1px solid rgba(21,156,131,0.18)", color: "#159c83" }}>{success}</div>}
+
+        <div className="panel p-3 space-y-2">
+          <button
+            type="button"
+            onClick={() => setLiveFleetOn((v) => !v)}
+            className="w-full py-2 rounded-md text-sm font-semibold"
+            style={{
+              background: liveFleetOn ? "rgba(21,156,131,0.12)" : "var(--panel-2)",
+              border: `1px solid ${liveFleetOn ? "#159c83" : "var(--line)"}`,
+              color: liveFleetOn ? "#4ade80" : "var(--text-dim)",
+            }}
+          >
+            📡 Live Fleet {liveFleetOn ? "ON" : "OFF"}
+          </button>
+
+          {liveFleetOn && (
+            <>
+              <div className="flex gap-3 text-xs" style={{ color: "var(--text-dim)" }}>
+                {(["dispatched", "idle", "offline", "all"] as const).map((f) => (
+                  <label key={f} className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="fleet-filter" checked={fleetFilter === f} onChange={() => setFleetFilter(f)} />
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </label>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={fleetSearch}
+                onChange={(e) => setFleetSearch(e.target.value)}
+                placeholder="Search driver or truck ID..."
+                className="search-input w-full"
+                style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+              />
+              <div className="max-h-56 overflow-y-auto space-y-1">
+                {filteredFleet.length === 0 ? (
+                  <p className="text-xs p-2" style={{ color: "var(--text-dim)" }}>No matching trucks.</p>
+                ) : (
+                  filteredFleet.map((tr) => (
+                    <button
+                      type="button"
+                      key={tr.truck_id}
+                      onClick={() => toggleTruck(tr.truck_id)}
+                      className="w-full flex items-center justify-between rounded-md p-2 text-left"
+                      style={{
+                        background: selectedTrucks.includes(tr.truck_id) ? "rgba(109,91,255,0.12)" : "var(--panel-2)",
+                        border: `1px solid ${selectedTrucks.includes(tr.truck_id) ? "var(--indigo)" : "var(--line)"}`,
+                      }}
+                    >
+                      <div>
+                        <div className="text-sm text-white font-medium">{tr.driver_name || "—"}</div>
+                        <div className="flex items-center gap-1 text-xs" style={{ color: "var(--text-dim)" }}>
+                          <span style={{ color: tr.status === "moving" ? "#4ade80" : tr.status === "idle" ? "#22d3ee" : "var(--text-dim)" }}>●</span>
+                          {tr.status} {tr.speed} km/h
+                        </div>
+                      </div>
+                      <span className="truck-id text-xs">{tr.truck_id}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
         <form onSubmit={handleCreateDispatch} className="panel p-4 space-y-4">
           {/* Step 1 */}

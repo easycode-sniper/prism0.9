@@ -1,18 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import dynamic from "next/dynamic";
+import Link from "next/link";
 import { getMonitoringData } from "@/lib/supabase/monitoring";
 import { checkPositionForDispatch } from "@/lib/supabase/positions";
 import type { MonitoringTruck, MonitoringData } from "@/lib/supabase/monitoring";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 
-// Leaflet touches `window` at import time, so it can't be part of the
-// server-rendered bundle for this ("use client") page.
-const MapView = dynamic(() => import("@/components/map/MapView").then((m) => m.MapView), { ssr: false });
-
 type FilterType = "all" | "dispatched" | "moving" | "idle" | "offline";
+
+const FILTERS: FilterType[] = ["all", "dispatched", "moving", "idle", "offline"];
 
 export default function MonitoringPage() {
   const { t } = useTranslation();
@@ -20,7 +18,6 @@ export default function MonitoringPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState(true);
-  const [selectedTruck, setSelectedTruck] = useState<string | null>(null);
   const [checkResults, setCheckResults] = useState<Map<string, PositionCheckResult>>(new Map());
   const [checking, setChecking] = useState<string | null>(null);
 
@@ -53,136 +50,141 @@ export default function MonitoringPage() {
 
   const trucks = data?.trucks ?? [];
 
-  const filteredTrucks = trucks.filter((t) => {
+  // Matches the legacy app's search scope exactly: driver name or truck
+  // ID only (not site/client — that's what the filter buttons are for).
+  const filteredTrucks = trucks.filter((tr) => {
     if (search) {
       const s = search.toLowerCase();
-      const matchTruck = t.truck_id.toLowerCase().includes(s);
-      const matchSite = t.site_name?.toLowerCase().includes(s) ?? false;
-      const matchClient = t.client?.toLowerCase().includes(s) ?? false;
-      if (!matchTruck && !matchSite && !matchClient) return false;
+      const matchTruck = tr.truck_id.toLowerCase().includes(s);
+      const matchDriver = tr.driver_name?.toLowerCase().includes(s) ?? false;
+      if (!matchTruck && !matchDriver) return false;
     }
-    if (filter === "dispatched") return t.dispatched;
-    if (filter === "moving") return t.status === "moving";
-    if (filter === "idle") return t.status === "idle";
-    if (filter === "offline") return t.status === "offline";
+    if (filter === "dispatched") return tr.dispatched;
+    if (filter === "moving") return tr.status === "moving";
+    if (filter === "idle") return tr.status === "idle";
+    if (filter === "offline") return tr.status === "offline";
     return true;
   });
 
-  const mapMarkers = filteredTrucks
-    .filter((t) => t.lat != null && t.lng != null)
-    .map((t) => ({
-      lat: t.lat!,
-      lng: t.lng!,
-      label: t.truck_id,
-      status: t.status,
-      course: t.course,
-      driverName: t.driver_name,
-      offRoute: t.last_on_route === false,
-    }));
-
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-gray-800 bg-gray-900/50 p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-white">{t("monitoring.title")}</h1>
-            <p className="text-xs text-gray-500">
-              {data?.total ?? 0} trucks · {data?.moving ?? 0} moving ·{" "}
-              {data?.idle ?? 0} idle · {data?.offline ?? 0} offline
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              placeholder="Search truck, site, or client..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
-            />
-            <div className="flex gap-1">
-              {(["all", "dispatched", "moving", "idle", "offline"] as const).map((f) => (
-                <button key={f} onClick={() => setFilter(f)}
-                  className={`rounded px-2 py-1 text-xs transition ${filter === f ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"}`}>
-                  {f}
-                </button>
-              ))}
-            </div>
-          </div>
+    <div className="mx-auto max-w-6xl p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-white">{t("monitoring.title")}</h1>
+          <p className="text-xs text-gray-500">Search and filter every truck in the fleet, dispatched or not</p>
         </div>
+        <span className="font-mono text-sm" style={{ color: "var(--text-dim)" }}>{filteredTrucks.length} / {trucks.length}</span>
       </div>
 
-      <div className="flex flex-1 min-h-0">
-        <div className="w-1/2 border-r border-gray-800">
-          <MapView truckMarkers={mapMarkers} />
-        </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2.5">
+        <input
+          type="text"
+          placeholder="Search driver or truck ID..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+          style={{ maxWidth: "280px" }}
+        />
+        {FILTERS.map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`rounded px-2.5 py-1 text-xs capitalize transition ${filter === f ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"}`}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
 
-        <div className="w-1/2 overflow-y-auto">
-          <table className="w-full">
-            <thead className="sticky top-0 bg-gray-900">
-              <tr className="border-b border-gray-800 text-left text-xs uppercase text-gray-500">
-                <th className="px-4 py-2">Truck</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2">Speed</th>
-                <th className="px-4 py-2">Destination</th>
-                <th className="px-4 py-2">Route</th>
-                <th className="px-4 py-2">ETA</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800/50">
-              {filteredTrucks.map((t) => {
-                const check = t.dispatch_id ? checkResults.get(t.dispatch_id) : null;
-                return (
-                  <tr key={t.truck_id} onClick={() => setSelectedTruck(t.truck_id)}
-                    className={`cursor-pointer text-sm transition hover:bg-gray-800/50 ${selectedTruck === t.truck_id ? "bg-gray-800/50" : ""}`}>
-                    <td className="px-4 py-2 font-mono text-cyan-400">{t.truck_id}</td>
-                    <td className="px-4 py-2"><StatusBadge status={t.status} /></td>
-                    <td className="px-4 py-2 text-gray-300">{t.lat != null ? `${t.speed} km/h` : "—"}</td>
-                    <td className="px-4 py-2 text-gray-400">
-                      {t.site_name ? <span className="text-white">{t.site_name}</span> : <span className="text-gray-600">—</span>}
-                    </td>
-                    <td className="px-4 py-2">
-                      {t.dispatched ? (
-                        t.last_on_route === false ? <span className="text-red-400" title={check ? `${(check.deviationMeters! / 1000).toFixed(1)}km off` : ""}>⚠ Off</span>
-                        : t.last_on_route === true ? <span className="text-green-400">✓ On</span>
-                        : <button onClick={(e) => { e.stopPropagation(); t.dispatch_id && handleCheckPosition(t.dispatch_id, t.truck_id); }}
-                          disabled={checking === t.truck_id}
-                          className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50">
-                          {checking === t.truck_id ? "..." : "Check"}
-                        </button>
-                      ) : <span className="text-gray-600">—</span>}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-gray-400">
-                      {check?.etaSeconds != null ? (
-                        <span className={check.onRoute ? "text-green-400" : "text-amber-400"}>
-                          {check.etaLabel}{check.etaBasis === "fallback-speed" ? "*" : ""}
-                        </span>
-                      ) : t.last_eta_seconds != null ? (
-                        <span>{formatEta(t.last_eta_seconds)}</span>
-                      ) : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filteredTrucks.length === 0 && (
-            <div className="p-8 text-center text-sm text-gray-500">No trucks match the current filter.</div>
-          )}
-        </div>
+      <div className="mt-4 overflow-x-auto rounded-lg border border-gray-800">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-800 bg-gray-900 text-left text-xs uppercase text-gray-500">
+              <th className="px-4 py-2">Truck</th>
+              <th className="px-4 py-2">Driver</th>
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Speed</th>
+              <th className="px-4 py-2">Destination</th>
+              <th className="px-4 py-2">Updated</th>
+              <th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-800/50">
+            {filteredTrucks.map((tr) => (
+              <MonitoringRow
+                key={tr.truck_id}
+                truck={tr}
+                check={tr.dispatch_id ? checkResults.get(tr.dispatch_id) : undefined}
+                checking={checking === tr.truck_id}
+                onCheckPosition={() => tr.dispatch_id && handleCheckPosition(tr.dispatch_id, tr.truck_id)}
+              />
+            ))}
+          </tbody>
+        </table>
+        {filteredTrucks.length === 0 && (
+          <div className="p-8 text-center text-sm text-gray-500">No trucks match.</div>
+        )}
       </div>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: MonitoringTruck["status"] }) {
-  const styles = { moving: "bg-green-900/50 text-green-400", idle: "bg-cyan-900/50 text-cyan-400", offline: "bg-gray-800 text-gray-500" };
-  return <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${styles[status]}`}>{status}</span>;
-}
+function MonitoringRow({
+  truck,
+  check,
+  checking,
+  onCheckPosition,
+}: {
+  truck: MonitoringTruck;
+  check: PositionCheckResult | undefined;
+  checking: boolean;
+  onCheckPosition: () => void;
+}) {
+  const isOffRoute = truck.dispatched && truck.last_on_route === false;
+  const statusLabel = isOffRoute
+    ? "🔴 off-route"
+    : truck.status === "moving"
+      ? "🟢 moving"
+      : truck.status === "idle"
+        ? "🔵 idle"
+        : "⚪ offline";
+  const statusColor = isOffRoute ? "#f87171" : truck.status === "moving" ? "#4ade80" : truck.status === "idle" ? "#22d3ee" : "var(--text-dim)";
 
-function formatEta(seconds: number): string {
-  if (seconds < 0) return "—";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds % 3600) / 60);
-  if (h === 0) return `${m}m`;
-  return `${h}h ${m}m`;
+  const locateHref = truck.lat != null && truck.lng != null
+    ? `/dispatch?lat=${truck.lat}&lng=${truck.lng}`
+    : null;
+
+  return (
+    <tr className="text-sm hover:bg-gray-800/30">
+      <td className="px-4 py-2 font-mono text-cyan-400">{truck.truck_id}</td>
+      <td className="px-4 py-2 text-white">{truck.driver_name || "—"}</td>
+      <td className="px-4 py-2">
+        <span className="inline-flex rounded px-2 py-0.5 text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+      </td>
+      <td className="px-4 py-2 text-gray-300">{truck.speed != null ? `${truck.speed} km/h` : "—"}</td>
+      <td className="px-4 py-2 text-gray-400">
+        {truck.dispatched ? (
+          <span className="text-white">{truck.site_name ?? "—"}</span>
+        ) : (
+          <span className="text-gray-600">—</span>
+        )}
+      </td>
+      <td className="px-4 py-2 text-gray-400">{truck.age_minutes != null ? `${truck.age_minutes}min ago` : "—"}</td>
+      <td className="px-4 py-2 text-right">
+        {truck.dispatched && truck.last_on_route == null && truck.dispatch_id && (
+          <button
+            onClick={onCheckPosition}
+            disabled={checking}
+            className="mr-2 text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+            title={check ? `${check.etaLabel}` : undefined}
+          >
+            {checking ? "..." : "Check"}
+          </button>
+        )}
+        {locateHref && (
+          <Link href={locateHref} className="text-xs text-indigo-400 hover:text-indigo-300">Locate</Link>
+        )}
+      </td>
+    </tr>
+  );
 }

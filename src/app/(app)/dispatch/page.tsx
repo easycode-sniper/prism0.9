@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import {
   listSites,
   listTrucks,
@@ -27,6 +28,13 @@ const MapView = dynamic(() => import("@/components/map/MapView").then((m) => m.M
 
 export default function DispatchPage() {
   const { t } = useTranslation();
+  const searchParams = useSearchParams();
+  const focusLat = searchParams.get("lat");
+  const focusLng = searchParams.get("lng");
+  const focusPoint = useMemo<[number, number] | null>(
+    () => (focusLat && focusLng ? [parseFloat(focusLat), parseFloat(focusLng)] : null),
+    [focusLat, focusLng]
+  );
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [trucks, setTrucks] = useState<TruckRecord[]>([]);
   const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
@@ -258,6 +266,7 @@ export default function DispatchPage() {
             siteMarkers={siteMarkers}
             zones={geofences}
             routeLine={mostRecentRoute}
+            focusPoint={focusPoint}
           />
         </div>
       </div>
@@ -518,6 +527,7 @@ export default function DispatchPage() {
           siteMarkers={siteMarkers}
           zones={geofences}
           routeLine={mostRecentRoute}
+          focusPoint={focusPoint}
         />
       </div>
     </div>

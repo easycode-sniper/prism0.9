@@ -39,6 +39,7 @@ interface MapViewProps {
   siteMarkers?: SiteMarkerData[];
   zones?: ZoneData[];
   routeLine?: [number, number][] | null;
+  focusPoint?: [number, number] | null;
 }
 
 const SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
@@ -91,7 +92,7 @@ function buildSiteIcon(): L.DivIcon {
   });
 }
 
-export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine = null }: MapViewProps) {
+export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine = null, focusPoint = null }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const truckLayerRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -235,6 +236,13 @@ export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine 
       layer.addLayer(shape);
     }
   }, [zones]);
+
+  // Pan/zoom to a specific point on request (e.g. "Locate" from Monitoring)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusPoint) return;
+    map.setView(focusPoint, 13);
+  }, [focusPoint]);
 
   // Route polyline
   useEffect(() => {

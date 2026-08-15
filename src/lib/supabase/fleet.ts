@@ -6,8 +6,8 @@
 // call ran entirely server-side, the browser client couldn't read the
 // session cookie, and the RLS-protected fleet_trucks query silently
 // returned zero rows. "use server" here makes this a proper server
-// action — safe to call from client components (live-fleet/page.tsx,
-// via RPC) and from other server code (monitoring.ts, direct call).
+// action — safe to call from client components (via RPC) and from
+// other server code (monitoring.ts, direct call).
 
 import { createClient } from "@/lib/supabase/server";
 import { getFleetData } from "@/lib/wialon/config";

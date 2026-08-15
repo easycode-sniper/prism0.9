@@ -10,7 +10,6 @@ const NAV_ITEMS: { href: string; key: string }[] = [
   { href: "/dashboard", key: "nav.dashboard" },
   { href: "/dispatch", key: "nav.dispatch" },
   { href: "/monitoring", key: "nav.monitoring" },
-  { href: "/live-fleet", key: "nav.liveFleet" },
   { href: "/history", key: "nav.history" },
   { href: "/notifications", key: "nav.notifications" },
 ];

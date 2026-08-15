@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 import { useFleet } from "@/components/providers/FleetProvider";
-import { getDriverRatings, DriverRating } from "@/lib/supabase/history";
+import { getDriverRatings, DriverRating, getNotifications, NotificationRecord } from "@/lib/supabase/history";
 import { listGeofences } from "@/lib/supabase/geofences";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";

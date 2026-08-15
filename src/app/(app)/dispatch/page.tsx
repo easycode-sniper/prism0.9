@@ -250,6 +250,11 @@ export default function DispatchPage() {
         course: tr.course,
         driverName: tr.driver_name,
         offRoute: tr.dispatched && tr.last_on_route === false,
+        speed: tr.speed,
+        ageMinutes: tr.age_minutes,
+        siteName: tr.dispatched ? tr.site_name : null,
+        client: tr.dispatched ? tr.client : null,
+        etaSeconds: tr.dispatched ? tr.last_eta_seconds : null,
       }));
   }, [fleetTrucks]);
 

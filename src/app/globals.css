@@ -318,15 +318,18 @@ hr {
   background: var(--line);
 }
 
-/* Leaflet popup */
+/* Leaflet popup — !important because leaflet.css loads inside the
+   map's own client-only chunk, after this stylesheet, and otherwise
+   wins the cascade with its default white popup background. */
 .leaflet-popup-content-wrapper {
-  background: var(--panel);
-  color: var(--text);
+  background: var(--panel) !important;
+  color: var(--text) !important;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
 
-.leaflet-popup-tip { background: var(--panel); }
+.leaflet-popup-tip { background: var(--panel) !important; }
+.leaflet-popup-close-button { color: var(--text-dim) !important; }
 .leaflet-container { font-family: var(--font-sans); background: var(--bg); }
 
 /* RTL (Arabic) — targeted overrides, not a full pixel-perfect mirror,

@@ -15,6 +15,18 @@ export interface TruckMarkerData {
   course?: number | null;
   offRoute?: boolean;
   driverName?: string | null;
+  speed?: number | null;
+  ageMinutes?: number | null;
+  siteName?: string | null;
+  client?: string | null;
+  etaSeconds?: number | null;
+}
+
+function formatEta(seconds: number | null | undefined): string | null {
+  if (seconds == null) return null;
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
 export interface SiteMarkerData {
@@ -243,11 +255,18 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       const labelText = m.driverName ? `${m.driverName} · ${m.label}` : m.label;
       const marker = L.marker([m.lat, m.lng], { icon: buildTruckIcon(m.status, m.offRoute, m.course, labelText) });
 
+      const eta = formatEta(m.etaSeconds);
       marker.bindPopup(
-        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5;">
-          <strong style="color: #22d3ee;">${m.label}</strong>${m.driverName ? `<br>Driver: ${m.driverName}` : ""}<br>
-          Status: <span style="color: ${statusColor(m.status, m.offRoute)};">${m.status}</span>
-          ${m.offRoute ? "<br><span style='color: #f87171;'>⚠ Off route</span>" : ""}
+        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5; min-width: 160px;">
+          <strong style="font-size: 13px; color: #22d3ee;">${m.label}</strong>
+          ${m.driverName ? `<div style="color: #9a9ab0; margin-top: 2px;">👤 ${m.driverName}</div>` : ""}
+          <div style="margin-top: 6px; display: flex; justify-content: space-between;">
+            <span style="color: ${statusColor(m.status, m.offRoute)}; text-transform: capitalize; font-weight: 600;">● ${m.status}</span>
+            ${m.speed != null ? `<span>${Math.round(m.speed)} km/h</span>` : ""}
+          </div>
+          ${m.offRoute ? `<div style="color: #f87171; margin-top: 4px;">⚠ Off route</div>` : ""}
+          ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #26263c;">🎯 ${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</div>` : ""}
+          ${m.ageMinutes != null ? `<div style="color: #6b6b80; margin-top: 6px; font-size: 11px;">Updated ${m.ageMinutes < 1 ? "just now" : `${m.ageMinutes}m ago`}</div>` : ""}
         </div>`
       );
 

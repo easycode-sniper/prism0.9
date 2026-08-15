@@ -7,6 +7,7 @@ import {
   listTrucks,
   listActiveDispatches,
   createBatchDispatch,
+  createDispatchQueue,
   stopDispatch,
 } from "@/lib/supabase/actions";
 import { checkPositionForDispatch, checkPositionManual } from "@/lib/supabase/positions";
@@ -38,6 +39,9 @@ export default function DispatchPage() {
   const [siteSearch, setSiteSearch] = useState("");
   const [selectedSite, setSelectedSite] = useState<SiteRecord | null>(null);
   const [siteResultsOpen, setSiteResultsOpen] = useState(false);
+
+  const [destinationMode, setDestinationMode] = useState<"same" | "different">("same");
+  const [truckSites, setTruckSites] = useState<Record<string, SiteRecord | null>>({});
 
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
@@ -83,6 +87,16 @@ export default function DispatchPage() {
     setSelectedTrucks((prev) =>
       prev.includes(truckId) ? prev.filter((id) => id !== truckId) : [...prev, truckId]
     );
+    setTruckSites((prev) => {
+      if (!(truckId in prev)) return prev;
+      const next = { ...prev };
+      delete next[truckId];
+      return next;
+    });
+  }
+
+  function setTruckSite(truckId: string, site: SiteRecord | null) {
+    setTruckSites((prev) => ({ ...prev, [truckId]: site }));
   }
 
   const filteredTrucks = useMemo(() => {
@@ -113,16 +127,37 @@ export default function DispatchPage() {
   async function handleCreateDispatch(e: React.FormEvent) {
     e.preventDefault();
     setError(null); setSuccess(null); setLoading(true);
-    if (selectedTrucks.length === 0 || !selectedSite) {
-      setError("Select at least one truck and a destination");
+
+    if (selectedTrucks.length === 0) {
+      setError("Select at least one truck");
       setLoading(false);
       return;
     }
-    const result = await createBatchDispatch(selectedTrucks, selectedSite.id);
-    if (result.error) { setError(result.error); setLoading(false); return; }
-    const siteName = result.data?.[0]?.site?.name ?? selectedSite.name;
-    setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} → ${siteName}`);
-    setSelectedTrucks([]); setTruckSearch(""); clearSite();
+
+    if (destinationMode === "same") {
+      if (!selectedSite) {
+        setError("Select a destination");
+        setLoading(false);
+        return;
+      }
+      const result = await createBatchDispatch(selectedTrucks, selectedSite.id);
+      if (result.error) { setError(result.error); setLoading(false); return; }
+      const siteName = result.data?.[0]?.site?.name ?? selectedSite.name;
+      setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} → ${siteName}`);
+    } else {
+      const missing = selectedTrucks.filter((id) => !truckSites[id]);
+      if (missing.length > 0) {
+        setError(`Assign a destination for: ${missing.join(", ")}`);
+        setLoading(false);
+        return;
+      }
+      const entries = selectedTrucks.map((id) => ({ truckId: id, siteId: truckSites[id]!.id }));
+      const result = await createDispatchQueue(entries);
+      if (result.error) { setError(result.error); setLoading(false); return; }
+      setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} to ${selectedTrucks.length} destination${selectedTrucks.length > 1 ? "s" : ""}`);
+    }
+
+    setSelectedTrucks([]); setTruckSearch(""); clearSite(); setTruckSites({});
     setLoading(false);
     await loadData();
     await loadMapData();
@@ -247,37 +282,76 @@ export default function DispatchPage() {
               🏭 {FACTORY_NAME}
             </div>
 
-            <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Destination — client or site name</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={siteSearch}
-                onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); setSiteResultsOpen(true); }}
-                onFocus={() => setSiteResultsOpen(true)}
-                placeholder="Type client name or town..."
-                className="search-input w-full"
-                style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
-              />
-              {selectedSite && (
-                <button type="button" onClick={clearSite} className="text-xs mt-1" style={{ color: "var(--indigo)" }}>Clear</button>
-              )}
-              {siteResultsOpen && !selectedSite && siteSearchResults.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full max-h-52 overflow-y-auto rounded-md" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
-                  {siteSearchResults.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => selectSite(s)}
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-black/20"
-                    >
-                      <span className="text-white">{s.name}</span>
-                      {s.client && <span style={{ color: "var(--text-dim)" }}> — {s.client}</span>}
-                      {s.lat == null && <span style={{ color: "var(--red)" }}> (no coords)</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="flex gap-1 mb-3 rounded-md p-1" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+              <button
+                type="button"
+                onClick={() => setDestinationMode("same")}
+                className="flex-1 text-xs py-1.5 rounded"
+                style={{ background: destinationMode === "same" ? "var(--indigo)" : "transparent", color: destinationMode === "same" ? "#fff" : "var(--text-dim)", fontWeight: 600 }}
+              >
+                Same destination for all
+              </button>
+              <button
+                type="button"
+                onClick={() => setDestinationMode("different")}
+                className="flex-1 text-xs py-1.5 rounded"
+                style={{ background: destinationMode === "different" ? "var(--indigo)" : "transparent", color: destinationMode === "different" ? "#fff" : "var(--text-dim)", fontWeight: 600 }}
+              >
+                Different destination per truck
+              </button>
             </div>
+
+            {destinationMode === "same" ? (
+              <>
+                <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Destination — client or site name</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={siteSearch}
+                    onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); setSiteResultsOpen(true); }}
+                    onFocus={() => setSiteResultsOpen(true)}
+                    placeholder="Type client name or town..."
+                    className="search-input w-full"
+                    style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+                  />
+                  {selectedSite && (
+                    <button type="button" onClick={clearSite} className="text-xs mt-1" style={{ color: "var(--indigo)" }}>Clear</button>
+                  )}
+                  {siteResultsOpen && !selectedSite && siteSearchResults.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full max-h-52 overflow-y-auto rounded-md" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+                      {siteSearchResults.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => selectSite(s)}
+                          className="block w-full text-left px-3 py-2 text-sm hover:bg-black/20"
+                        >
+                          <span className="text-white">{s.name}</span>
+                          {s.client && <span style={{ color: "var(--text-dim)" }}> — {s.client}</span>}
+                          {s.lat == null && <span style={{ color: "var(--red)" }}> (no coords)</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                {selectedTrucks.length === 0 ? (
+                  <p className="text-xs" style={{ color: "var(--text-dim)" }}>Select trucks above first.</p>
+                ) : (
+                  selectedTrucks.map((truckId) => (
+                    <QueueDestinationRow
+                      key={truckId}
+                      truckId={truckId}
+                      sites={sites}
+                      value={truckSites[truckId] ?? null}
+                      onChange={(site) => setTruckSite(truckId, site)}
+                    />
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           <button type="submit" disabled={loading} className="btn-primary w-full">
@@ -320,6 +394,75 @@ export default function DispatchPage() {
           zones={geofences}
           routeLine={mostRecentRoute}
         />
+      </div>
+    </div>
+  );
+}
+
+function QueueDestinationRow({
+  truckId,
+  sites,
+  value,
+  onChange,
+}: {
+  truckId: string;
+  sites: SiteRecord[];
+  value: SiteRecord | null;
+  onChange: (site: SiteRecord | null) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const results = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return sites
+      .filter((s) => s.name.toLowerCase().includes(q) || (s.client && s.client.toLowerCase().includes(q)))
+      .slice(0, 20);
+  }, [sites, search]);
+
+  function pick(site: SiteRecord) {
+    onChange(site);
+    setSearch(`${site.name}${site.client ? ` — ${site.client}` : ""}`);
+    setOpen(false);
+  }
+
+  function clear() {
+    onChange(null);
+    setSearch("");
+  }
+
+  return (
+    <div className="rounded-md p-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="truck-id text-xs">{truckId}</span>
+        {value && <button type="button" onClick={clear} className="text-xs" style={{ color: "var(--indigo)" }}>Clear</button>}
+      </div>
+      <div className="relative">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); onChange(null); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Client name or town..."
+          className="search-input w-full"
+          style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "4px", padding: "5px 8px", color: "var(--text)", fontSize: ".78rem" }}
+        />
+        {open && !value && results.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-md" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
+            {results.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => pick(s)}
+                className="block w-full text-left px-2 py-1.5 text-xs hover:bg-black/20"
+              >
+                <span className="text-white">{s.name}</span>
+                {s.client && <span style={{ color: "var(--text-dim)" }}> — {s.client}</span>}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

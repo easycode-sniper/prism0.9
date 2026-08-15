@@ -209,7 +209,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     layer.clearLayers();
 
     for (const m of truckMarkers) {
-      const labelText = showNames ? (m.driverName || m.label) : null;
+      const labelText = showNames ? (m.driverName ? `${m.driverName} · ${m.label}` : m.label) : null;
       const marker = L.marker([m.lat, m.lng], { icon: buildTruckIcon(m.status, m.offRoute, m.course, labelText) });
 
       marker.bindPopup(

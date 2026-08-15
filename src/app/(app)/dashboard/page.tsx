@@ -7,8 +7,13 @@ import { useFleet } from "@/components/providers/FleetProvider";
 import { getDriverRatings, DriverRating, getNotifications, NotificationRecord } from "@/lib/supabase/history";
 import { listGeofences } from "@/lib/supabase/geofences";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
+import { listGasStations } from "@/lib/supabase/stations";
+import type { GasStation } from "@/lib/supabase/stations";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+
+// A truck within this distance of a station is treated as "at the pump".
+const STATION_PROXIMITY_METERS = 150;
 
 const GEOFENCE_EDGE_BUFFER_METERS = 150;
 
@@ -51,6 +56,8 @@ export default function DashboardPage() {
   const [ratings, setRatings] = useState<DriverRating[]>([]);
   const [ratingsError, setRatingsError] = useState<string | null>(null);
   const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
+  const [gasStations, setGasStations] = useState<GasStation[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
   useEffect(() => {
     if (fleetData.error) {
@@ -69,6 +76,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     listGeofences().then(({ data }) => setGeofences(data));
+  }, []);
+
+  useEffect(() => {
+    listGasStations().then(({ data }) => setGasStations(data));
+  }, []);
+
+  useEffect(() => {
+    getNotifications().then(({ data }) => setNotifications(data));
   }, []);
 
   const trucks = fleetData.trucks;
@@ -97,6 +112,36 @@ export default function DashboardPage() {
     datasets: [{
       data: [occupancy.factory, occupancy.base, occupancy.customer_site, occupancy.in_transit],
       backgroundColor: ["#3b82f6", "#8b5cf6", "#22c55e", "#06b6d4"],
+      borderWidth: 0,
+    }],
+  };
+
+  const fuelingTrucks = trucksWithPosition
+    .map((t) => {
+      const station = gasStations.find(
+        (s) => haversineMeters(t.lat!, t.lng!, s.lat, s.lng) <= STATION_PROXIMITY_METERS
+      );
+      return station ? { truckId: t.truck_id, stationName: station.name } : null;
+    })
+    .filter((x): x is { truckId: string; stationName: string } => x !== null);
+
+  const fuelChart = {
+    labels: ["At Gas Station ⛽", "Not at Gas Station"],
+    datasets: [{
+      data: [fuelingTrucks.length, trucksWithPosition.length - fuelingTrucks.length],
+      backgroundColor: ["#f59e0b", "#334155"],
+      borderWidth: 0,
+    }],
+  };
+
+  const alertCounts = { off_route: 0, speeding: 0, site_arrival: 0, factory_arrival: 0 };
+  for (const n of notifications) alertCounts[n.kind]++;
+
+  const alertChart = {
+    labels: ["Off Route", "Speeding", "Site Arrival", "Factory Arrival"],
+    datasets: [{
+      data: [alertCounts.off_route, alertCounts.speeding, alertCounts.site_arrival, alertCounts.factory_arrival],
+      backgroundColor: ["#ef4444", "#f97316", "#22c55e", "#3b82f6"],
       borderWidth: 0,
     }],
   };
@@ -131,7 +176,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', gridAutoRows: 'min-content' }}>
         <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px' }}>
           <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Fleet Status Distribution</h3>
           <div style={{ position: 'relative', height: '220px' }}>
@@ -142,6 +187,28 @@ export default function DashboardPage() {
           <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Geofence Occupancy</h3>
           <div style={{ position: 'relative', height: '220px' }}>
             <Doughnut data={geofenceChart} options={chartOptions} />
+          </div>
+        </div>
+        <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px' }}>
+          <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '4px' }}>Fuel Stop Analysis</h3>
+          <p style={{ fontSize: '.72rem', color: 'var(--text-dim)', marginBottom: '6px' }}>
+            Live proximity to a known station (&lt;{STATION_PROXIMITY_METERS}m)
+          </p>
+          <div style={{ position: 'relative', height: '190px' }}>
+            <Doughnut data={fuelChart} options={chartOptions} />
+          </div>
+          {fuelingTrucks.length > 0 && (
+            <ul style={{ marginTop: '8px', fontSize: '.78rem', color: 'var(--text-dim)', listStyle: 'none', padding: 0 }}>
+              {fuelingTrucks.map((f) => (
+                <li key={f.truckId}>🚚 <strong style={{ color: 'var(--amber)' }}>{f.truckId}</strong> — {f.stationName}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px' }}>
+          <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Alert Types Distribution</h3>
+          <div style={{ position: 'relative', height: '220px' }}>
+            <Doughnut data={alertChart} options={chartOptions} />
           </div>
         </div>
       </div>

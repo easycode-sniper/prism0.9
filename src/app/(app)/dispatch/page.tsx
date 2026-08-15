@@ -14,13 +14,19 @@ import {
 import { checkPositionForDispatch, checkPositionManual } from "@/lib/supabase/positions";
 import { getMonitoringData } from "@/lib/supabase/monitoring";
 import { listGeofences } from "@/lib/supabase/geofences";
+import { listGasStations } from "@/lib/supabase/stations";
 import { createClient } from "@/lib/supabase/client";
 import { FACTORY_NAME } from "@/lib/constants";
+import { haversineMeters } from "@/lib/geometry";
 import type { SiteRecord, TruckRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import type { MonitoringTruck } from "@/lib/supabase/monitoring";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
+import type { GasStation } from "@/lib/supabase/stations";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+
+// A truck within this distance of a station is treated as "at the pump".
+const STATION_PROXIMITY_METERS = 150;
 
 // Leaflet touches `window` at import time, so it can't be part of the
 // server-rendered bundle for this ("use client") page.
@@ -40,6 +46,7 @@ export default function DispatchPage() {
   const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
   const [fleetTrucks, setFleetTrucks] = useState<MonitoringTruck[]>([]);
   const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
+  const [gasStations, setGasStations] = useState<GasStation[]>([]);
 
   const [truckSearch, setTruckSearch] = useState("");
   const [selectedTrucks, setSelectedTrucks] = useState<string[]>([]);
@@ -75,9 +82,14 @@ export default function DispatchPage() {
   }, []);
 
   const loadMapData = useCallback(async () => {
-    const [monitoring, geofenceRes] = await Promise.all([getMonitoringData(), listGeofences()]);
+    const [monitoring, geofenceRes, stationsRes] = await Promise.all([
+      getMonitoringData(),
+      listGeofences(),
+      listGasStations(),
+    ]);
     setFleetTrucks(monitoring.trucks);
     if (geofenceRes.data) setGeofences(geofenceRes.data);
+    if (stationsRes.data) setGasStations(stationsRes.data);
   }, []);
 
   useEffect(() => {
@@ -246,6 +258,17 @@ export default function DispatchPage() {
     [sites]
   );
 
+  const stationMarkers = useMemo(
+    () =>
+      gasStations.map((s) => {
+        const truckHere = allTruckMarkers.find(
+          (tr) => haversineMeters(tr.lat, tr.lng, s.lat, s.lng) <= STATION_PROXIMITY_METERS
+        );
+        return { lat: s.lat, lng: s.lng, name: s.name, truckHere: truckHere?.label ?? null };
+      }),
+    [gasStations, allTruckMarkers]
+  );
+
   const mostRecentRoute = dispatches[0]?.route_geometry ?? null;
 
   if (sidebarCollapsed) {
@@ -264,6 +287,7 @@ export default function DispatchPage() {
           <MapView
             truckMarkers={allTruckMarkers}
             siteMarkers={siteMarkers}
+            stationMarkers={stationMarkers}
             zones={geofences}
             routeLine={mostRecentRoute}
             focusPoint={focusPoint}
@@ -525,6 +549,7 @@ export default function DispatchPage() {
         <MapView
           truckMarkers={allTruckMarkers}
           siteMarkers={siteMarkers}
+          stationMarkers={stationMarkers}
           zones={geofences}
           routeLine={mostRecentRoute}
           focusPoint={focusPoint}

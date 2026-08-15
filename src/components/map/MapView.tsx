@@ -24,6 +24,13 @@ export interface SiteMarkerData {
   client?: string | null;
 }
 
+export interface StationMarkerData {
+  lat: number;
+  lng: number;
+  name: string;
+  truckHere?: string | null;
+}
+
 export interface ZoneData {
   id: string;
   name: string;
@@ -37,6 +44,7 @@ export interface ZoneData {
 interface MapViewProps {
   truckMarkers: TruckMarkerData[];
   siteMarkers?: SiteMarkerData[];
+  stationMarkers?: StationMarkerData[];
   zones?: ZoneData[];
   routeLine?: [number, number][] | null;
   focusPoint?: [number, number] | null;
@@ -92,11 +100,21 @@ function buildSiteIcon(): L.DivIcon {
   });
 }
 
-export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine = null, focusPoint = null }: MapViewProps) {
+function buildStationIcon(occupied: boolean): L.DivIcon {
+  return L.divIcon({
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#f59e0b" : "#334155"};border:2px solid rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;font-size:9px;">⛽</div>`,
+    className: "",
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+}
+
+export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], routeLine = null, focusPoint = null }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const truckLayerRef = useRef<L.MarkerClusterGroup | null>(null);
   const siteLayerRef = useRef<L.MarkerClusterGroup | null>(null);
+  const stationLayerRef = useRef<L.MarkerClusterGroup | null>(null);
   const zonesLayerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.Polyline | null>(null);
   const tileLayersRef = useRef<{ dark: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer } | null>(null);
@@ -104,6 +122,7 @@ export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine 
   const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">("dark");
   const [showZones, setShowZones] = useState(true);
   const [showNames, setShowNames] = useState(true);
+  const [showStations, setShowStations] = useState(false);
 
   // Initialize map once
   useEffect(() => {
@@ -135,6 +154,10 @@ export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine 
 
     truckLayerRef.current = L.markerClusterGroup({ disableClusteringAtZoom: 11, spiderfyOnMaxZoom: true }).addTo(map);
     siteLayerRef.current = L.markerClusterGroup({ disableClusteringAtZoom: 11, spiderfyOnMaxZoom: true }).addTo(map);
+    // Always attached, like the other marker-cluster layers — toggling a
+    // populated MarkerClusterGroup on/off the map (rather than just
+    // clearing its markers) crashes mid-animation on `_leaflet_pos`.
+    stationLayerRef.current = L.markerClusterGroup({ disableClusteringAtZoom: 11, spiderfyOnMaxZoom: true }).addTo(map);
     zonesLayerRef.current = L.layerGroup().addTo(map);
 
     mapRef.current = map;
@@ -218,6 +241,26 @@ export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine 
     }
   }, [siteMarkers]);
 
+  // Gas station markers — layer stays on the map; toggling just clears
+  // vs. repopulates its markers (see mount effect for why).
+  useEffect(() => {
+    const layer = stationLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    if (!showStations) return;
+
+    for (const s of stationMarkers) {
+      const marker = L.marker([s.lat, s.lng], { icon: buildStationIcon(!!s.truckHere) });
+      marker.bindPopup(
+        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5;">
+          <strong style="color: #f59e0b;">⛽ ${s.name}</strong>${s.truckHere ? `<br>🚚 ${s.truckHere} fueling` : ""}
+        </div>`
+      );
+      layer.addLayer(marker);
+    }
+  }, [stationMarkers, showStations]);
+
   // Zone polygons/circles
   useEffect(() => {
     const layer = zonesLayerRef.current;
@@ -280,6 +323,7 @@ export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine 
         <span style={{ width: 1, background: "var(--line)", margin: "2px 2px" }} />
         <ToggleButton active={showZones} onClick={() => setShowZones((v) => !v)} label="📍 Zones" />
         <ToggleButton active={showNames} onClick={() => setShowNames((v) => !v)} label="🏷️ Names" />
+        <ToggleButton active={showStations} onClick={() => setShowStations((v) => !v)} label="⛽ Stations" />
       </div>
       <div ref={containerRef} className="h-full w-full" />
     </div>

@@ -69,7 +69,11 @@ a, button, input, select {
   border-radius: 8px;
 }
 
-input, select, textarea {
+/* Excludes checkbox/radio — this styling (full width, padding, border)
+   is meant for text inputs and selects. Applied to a checkbox, it
+   stretches its hit box to 100% of the flex row, leaving a big blank
+   gap between the tiny visible checkmark and whatever sits next to it. */
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   width: 100%;
   padding: 10px 12px;
   background: var(--panel-2);

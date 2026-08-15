@@ -202,14 +202,17 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     }
   }, [showZones]);
 
-  // Truck markers (rebuilds on data change or names-toggle change)
+  // Truck markers — hidden entirely until Names is on, not just their
+  // labels (Names is the master toggle for the truck layer).
   useEffect(() => {
     const layer = truckLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
 
+    if (!showNames) return;
+
     for (const m of truckMarkers) {
-      const labelText = showNames ? (m.driverName ? `${m.driverName} · ${m.label}` : m.label) : null;
+      const labelText = m.driverName ? `${m.driverName} · ${m.label}` : m.label;
       const marker = L.marker([m.lat, m.lng], { icon: buildTruckIcon(m.status, m.offRoute, m.course, labelText) });
 
       marker.bindPopup(

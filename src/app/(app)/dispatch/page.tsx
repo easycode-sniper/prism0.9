@@ -8,7 +8,6 @@ import {
   listTrucks,
   listActiveDispatches,
   createBatchDispatch,
-  createDispatchQueue,
   stopDispatch,
 } from "@/lib/supabase/actions";
 import { checkPositionForDispatch, checkPositionManual } from "@/lib/supabase/positions";
@@ -55,9 +54,6 @@ export default function DispatchPage() {
   const [selectedSite, setSelectedSite] = useState<SiteRecord | null>(null);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  const [destinationMode, setDestinationMode] = useState<"same" | "different">("same");
-  const [truckSites, setTruckSites] = useState<Record<string, SiteRecord | null>>({});
 
   const [liveFleetOn, setLiveFleetOn] = useState(true);
   const [fleetFilter, setFleetFilter] = useState<"all" | "dispatched" | "idle" | "offline">("all");
@@ -114,17 +110,16 @@ export default function DispatchPage() {
     setSelectedTrucks((prev) =>
       prev.includes(truckId) ? prev.filter((id) => id !== truckId) : [...prev, truckId]
     );
-    setTruckSites((prev) => {
-      if (!(truckId in prev)) return prev;
-      const next = { ...prev };
-      delete next[truckId];
-      return next;
-    });
   }
 
-  function setTruckSite(truckId: string, site: SiteRecord | null) {
-    setTruckSites((prev) => ({ ...prev, [truckId]: site }));
-  }
+  // Live driver names come from the fleet feed (loadMapData), not the
+  // truck registry (loadData) — the Step 1 checklist joins them by ID
+  // so it's not just a wall of truck IDs.
+  const driverByTruckId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const tr of fleetTrucks) map.set(tr.truck_id, tr.driver_name);
+    return map;
+  }, [fleetTrucks]);
 
   const filteredFleet = useMemo(() => {
     let list = fleetTrucks;
@@ -173,31 +168,18 @@ export default function DispatchPage() {
       setLoading(false);
       return;
     }
-
-    if (destinationMode === "same") {
-      if (!selectedSite) {
-        setError("Select a destination");
-        setLoading(false);
-        return;
-      }
-      const result = await createBatchDispatch(selectedTrucks, selectedSite.id);
-      if (result.error) { setError(result.error); setLoading(false); return; }
-      const siteName = result.data?.[0]?.site?.name ?? selectedSite.name;
-      setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} → ${siteName}`);
-    } else {
-      const missing = selectedTrucks.filter((id) => !truckSites[id]);
-      if (missing.length > 0) {
-        setError(`Assign a destination for: ${missing.join(", ")}`);
-        setLoading(false);
-        return;
-      }
-      const entries = selectedTrucks.map((id) => ({ truckId: id, siteId: truckSites[id]!.id }));
-      const result = await createDispatchQueue(entries);
-      if (result.error) { setError(result.error); setLoading(false); return; }
-      setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} to ${selectedTrucks.length} destination${selectedTrucks.length > 1 ? "s" : ""}`);
+    if (!selectedSite) {
+      setError("Select a destination");
+      setLoading(false);
+      return;
     }
 
-    setSelectedTrucks([]); setTruckSearch(""); clearSite(); setTruckSites({});
+    const result = await createBatchDispatch(selectedTrucks, selectedSite.id);
+    if (result.error) { setError(result.error); setLoading(false); return; }
+    const siteName = result.data?.[0]?.site?.name ?? selectedSite.name;
+    setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} → ${siteName}`);
+
+    setSelectedTrucks([]); setTruckSearch(""); clearSite();
     setLoading(false);
     await loadData();
     await loadMapData();
@@ -419,6 +401,7 @@ export default function DispatchPage() {
                   <label key={tr.truck_id} className="flex items-center gap-2 rounded px-2 py-1 text-sm cursor-pointer hover:bg-black/20">
                     <input type="checkbox" checked={selectedTrucks.includes(tr.truck_id)} onChange={() => toggleTruck(tr.truck_id)} />
                     <span className="truck-id">{tr.truck_id}</span>
+                    <span style={{ color: "var(--text-dim)" }}>{driverByTruckId.get(tr.truck_id) || "—"}</span>
                   </label>
                 ))
               )}
@@ -440,81 +423,42 @@ export default function DispatchPage() {
               <option>🏭 {FACTORY_NAME}</option>
             </select>
 
-            <div className="flex gap-1 mb-3 rounded-md p-1" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
-              <button
-                type="button"
-                onClick={() => setDestinationMode("same")}
-                className="flex-1 text-xs py-1.5 rounded"
-                style={{ background: destinationMode === "same" ? "var(--indigo)" : "transparent", color: destinationMode === "same" ? "#fff" : "var(--text-dim)", fontWeight: 600 }}
-              >
-                Same destination for all
-              </button>
-              <button
-                type="button"
-                onClick={() => setDestinationMode("different")}
-                className="flex-1 text-xs py-1.5 rounded"
-                style={{ background: destinationMode === "different" ? "var(--indigo)" : "transparent", color: destinationMode === "different" ? "#fff" : "var(--text-dim)", fontWeight: 600 }}
-              >
-                Different destination per truck
-              </button>
+            <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Destination — client or site name</label>
+            <input
+              type="text"
+              value={siteSearch}
+              onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); }}
+              placeholder="Type client name or town..."
+              className="search-input w-full mb-2"
+              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+            />
+            <select
+              size={6}
+              value={selectedSite?.id ?? ""}
+              onChange={(e) => {
+                const s = sites.find((site) => site.id === e.target.value);
+                if (s) selectSite(s);
+              }}
+              className="w-full mb-2"
+              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", color: "var(--text)", fontSize: ".82rem" }}
+            >
+              <option value="" disabled>-- Select Destination Site --</option>
+              {siteListOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}{s.client ? ` — ${s.client}` : ""}{s.lat == null ? " (no coords)" : ""}
+                </option>
+              ))}
+            </select>
+            <div
+              className="rounded-md px-3 py-2 text-xs mb-1"
+              style={{
+                background: selectedSite ? "rgba(21,156,131,0.08)" : "rgba(109,91,255,0.08)",
+                border: `1px solid ${selectedSite ? "rgba(21,156,131,0.3)" : "rgba(109,91,255,0.25)"}`,
+                color: selectedSite ? "#4ade80" : "var(--indigo)",
+              }}
+            >
+              {selectedSite ? `Destination set: ${selectedSite.name}. Ready to dispatch.` : "Choose a destination to prepare the route."}
             </div>
-
-            {destinationMode === "same" ? (
-              <>
-                <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Destination — client or site name</label>
-                <input
-                  type="text"
-                  value={siteSearch}
-                  onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); }}
-                  placeholder="Type client name or town..."
-                  className="search-input w-full mb-2"
-                  style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
-                />
-                <select
-                  size={6}
-                  value={selectedSite?.id ?? ""}
-                  onChange={(e) => {
-                    const s = sites.find((site) => site.id === e.target.value);
-                    if (s) selectSite(s);
-                  }}
-                  className="w-full mb-2"
-                  style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", color: "var(--text)", fontSize: ".82rem" }}
-                >
-                  <option value="" disabled>-- Select Destination Site --</option>
-                  {siteListOptions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}{s.client ? ` — ${s.client}` : ""}{s.lat == null ? " (no coords)" : ""}
-                    </option>
-                  ))}
-                </select>
-                <div
-                  className="rounded-md px-3 py-2 text-xs mb-1"
-                  style={{
-                    background: selectedSite ? "rgba(21,156,131,0.08)" : "rgba(109,91,255,0.08)",
-                    border: `1px solid ${selectedSite ? "rgba(21,156,131,0.3)" : "rgba(109,91,255,0.25)"}`,
-                    color: selectedSite ? "#4ade80" : "var(--indigo)",
-                  }}
-                >
-                  {selectedSite ? `Destination set: ${selectedSite.name}. Ready to dispatch.` : "Choose a destination to prepare the route."}
-                </div>
-              </>
-            ) : (
-              <div className="space-y-2">
-                {selectedTrucks.length === 0 ? (
-                  <p className="text-xs" style={{ color: "var(--text-dim)" }}>Select trucks above first.</p>
-                ) : (
-                  selectedTrucks.map((truckId) => (
-                    <QueueDestinationRow
-                      key={truckId}
-                      truckId={truckId}
-                      sites={sites}
-                      value={truckSites[truckId] ?? null}
-                      onChange={(site) => setTruckSite(truckId, site)}
-                    />
-                  ))
-                )}
-              </div>
-            )}
           </div>
 
           <button type="submit" disabled={loading} className="btn-primary w-full">
@@ -559,75 +503,6 @@ export default function DispatchPage() {
           routeLine={mostRecentRoute}
           focusPoint={focusPoint}
         />
-      </div>
-    </div>
-  );
-}
-
-function QueueDestinationRow({
-  truckId,
-  sites,
-  value,
-  onChange,
-}: {
-  truckId: string;
-  sites: SiteRecord[];
-  value: SiteRecord | null;
-  onChange: (site: SiteRecord | null) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-
-  const results = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
-    return sites
-      .filter((s) => s.name.toLowerCase().includes(q) || (s.client && s.client.toLowerCase().includes(q)))
-      .slice(0, 20);
-  }, [sites, search]);
-
-  function pick(site: SiteRecord) {
-    onChange(site);
-    setSearch(`${site.name}${site.client ? ` — ${site.client}` : ""}`);
-    setOpen(false);
-  }
-
-  function clear() {
-    onChange(null);
-    setSearch("");
-  }
-
-  return (
-    <div className="rounded-md p-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
-      <div className="flex items-center justify-between mb-1">
-        <span className="truck-id text-xs">{truckId}</span>
-        {value && <button type="button" onClick={clear} className="text-xs" style={{ color: "var(--indigo)" }}>Clear</button>}
-      </div>
-      <div className="relative">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); onChange(null); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder="Client name or town..."
-          className="search-input w-full"
-          style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "4px", padding: "5px 8px", color: "var(--text)", fontSize: ".78rem" }}
-        />
-        {open && !value && results.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-md" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-            {results.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => pick(s)}
-                className="block w-full text-left px-2 py-1.5 text-xs hover:bg-black/20"
-              >
-                <span className="text-white">{s.name}</span>
-                {s.client && <span style={{ color: "var(--text-dim)" }}> — {s.client}</span>}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

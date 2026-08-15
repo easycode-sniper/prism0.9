@@ -1,13 +1,19 @@
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- PRISM — Store Wialon token in app_config
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
--- Run this ONCE to store the Wialon API token securely
--- in Supabase (server-side only, never exposed to browser).
+-- Run this ONCE to seed app_config with a placeholder.
+-- Do NOT put the real Wialon API token in this file — it
+-- gets committed to source control. Set the real token
+-- afterward via Admin → Settings in the app (writes to
+-- this same app_config row through adminSaveSettings),
+-- or directly in the Supabase dashboard's table editor.
 --
--- After running, the token is read by the server-side
--- Wialon client and used to authenticate with Wialon
--- via the Cloudflare relay.
+-- SECURITY NOTE: an earlier version of this migration had
+-- the real token hardcoded here and was committed to git.
+-- That token must be treated as compromised and rotated in
+-- Wialon, independent of this fix — editing this file does
+-- not remove it from git history.
 
 UPDATE public.app_config
-SET config_value = '{"relay": "https://wialon-relay1.ferdjellahsouhaibomd.workers.dev", "server": "hst-api.wialon.eu", "token": "320891517e06a26d588d3174f9414638811A365C73F5F3BAB3B16EFC1BA0D39D393E777C"}'
+SET config_value = '{"relay": "https://wialon-relay1.ferdjellahsouhaibomd.workers.dev", "server": "hst-api.wialon.eu", "token": ""}'
 WHERE config_key = 'wialon';

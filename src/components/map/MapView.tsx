@@ -54,12 +54,31 @@ function statusColor(status: TruckMarkerData["status"], offRoute?: boolean): str
 // Directional arrow rotated to the truck's actual compass heading when
 // known; a plain dot otherwise. Ported from the original single-file
 // app's marker rendering.
-function buildTruckIcon(status: TruckMarkerData["status"], offRoute: boolean | undefined, course: number | null | undefined): L.DivIcon {
+//
+// The name label is baked directly into the icon's own HTML rather than
+// bound as a separate Leaflet tooltip. Permanent tooltips on markers
+// inside a MarkerClusterGroup don't reliably get torn down by
+// clearLayers() — they can leak/persist as orphaned DOM elements after
+// the marker they belonged to is gone (e.g. once a dispatch stops).
+// Baking the label into the marker's own icon means it's created and
+// destroyed atomically with the marker — nothing separate to leak.
+function buildTruckIcon(
+  status: TruckMarkerData["status"],
+  offRoute: boolean | undefined,
+  course: number | null | undefined,
+  labelText: string | null
+): L.DivIcon {
   const color = statusColor(status, offRoute);
-  const html =
+  const shape =
     course != null
       ? `<svg width="22" height="22" viewBox="0 0 24 24" style="transform:rotate(${course}deg); filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));"><path d="M12 1.5 L20 21 L12 16 L4 21 Z" fill="${color}" stroke="#0a0a14" stroke-width="1.75" stroke-linejoin="round"/></svg>`
-      : `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:${offRoute ? 3 : 1}px solid ${offRoute ? "#f87171" : "rgba(255,255,255,.85)"};box-shadow:0 0 6px ${color};margin:5px;"></div>`;
+      : `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:${offRoute ? 3 : 1}px solid ${offRoute ? "#f87171" : "rgba(255,255,255,.85)"};box-shadow:0 0 6px ${color};"></div>`;
+
+  const label = labelText
+    ? `<div style="position:absolute; bottom:26px; left:50%; transform:translateX(-50%); white-space:nowrap; background:#fff; color:#222; font-size:11px; font-weight:600; padding:2px 6px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.5); pointer-events:none;">${labelText}</div>`
+    : "";
+
+  const html = `<div style="position:relative; width:22px; height:22px; display:flex; align-items:center; justify-content:center;">${label}${shape}</div>`;
   return L.divIcon({ html, className: "", iconSize: [22, 22], iconAnchor: [11, 11] });
 }
 
@@ -166,16 +185,8 @@ export function MapView({ truckMarkers, siteMarkers = [], zones = [], routeLine 
     layer.clearLayers();
 
     for (const m of truckMarkers) {
-      const marker = L.marker([m.lat, m.lng], { icon: buildTruckIcon(m.status, m.offRoute, m.course) });
-
-      if (showNames) {
-        marker.bindTooltip(m.driverName || m.label, {
-          permanent: true,
-          direction: "top",
-          offset: [0, -10],
-          className: "truck-name-tooltip",
-        });
-      }
+      const labelText = showNames ? (m.driverName || m.label) : null;
+      const marker = L.marker([m.lat, m.lng], { icon: buildTruckIcon(m.status, m.offRoute, m.course, labelText) });
 
       marker.bindPopup(
         `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5;">

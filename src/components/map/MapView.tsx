@@ -47,10 +47,16 @@ export interface ZoneData {
   id: string;
   name: string;
   kind: "factory" | "site";
+  siteId?: string | null;
   ring: [number, number][] | null;
   centerLat: number | null;
   centerLng: number | null;
   radiusMeters: number | null;
+}
+
+function ringCentroid(ring: [number, number][]): [number, number] {
+  const [latSum, lngSum] = ring.reduce(([la, ln], [lat, lng]) => [la + lat, ln + lng], [0, 0]);
+  return [latSum / ring.length, lngSum / ring.length];
 }
 
 interface MapViewProps {
@@ -103,6 +109,18 @@ function buildTruckIcon(
   return L.divIcon({ html, className: "", iconSize: [22, 22], iconAnchor: [11, 11] });
 }
 
+// The factory and home base are landmarks, not just another zone —
+// always visible regardless of the Zones toggle or zoom level, with
+// their own icon rather than a plain circle marker.
+function buildLandmarkIcon(emoji: string, color: string): L.DivIcon {
+  return L.divIcon({
+    html: `<div style="width:30px;height:30px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:16px;">${emoji}</div>`,
+    className: "",
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+}
+
 function buildSiteIcon(): L.DivIcon {
   return L.divIcon({
     html: `<div style="width:9px;height:9px;border-radius:50%;background:#6d5bff;border:1px solid rgba(255,255,255,.7);"></div>`,
@@ -144,6 +162,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
   const siteLayerRef = useRef<L.MarkerClusterGroup | null>(null);
   const stationLayerRef = useRef<L.MarkerClusterGroup | null>(null);
   const zonesLayerRef = useRef<L.LayerGroup | null>(null);
+  const landmarksLayerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.Polyline | null>(null);
   const tileLayersRef = useRef<{ dark: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer } | null>(null);
 
@@ -199,6 +218,9 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       iconCreateFunction: buildClusterIcon(STATION_CLUSTER_GRADIENT),
     }).addTo(map);
     zonesLayerRef.current = L.layerGroup().addTo(map);
+    // Never gated behind the Zones toggle or clustering — these two are
+    // landmarks the operator needs oriented against at any zoom level.
+    landmarksLayerRef.current = L.layerGroup().addTo(map);
 
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 100);
@@ -327,6 +349,34 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       if (!shape) continue;
       shape.bindPopup(`<strong style="color:#22d3ee;">${z.name}</strong>`);
       layer.addLayer(shape);
+    }
+  }, [zones]);
+
+  // Factory + home base landmark icons — the base is the 'site' zone
+  // with no siteId (a real customer site always has one).
+  useEffect(() => {
+    const layer = landmarksLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    for (const z of zones) {
+      const isFactory = z.kind === "factory";
+      const isBase = z.kind === "site" && z.siteId == null;
+      if (!isFactory && !isBase) continue;
+
+      const point: [number, number] | null =
+        z.centerLat != null && z.centerLng != null
+          ? [z.centerLat, z.centerLng]
+          : z.ring
+            ? ringCentroid(z.ring)
+            : null;
+      if (!point) continue;
+
+      const marker = L.marker(point, {
+        icon: buildLandmarkIcon(isFactory ? "🏭" : "🅿️", isFactory ? "#6d5bff" : "#22d3ee"),
+      });
+      marker.bindPopup(`<strong style="color:#22d3ee;">${z.name}</strong>`);
+      layer.addLayer(marker);
     }
   }, [zones]);
 

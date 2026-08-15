@@ -100,6 +100,22 @@ function buildSiteIcon(): L.DivIcon {
   });
 }
 
+// Matches the legacy app's cluster-bubble classes: site clusters gold,
+// truck clusters purple/indigo. Stations are new — given their own
+// distinct color (red-orange) so all three layers stay tellable apart.
+function buildClusterIcon(gradient: string) {
+  return (cluster: L.MarkerCluster) =>
+    L.divIcon({
+      html: `<div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:.85rem;color:#fff;border:2px solid rgba(255,255,255,.85);box-shadow:0 2px 8px rgba(0,0,0,.4);background:${gradient};">${cluster.getChildCount()}</div>`,
+      className: "",
+      iconSize: [34, 34],
+    });
+}
+
+const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #ffcf4d, #ffb703)";
+const TRUCK_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #a855f7, #6d5bff)";
+const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fb923c, #dc2626)";
+
 function buildStationIcon(occupied: boolean): L.DivIcon {
   return L.divIcon({
     html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#f59e0b" : "#334155"};border:2px solid rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;font-size:9px;">⛽</div>`,
@@ -152,12 +168,24 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
 
     tileLayersRef.current = { dark, satellite, satelliteLabels };
 
-    truckLayerRef.current = L.markerClusterGroup({ disableClusteringAtZoom: 11, spiderfyOnMaxZoom: true }).addTo(map);
-    siteLayerRef.current = L.markerClusterGroup({ disableClusteringAtZoom: 11, spiderfyOnMaxZoom: true }).addTo(map);
+    truckLayerRef.current = L.markerClusterGroup({
+      disableClusteringAtZoom: 11,
+      spiderfyOnMaxZoom: true,
+      iconCreateFunction: buildClusterIcon(TRUCK_CLUSTER_GRADIENT),
+    }).addTo(map);
+    siteLayerRef.current = L.markerClusterGroup({
+      disableClusteringAtZoom: 11,
+      spiderfyOnMaxZoom: true,
+      iconCreateFunction: buildClusterIcon(SITE_CLUSTER_GRADIENT),
+    }).addTo(map);
     // Always attached, like the other marker-cluster layers — toggling a
     // populated MarkerClusterGroup on/off the map (rather than just
     // clearing its markers) crashes mid-animation on `_leaflet_pos`.
-    stationLayerRef.current = L.markerClusterGroup({ disableClusteringAtZoom: 11, spiderfyOnMaxZoom: true }).addTo(map);
+    stationLayerRef.current = L.markerClusterGroup({
+      disableClusteringAtZoom: 11,
+      spiderfyOnMaxZoom: true,
+      iconCreateFunction: buildClusterIcon(STATION_CLUSTER_GRADIENT),
+    }).addTo(map);
     zonesLayerRef.current = L.layerGroup().addTo(map);
 
     mapRef.current = map;

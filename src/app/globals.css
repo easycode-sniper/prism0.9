@@ -266,6 +266,7 @@ tbody tr:hover { background: rgba(109, 91, 255, 0.05); }
 .truck-id {
   font-family: var(--font-mono);
   color: var(--cyan);
+  white-space: nowrap;
 }
 
 /* Glow markers for map */

@@ -161,9 +161,12 @@ export default function DispatchPage() {
     await loadMapData();
   }
 
-  const dispatchedTruckMarkers = useMemo(() => {
+  // Whole live fleet, not just currently-dispatched trucks — matches the
+  // legacy app's Dispatch tab, which always shows every truck/driver on
+  // the map regardless of dispatch status.
+  const allTruckMarkers = useMemo(() => {
     return fleetTrucks
-      .filter((tr) => tr.dispatched && tr.lat != null && tr.lng != null)
+      .filter((tr) => tr.lat != null && tr.lng != null)
       .map((tr) => ({
         lat: tr.lat!,
         lng: tr.lng!,
@@ -171,7 +174,7 @@ export default function DispatchPage() {
         status: tr.status,
         course: tr.course,
         driverName: tr.driver_name,
-        offRoute: tr.last_on_route === false,
+        offRoute: tr.dispatched && tr.last_on_route === false,
       }));
   }, [fleetTrucks]);
 
@@ -312,7 +315,7 @@ export default function DispatchPage() {
       {/* Map */}
       <div className="flex-1 min-w-0">
         <MapView
-          truckMarkers={dispatchedTruckMarkers}
+          truckMarkers={allTruckMarkers}
           siteMarkers={siteMarkers}
           zones={geofences}
           routeLine={mostRecentRoute}

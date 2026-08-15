@@ -9,8 +9,10 @@ export interface MonitoringTruck {
   lat: number | null;
   lng: number | null;
   speed: number;
+  course: number | null;
   age_minutes: number | null;
   matched: boolean;
+  driver_name: string | null;
   // Dispatch info
   dispatched: boolean;
   dispatch_id: string | null;
@@ -19,6 +21,7 @@ export interface MonitoringTruck {
   dispatched_at: string | null;
   last_on_route: boolean | null;
   last_eta_seconds: number | null;
+  route_geometry: [number, number][] | null;
 }
 
 export interface MonitoringData {
@@ -57,6 +60,7 @@ export async function getMonitoringData(): Promise<MonitoringData> {
       dispatched_at,
       last_on_route,
       last_eta_seconds,
+      route_geometry,
       site:construction_sites(name, client)
     `
     )
@@ -77,8 +81,10 @@ export async function getMonitoringData(): Promise<MonitoringData> {
       lat: t.lat,
       lng: t.lng,
       speed: t.speed,
+      course: t.course ?? null,
       age_minutes: t.age_minutes,
       matched: t.matched,
+      driver_name: t.driverName ?? null,
       dispatched: !!dispatch,
       dispatch_id: dispatch?.id || null,
       site_name: Array.isArray(dispatch?.site)
@@ -90,6 +96,7 @@ export async function getMonitoringData(): Promise<MonitoringData> {
       dispatched_at: dispatch?.dispatched_at || null,
       last_on_route: dispatch?.last_on_route ?? null,
       last_eta_seconds: dispatch?.last_eta_seconds ?? null,
+      route_geometry: dispatch?.route_geometry ?? null,
     };
   });
 

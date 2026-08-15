@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { fetchRoute } from "@/lib/routing";
+import { FACTORY_LAT, FACTORY_LNG } from "@/lib/constants";
 
 // ── Auth ──
 
@@ -48,11 +50,18 @@ export async function createBatchDispatch(truckIds: string[], siteId: string) {
     return { error: "Site has no coordinates" };
   }
 
+  // All trucks in a convoy share the same origin (the one factory) and
+  // destination, so the road route only needs to be fetched once.
+  const route = await fetchRoute([FACTORY_LAT, FACTORY_LNG], [site.data.lat, site.data.lng]);
+
   const rows = truckIds.map((truckId) => ({
     truck_id: truckId,
     site_id: siteId,
     dispatched_by: user.data.user!.id,
     status: "active",
+    route_geometry: route?.geometry ?? null,
+    route_total_distance_meters: route?.distanceMeters ?? null,
+    route_total_time_seconds: route?.durationSeconds ?? null,
   }));
 
   const dispatch = await supabase
@@ -65,6 +74,7 @@ export async function createBatchDispatch(truckIds: string[], siteId: string) {
       site_id,
       dispatched_at,
       status,
+      route_geometry,
       site:construction_sites(name, client, lat, lng),
       dispatcher:profiles!dispatches_dispatched_by_fkey(full_name)
     `
@@ -94,6 +104,7 @@ export async function listActiveDispatches() {
       last_on_route,
       last_deviation_meters,
       last_eta_seconds,
+      route_geometry,
       site:construction_sites(name, client, lat, lng),
       dispatcher:profiles!dispatches_dispatched_by_fkey(full_name)
     `
@@ -189,6 +200,7 @@ export interface DispatchRecord {
   last_on_route: boolean | null;
   last_deviation_meters: number | null;
   last_eta_seconds: number | null;
+  route_geometry: [number, number][] | null;
   site: { name: string; client: string | null; lat: number | null; lng: number | null } | null;
   dispatcher: { full_name: string | null } | null;
 }

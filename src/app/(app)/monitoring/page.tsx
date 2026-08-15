@@ -75,7 +75,8 @@ export default function MonitoringPage() {
       lng: t.lng!,
       label: t.truck_id,
       status: t.status,
-      dispatched: t.dispatched,
+      course: t.course,
+      driverName: t.driver_name,
       offRoute: t.last_on_route === false,
     }));
 
@@ -112,7 +113,7 @@ export default function MonitoringPage() {
 
       <div className="flex flex-1 min-h-0">
         <div className="w-1/2 border-r border-gray-800">
-          <MapView markers={mapMarkers} />
+          <MapView truckMarkers={mapMarkers} />
         </div>
 
         <div className="w-1/2 overflow-y-auto">

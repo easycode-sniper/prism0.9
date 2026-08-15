@@ -59,6 +59,7 @@ export interface FleetTruck {
   age_minutes: number | null;
   status: "moving" | "idle" | "offline";
   unit_name: string | null;
+  driverName: string | null;
 }
 
 export interface FleetData {
@@ -247,6 +248,7 @@ export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
         age_minutes: null,
         status: "offline",
         unit_name: null,
+        driverName: null,
       })),
       lastUpdated: null,
       error: "Wialon is not configured — set the API token in Admin → Settings.",
@@ -256,6 +258,15 @@ export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
   try {
     const units = await fetchAllUnits(config);
     const matched = matchTrucksToUnits(allTruckIds, units);
+
+    // Resolved once for the whole fleet, not per-truck — the same pattern
+    // findWialonUnit uses for a single truck, just applied in bulk so
+    // labeling 84 markers with driver names doesn't mean 84 driver-map
+    // fetches.
+    const driverMaps = await fetchWialonDriverMaps(config).catch((err) => {
+      console.warn("Driver library fetch failed — proceeding without driver names:", err.message);
+      return { driverByUnitId: {}, driverByCode: {} };
+    });
 
     const now = Date.now() / 1000;
     const trucks: FleetTruck[] = allTruckIds.map((truckId) => {
@@ -272,6 +283,7 @@ export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
           age_minutes: null,
           status: "offline",
           unit_name: unit?.name || null,
+          driverName: unit ? resolveDriverName(unit, driverMaps) : null,
         };
       }
 
@@ -288,6 +300,7 @@ export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
         age_minutes: ageMinutes,
         status,
         unit_name: unit.name,
+        driverName: resolveDriverName(unit, driverMaps),
       };
     });
 
@@ -308,6 +321,7 @@ export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
         age_minutes: null,
         status: "offline",
         unit_name: null,
+        driverName: null,
       })),
       lastUpdated: null,
       error: err.message,

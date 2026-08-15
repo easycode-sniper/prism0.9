@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { findWialonUnit, getWialonConfig } from "@/lib/wialon/config";
 import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence } from "@/lib/geometry";
 import { listGeofences } from "@/lib/supabase/geofences";
+import { FACTORY_LAT, FACTORY_LNG } from "@/lib/constants";
 
 export interface PositionCheckResult {
   truckId: string;
@@ -34,67 +35,52 @@ const SPEED_LIMIT_KMH = 90;
 const GEOFENCE_EDGE_BUFFER_METERS = 150;
 const ARRIVAL_DISTANCE_BUFFER_METERS = 300;
 
-// Usine Amouda Ciment, El Baida — verified via Google Places. Used as the
-// factory arrival fallback when no factory geofence polygon is loaded.
-const FACTORY_LAT = 34.4368063;
-const FACTORY_LNG = 2.058655;
+interface DispatchForCheck {
+  id: string;
+  truck_id: string;
+  site_id: string;
+  route_geometry: [number, number][] | null;
+  route_total_distance_meters: number | null;
+  route_total_time_seconds: number | null;
+  is_off_route: boolean | null;
+  is_speeding: boolean | null;
+  site_arrival_notified: boolean | null;
+  factory_arrival_notified: boolean | null;
+}
 
-export async function checkPositionForDispatch(
-  truckId: string,
-  dispatchId: string
-): Promise<{ result?: PositionCheckResult; error?: string }> {
-  const supabase = await createClient();
-  const user = await supabase.auth.getUser();
-  if (!user.data.user) return { error: "Not authenticated" };
+interface SiteForCheck {
+  name: string | null;
+  lat: number | null;
+  lng: number | null;
+}
 
-  // Get dispatch info — including CURRENT off-route/speeding state, so we
-  // can tell whether this check represents a NEW violation (false → true)
-  // or a continuation of one already notified about.
-  const { data: dispatch, error: dispatchError } = await supabase
-    .from("dispatches")
-    .select(
-      "id, truck_id, site_id, route_geometry, route_total_distance_meters, route_total_time_seconds, is_off_route, is_speeding, site_arrival_notified, factory_arrival_notified"
-    )
-    .eq("id", dispatchId)
-    .single();
-
-  if (dispatchError || !dispatch) return { error: "Dispatch not found" };
-
-  // Get site info for fallback + notification messages
-  const { data: site } = await supabase
-    .from("construction_sites")
-    .select("name, lat, lng")
-    .eq("id", dispatch.site_id)
-    .single();
-
-  // Get live position (+ driver, if resolvable) from Wialon
-  const config = await getWialonConfig();
-  if (!config?.token) return { error: "Wialon not configured" };
-
-  const unit = await findWialonUnit(truckId);
-  if (!unit) return { error: `Truck ${truckId} not found in Wialon` };
-  if (!unit.pos) return { error: `No position data for ${truckId}` };
-
-  const point: [number, number] = [unit.pos.lat, unit.pos.lng];
-
-  // Calculate deviation and ETA
+// Core position-check logic shared by the live-Wialon path and the
+// manual-coordinate-paste fallback: deviation/ETA against real route
+// geometry (or straight-line if none), geofence arrival detection,
+// transition-based notifications, and the dispatch row update.
+async function runPositionCheck(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  dispatch: DispatchForCheck,
+  site: SiteForCheck | null,
+  point: [number, number],
+  speed: number,
+  driverName: string | null
+): Promise<PositionCheckResult> {
   let deviationMeters: number | null = null;
   let onRoute: boolean | null = null;
   let deviationBasis: "route" | "straight" = "straight";
   let etaSeconds: number | null = null;
   let etaBasis: "osrm-speed" | "fallback-speed" | null = null;
 
-  const routeGeometry = dispatch.route_geometry as [number, number][] | null;
+  const routeGeometry = dispatch.route_geometry;
 
   if (routeGeometry && routeGeometry.length >= 2) {
-    // Use route geometry
     const proj = projectPointOntoRoute(point, routeGeometry);
     if (proj) {
       deviationMeters = proj.distanceToRoute;
       deviationBasis = "route";
       onRoute = deviationMeters <= ROUTE_BUFFER_METERS;
 
-      // ETA from OSRM speed
       const totalDist = dispatch.route_total_distance_meters;
       const totalTime = dispatch.route_total_time_seconds;
       if (totalDist && totalTime) {
@@ -104,23 +90,20 @@ export async function checkPositionForDispatch(
         etaBasis = "osrm-speed";
       }
     }
-  } else {
-    // Fallback: straight-line distance to destination
-    if (site?.lat && site?.lng) {
-      deviationMeters = haversineMeters(point[0], point[1], site.lat, site.lng);
-      deviationBasis = "straight";
-      etaSeconds = (deviationMeters / 1000) / FALLBACK_AVG_SPEED_KMH * 3600;
-      etaBasis = "fallback-speed";
-    }
+  } else if (site?.lat && site?.lng) {
+    deviationMeters = haversineMeters(point[0], point[1], site.lat, site.lng);
+    deviationBasis = "straight";
+    etaSeconds = (deviationMeters / 1000) / FALLBACK_AVG_SPEED_KMH * 3600;
+    etaBasis = "fallback-speed";
   }
 
-  const isSpeeding = unit.pos.speed > SPEED_LIMIT_KMH;
+  const isSpeeding = speed > SPEED_LIMIT_KMH;
 
   const result: PositionCheckResult = {
-    truckId,
-    lat: unit.pos.lat,
-    lng: unit.pos.lng,
-    speed: unit.pos.speed,
+    truckId: dispatch.truck_id,
+    lat: point[0],
+    lng: point[1],
+    speed,
     deviationMeters,
     onRoute,
     deviationBasis,
@@ -128,7 +111,7 @@ export async function checkPositionForDispatch(
     etaBasis,
     etaLabel: formatDuration(etaSeconds),
     isSpeeding,
-    driverName: unit.driverName,
+    driverName,
     timestamp: new Date(),
   };
 
@@ -175,38 +158,38 @@ export async function checkPositionForDispatch(
 
   if (nowOffRoute && !wasOffRoute) {
     notificationsToInsert.push({
-      dispatch_id: dispatchId,
-      truck_id: truckId,
+      dispatch_id: dispatch.id,
+      truck_id: dispatch.truck_id,
       kind: "off_route",
       title: "🔴 Truck left assigned route",
-      message: `${truckId} has deviated from its route to ${siteName} (${(deviationMeters! / 1000).toFixed(1)}km off).`,
+      message: `${dispatch.truck_id} has deviated from its route to ${siteName} (${(deviationMeters! / 1000).toFixed(1)}km off).`,
     });
   }
   if (nowSpeeding && !wasSpeeding) {
     notificationsToInsert.push({
-      dispatch_id: dispatchId,
-      truck_id: truckId,
+      dispatch_id: dispatch.id,
+      truck_id: dispatch.truck_id,
       kind: "speeding",
       title: "🟠 Speed limit exceeded",
-      message: `${truckId} is going ${Math.round(unit.pos.speed)}km/h on the run to ${siteName} (limit ${SPEED_LIMIT_KMH}km/h).`,
+      message: `${dispatch.truck_id} is going ${Math.round(speed)}km/h on the run to ${siteName} (limit ${SPEED_LIMIT_KMH}km/h).`,
     });
   }
   if (nowSiteArrived) {
     notificationsToInsert.push({
-      dispatch_id: dispatchId,
-      truck_id: truckId,
+      dispatch_id: dispatch.id,
+      truck_id: dispatch.truck_id,
       kind: "site_arrival",
       title: "🟢 Arrived at destination",
-      message: `${truckId} has arrived at ${siteName}.`,
+      message: `${dispatch.truck_id} has arrived at ${siteName}.`,
     });
   }
   if (nowFactoryArrived) {
     notificationsToInsert.push({
-      dispatch_id: dispatchId,
-      truck_id: truckId,
+      dispatch_id: dispatch.id,
+      truck_id: dispatch.truck_id,
       kind: "factory_arrival",
       title: "🟣 Arrived at factory",
-      message: `${truckId} has arrived at Usine Amouda Ciment.`,
+      message: `${dispatch.truck_id} has arrived at Usine Amouda Ciment.`,
     });
   }
 
@@ -216,7 +199,7 @@ export async function checkPositionForDispatch(
 
   // Update dispatch record — current state (resettable) + lifetime flags
   // (never reset, used for history/ratings) + driver name snapshot.
-  await supabase
+  const updateResult = await supabase
     .from("dispatches")
     .update({
       last_lat: result.lat,
@@ -225,7 +208,12 @@ export async function checkPositionForDispatch(
       last_deviation_meters: result.deviationMeters,
       last_on_route: result.onRoute,
       last_deviation_basis: result.deviationBasis,
-      last_eta_seconds: result.etaSeconds,
+      // Column is INTEGER — must round. This was silently failing every
+      // update whenever eta was computed from real route geometry (a
+      // non-whole number), which meant is_off_route/is_speeding never
+      // actually persisted and every check looked like a fresh
+      // violation. Only surfaced once OSRM routing made this path real.
+      last_eta_seconds: result.etaSeconds != null ? Math.round(result.etaSeconds) : null,
       last_eta_basis: result.etaBasis,
       is_off_route: nowOffRoute,
       is_speeding: nowSpeeding,
@@ -236,7 +224,96 @@ export async function checkPositionForDispatch(
       factory_arrival_notified: nowFactoryArrived ? true : undefined,
       arrived_at: nowSiteArrived ? result.timestamp.toISOString() : undefined,
     })
-    .eq("id", dispatchId);
+    .eq("id", dispatch.id)
+    .select("id");
+
+  if (updateResult.error) {
+    console.error("[runPositionCheck] dispatch update failed:", updateResult.error);
+  } else if (updateResult.data.length === 0) {
+    console.error("[runPositionCheck] dispatch update matched 0 rows for id:", dispatch.id);
+  }
+
+  return result;
+}
+
+async function loadDispatchAndSite(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  dispatchId: string
+): Promise<{ dispatch: DispatchForCheck; site: SiteForCheck | null } | { error: string }> {
+  const { data: dispatch, error: dispatchError } = await supabase
+    .from("dispatches")
+    .select(
+      "id, truck_id, site_id, route_geometry, route_total_distance_meters, route_total_time_seconds, is_off_route, is_speeding, site_arrival_notified, factory_arrival_notified"
+    )
+    .eq("id", dispatchId)
+    .single();
+
+  if (dispatchError || !dispatch) return { error: "Dispatch not found" };
+
+  const { data: site } = await supabase
+    .from("construction_sites")
+    .select("name, lat, lng")
+    .eq("id", dispatch.site_id)
+    .single();
+
+  return { dispatch, site: site ?? null };
+}
+
+export async function checkPositionForDispatch(
+  truckId: string,
+  dispatchId: string
+): Promise<{ result?: PositionCheckResult; error?: string }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { error: "Not authenticated" };
+
+  const loaded = await loadDispatchAndSite(supabase, dispatchId);
+  if ("error" in loaded) return { error: loaded.error };
+  const { dispatch, site } = loaded;
+
+  const config = await getWialonConfig();
+  if (!config?.token) return { error: "Wialon not configured" };
+
+  const unit = await findWialonUnit(truckId);
+  if (!unit) return { error: `Truck ${truckId} not found in Wialon` };
+  if (!unit.pos) return { error: `No position data for ${truckId}` };
+
+  const result = await runPositionCheck(
+    supabase,
+    dispatch,
+    site,
+    [unit.pos.lat, unit.pos.lng],
+    unit.pos.speed,
+    unit.driverName
+  );
+
+  return { result };
+}
+
+// Fallback for when the live Wialon fetch fails — lets the dispatcher paste
+// a coordinate pair (from a phone call with the driver, another tracking
+// tool, etc.) and still get a real on-route/off-route + ETA check.
+export async function checkPositionManual(
+  dispatchId: string,
+  lat: number,
+  lng: number
+): Promise<{ result?: PositionCheckResult; error?: string }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { error: "Not authenticated" };
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { error: "Enter valid numeric coordinates" };
+  }
+
+  const loaded = await loadDispatchAndSite(supabase, dispatchId);
+  if ("error" in loaded) return { error: loaded.error };
+  const { dispatch, site } = loaded;
+
+  // No live speed available from a manual paste — speeding simply won't
+  // fire for this check, which is correct: this is a live-fetch-failed
+  // fallback, not a speed source.
+  const result = await runPositionCheck(supabase, dispatch, site, [lat, lng], 0, null);
 
   return { result };
 }

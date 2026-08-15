@@ -38,7 +38,8 @@ export default function DispatchPage() {
 
   const [siteSearch, setSiteSearch] = useState("");
   const [selectedSite, setSelectedSite] = useState<SiteRecord | null>(null);
-  const [siteResultsOpen, setSiteResultsOpen] = useState(false);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [destinationMode, setDestinationMode] = useState<"same" | "different">("same");
   const [truckSites, setTruckSites] = useState<Record<string, SiteRecord | null>>({});
@@ -126,18 +127,16 @@ export default function DispatchPage() {
     return trucks.filter((tr) => tr.truck_id.toLowerCase().includes(q));
   }, [trucks, truckSearch]);
 
-  const siteSearchResults = useMemo(() => {
+  // Full list by default (not search-triggered-only) — the destination
+  // listbox should show every site immediately, narrowing as you type.
+  const siteListOptions = useMemo(() => {
     const q = siteSearch.trim().toLowerCase();
-    if (!q) return [];
-    return sites
-      .filter((s) => s.name.toLowerCase().includes(q) || (s.client && s.client.toLowerCase().includes(q)))
-      .slice(0, 20);
+    if (!q) return sites;
+    return sites.filter((s) => s.name.toLowerCase().includes(q) || (s.client && s.client.toLowerCase().includes(q)));
   }, [sites, siteSearch]);
 
   function selectSite(site: SiteRecord) {
     setSelectedSite(site);
-    setSiteSearch(`${site.name}${site.client ? ` — ${site.client}` : ""}`);
-    setSiteResultsOpen(false);
   }
 
   function clearSite() {
@@ -241,10 +240,43 @@ export default function DispatchPage() {
 
   const mostRecentRoute = dispatches[0]?.route_geometry ?? null;
 
+  if (sidebarCollapsed) {
+    return (
+      <div className="flex h-full">
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(false)}
+          title="Show dispatch panel"
+          className="flex-shrink-0 flex items-start justify-center pt-4"
+          style={{ width: "28px", borderRight: "1px solid var(--line)", background: "var(--panel)", color: "var(--text-dim)" }}
+        >
+          ▶
+        </button>
+        <div className="flex-1 min-w-0">
+          <MapView
+            truckMarkers={allTruckMarkers}
+            siteMarkers={siteMarkers}
+            zones={geofences}
+            routeLine={mostRecentRoute}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full">
       {/* Sidebar */}
-      <div className="w-96 flex-shrink-0 overflow-y-auto p-4 space-y-4" style={{ borderRight: "1px solid var(--line)" }}>
+      <div className="w-96 flex-shrink-0 overflow-y-auto p-4 space-y-4 relative" style={{ borderRight: "1px solid var(--line)" }}>
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(true)}
+          title="Hide dispatch panel"
+          className="absolute top-3 right-3 rounded-md flex items-center justify-center"
+          style={{ width: "22px", height: "22px", background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)", fontSize: ".7rem" }}
+        >
+          ◀
+        </button>
         <div>
           <h1 className="text-xl font-semibold text-white">{t("dispatch.title")}</h1>
           <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>{t("dispatch.subtitle")}</p>
@@ -362,9 +394,13 @@ export default function DispatchPage() {
               Route
             </div>
             <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Starting factory</label>
-            <div className="rounded-md px-3 py-2 text-sm mb-3" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
-              🏭 {FACTORY_NAME}
-            </div>
+            <select
+              disabled
+              className="w-full mb-3"
+              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+            >
+              <option>🏭 {FACTORY_NAME}</option>
+            </select>
 
             <div className="flex gap-1 mb-3 rounded-md p-1" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
               <button
@@ -388,35 +424,40 @@ export default function DispatchPage() {
             {destinationMode === "same" ? (
               <>
                 <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Destination — client or site name</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={siteSearch}
-                    onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); setSiteResultsOpen(true); }}
-                    onFocus={() => setSiteResultsOpen(true)}
-                    placeholder="Type client name or town..."
-                    className="search-input w-full"
-                    style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
-                  />
-                  {selectedSite && (
-                    <button type="button" onClick={clearSite} className="text-xs mt-1" style={{ color: "var(--indigo)" }}>Clear</button>
-                  )}
-                  {siteResultsOpen && !selectedSite && siteSearchResults.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full max-h-52 overflow-y-auto rounded-md" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
-                      {siteSearchResults.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => selectSite(s)}
-                          className="block w-full text-left px-3 py-2 text-sm hover:bg-black/20"
-                        >
-                          <span className="text-white">{s.name}</span>
-                          {s.client && <span style={{ color: "var(--text-dim)" }}> — {s.client}</span>}
-                          {s.lat == null && <span style={{ color: "var(--red)" }}> (no coords)</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                <input
+                  type="text"
+                  value={siteSearch}
+                  onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); }}
+                  placeholder="Type client name or town..."
+                  className="search-input w-full mb-2"
+                  style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+                />
+                <select
+                  size={6}
+                  value={selectedSite?.id ?? ""}
+                  onChange={(e) => {
+                    const s = sites.find((site) => site.id === e.target.value);
+                    if (s) selectSite(s);
+                  }}
+                  className="w-full mb-2"
+                  style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", color: "var(--text)", fontSize: ".82rem" }}
+                >
+                  <option value="" disabled>-- Select Destination Site --</option>
+                  {siteListOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.client ? ` — ${s.client}` : ""}{s.lat == null ? " (no coords)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <div
+                  className="rounded-md px-3 py-2 text-xs mb-1"
+                  style={{
+                    background: selectedSite ? "rgba(21,156,131,0.08)" : "rgba(109,91,255,0.08)",
+                    border: `1px solid ${selectedSite ? "rgba(21,156,131,0.3)" : "rgba(109,91,255,0.25)"}`,
+                    color: selectedSite ? "#4ade80" : "var(--indigo)",
+                  }}
+                >
+                  {selectedSite ? `Destination set: ${selectedSite.name}. Ready to dispatch.` : "Choose a destination to prepare the route."}
                 </div>
               </>
             ) : (

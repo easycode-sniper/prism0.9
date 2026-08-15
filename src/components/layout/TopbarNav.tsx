@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { useFleet } from "@/components/providers/FleetProvider";
 import type { Language } from "@/lib/i18n/translations";
 
 const NAV_ITEMS: { href: string; key: string }[] = [
@@ -43,6 +44,13 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
         )}
       </nav>
     </>
+  );
+}
+
+export function FleetActiveCount() {
+  const { activeRuns, fleetData } = useFleet();
+  return (
+    <span>Active: <strong style={{ color: "var(--amber)" }}>{activeRuns}</strong> / <span>{fleetData.trucks.length || "—"}</span></span>
   );
 }
 

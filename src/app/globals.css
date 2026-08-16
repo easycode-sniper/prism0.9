@@ -384,8 +384,22 @@ hr {
   100% { r: 10; opacity: 0; }
 }
 
+.login-truck {
+  left: -10%;
+  animation: login-truck-drive 4.5s ease-in-out infinite;
+}
+@keyframes login-truck-drive {
+  0%   { left: -10%; opacity: 0; }
+  8%   { opacity: 1; }
+  62%  { left: 82%; opacity: 1; }
+  72%  { left: 78%; opacity: 1; }
+  82%  { left: 82%; opacity: 1; }
+  92%  { opacity: 1; }
+  100% { left: 82%; opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .login-glow, .login-route, .login-ping { animation: none; }
+  .login-glow, .login-route, .login-ping, .login-truck { animation: none; left: 78%; opacity: 1; }
 }
 
 /* RTL (Arabic) — targeted overrides, not a full pixel-perfect mirror,

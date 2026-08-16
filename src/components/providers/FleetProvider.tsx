@@ -66,7 +66,19 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const supabase = createClient();
+  // Stable for the component's lifetime — NOT `createClient()` called
+  // directly in the render body, which returns a new client (and
+  // therefore a new identity) on every render. That instability was
+  // the actual bug: pollOnce, and both realtime channel effects below,
+  // all depend on `supabase`, so a fresh identity on every render tore
+  // them down and immediately re-fired them — including re-running the
+  // full Wialon poll right away instead of on its 60s schedule. Since
+  // pollOnce's own writes trigger the realtime channels that cause a
+  // re-render, this was a feedback loop: poll -> DB write -> realtime
+  // event -> re-render -> new client -> effects reset -> poll again,
+  // compounding into near-continuous full re-fetches and freezing the
+  // tab (this provider wraps every page, so it wasn't page-specific).
+  const [supabase] = useState(() => createClient());
 
   // pollOnce reads these via ref rather than closing over the state
   // directly, so checking positions each poll doesn't require

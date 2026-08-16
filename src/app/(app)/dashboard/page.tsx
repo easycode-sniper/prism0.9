@@ -117,14 +117,14 @@ export default function DashboardPage() {
     }],
   };
 
-  const alertCounts = { off_route: 0, speeding: 0, site_arrival: 0, factory_arrival: 0 };
+  const alertCounts = { off_route: 0, speeding: 0, site_arrival: 0, factory_arrival: 0, hq_arrival: 0 };
   for (const n of notifications) alertCounts[n.kind]++;
 
   const alertChart = {
-    labels: ["Off Route", "Speeding", "Site Arrival", "Factory Arrival"],
+    labels: ["Off Route", "Speeding", "Site Arrival", "Factory Arrival", "HQ Arrival"],
     datasets: [{
-      data: [alertCounts.off_route, alertCounts.speeding, alertCounts.site_arrival, alertCounts.factory_arrival],
-      backgroundColor: ["#ef4444", "#f97316", "#22c55e", "#3b82f6"],
+      data: [alertCounts.off_route, alertCounts.speeding, alertCounts.site_arrival, alertCounts.factory_arrival, alertCounts.hq_arrival],
+      backgroundColor: ["#ef4444", "#f97316", "#22c55e", "#3b82f6", "#22d3ee"],
       borderWidth: 0,
     }],
   };

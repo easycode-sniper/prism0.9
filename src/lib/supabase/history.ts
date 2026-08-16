@@ -136,7 +136,7 @@ export interface NotificationRecord {
   id: string;
   dispatch_id: string | null;
   truck_id: string;
-  kind: "off_route" | "speeding" | "site_arrival" | "factory_arrival";
+  kind: "off_route" | "speeding" | "site_arrival" | "factory_arrival" | "hq_arrival";
   title: string;
   message: string;
   created_at: string;

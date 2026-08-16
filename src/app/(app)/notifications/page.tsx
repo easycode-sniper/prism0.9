@@ -7,7 +7,7 @@ import {
 } from "@/lib/supabase/history";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
-import { TriangleAlert, Gauge, Flag, Factory } from "lucide-react";
+import { TriangleAlert, Gauge, Flag, Factory, ParkingCircle } from "lucide-react";
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
@@ -88,6 +88,7 @@ function NotificationIcon({ kind }: { kind: NotificationRecord["kind"] }) {
     speeding: { icon: Gauge, color: "#fb923c" },
     site_arrival: { icon: Flag, color: "#4ade80" },
     factory_arrival: { icon: Factory, color: "#a855f7" },
+    hq_arrival: { icon: ParkingCircle, color: "#22d3ee" },
   };
   const { icon: Icon, color } = config[kind];
   return <Icon size={16} strokeWidth={2.25} color={color} />;

@@ -10,6 +10,7 @@ import { listGasStations } from "@/lib/supabase/stations";
 import type { GasStation } from "@/lib/supabase/stations";
 import { getNotifications } from "@/lib/supabase/history";
 import type { NotificationRecord } from "@/lib/supabase/history";
+import { checkPositionAuto, checkHqArrivals } from "@/lib/supabase/positions";
 import { createClient } from "@/lib/supabase/client";
 
 interface FleetContextType {
@@ -70,6 +71,15 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
 
+  // pollOnce reads these via ref rather than closing over the state
+  // directly, so checking positions each poll doesn't require
+  // recreating (and re-scheduling) pollOnce every time a dispatch or
+  // geofence changes.
+  const dispatchesRef = useRef<DispatchRecord[]>([]);
+  const geofencesRef = useRef<GeofenceRecord[]>([]);
+  useEffect(() => { dispatchesRef.current = dispatches; }, [dispatches]);
+  useEffect(() => { geofencesRef.current = geofences; }, [geofences]);
+
   const activeRuns = dispatches.length;
   const offRouteCount = dispatches.filter((d) => d.last_on_route === false).length;
 
@@ -116,6 +126,27 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
           offline_count: data.trucks.filter((t: FleetTruck) => t.status === "offline").length,
           captured_at: new Date().toISOString(),
         });
+
+      // The actual notification trigger — this is what previously only
+      // ran when someone manually clicked "Check" on a single truck.
+      // Reuses the positions this same poll already fetched, so it's
+      // not an extra Wialon round-trip per dispatch.
+      const truckById = new Map(data.trucks.map((t) => [t.truck_id, t]));
+      for (const dispatch of dispatchesRef.current) {
+        const truck = truckById.get(dispatch.truck_id);
+        if (truck?.matched && truck.lat != null && truck.lng != null) {
+          checkPositionAuto(dispatch.id, truck.lat, truck.lng, truck.speed, truck.driverName).catch((err) =>
+            console.error("[FleetProvider] auto position check failed:", err)
+          );
+        }
+      }
+
+      const hq = geofencesRef.current.find((g) => g.kind === "site" && g.siteId == null);
+      if (hq?.centerLat != null && hq?.centerLng != null && hq?.radiusMeters != null) {
+        checkHqArrivals(data.trucks, { centerLat: hq.centerLat, centerLng: hq.centerLng, radiusMeters: hq.radiusMeters }).catch(
+          (err) => console.error("[FleetProvider] HQ arrival check failed:", err)
+        );
+      }
     } catch (err) {
       console.error("Fleet poll failed:", err);
     } finally {

@@ -151,7 +151,7 @@ async function runPositionCheck(
   const notificationsToInsert: {
     dispatch_id: string;
     truck_id: string;
-    kind: "off_route" | "speeding" | "site_arrival" | "factory_arrival";
+    kind: "off_route" | "speeding" | "site_arrival" | "factory_arrival" | "hq_arrival";
     title: string;
     message: string;
   }[] = [];
@@ -288,6 +288,76 @@ export async function checkPositionForDispatch(
   );
 
   return { result };
+}
+
+// Automatic sweep, called once per fleet poll (FleetProvider) for every
+// currently-active dispatch — this is what actually makes notifications
+// fire in the background. Position/speed/driver come from the fleet
+// poll FleetProvider already did, not a fresh per-dispatch Wialon call.
+export async function checkPositionAuto(
+  dispatchId: string,
+  lat: number,
+  lng: number,
+  speed: number,
+  driverName: string | null
+): Promise<{ result?: PositionCheckResult; error?: string }> {
+  const supabase = await createClient();
+  const loaded = await loadDispatchAndSite(supabase, dispatchId);
+  if ("error" in loaded) return { error: loaded.error };
+  const { dispatch, site } = loaded;
+
+  const result = await runPositionCheck(supabase, dispatch, site, [lat, lng], speed, driverName);
+  return { result };
+}
+
+const HQ_EDGE_BUFFER_METERS = 50;
+
+// Home-base arrival isn't tied to a dispatch — a truck returns to PARC
+// OMD whether or not it's currently running a delivery — so it can't
+// reuse the dispatches.*_notified flag pattern. fleet_trucks.at_hq is
+// the per-truck transition flag instead. Bulk (one read, one insert,
+// up to two updates) rather than per-truck round trips, since this
+// runs for the whole fleet every poll.
+export async function checkHqArrivals(
+  trucks: { truck_id: string; lat: number | null; lng: number | null }[],
+  hq: { centerLat: number; centerLng: number; radiusMeters: number }
+): Promise<void> {
+  const positioned = trucks.filter((t): t is { truck_id: string; lat: number; lng: number } => t.lat != null && t.lng != null);
+  if (positioned.length === 0) return;
+
+  const supabase = await createClient();
+  const { data: rows } = await supabase
+    .from("fleet_trucks")
+    .select("truck_id, at_hq")
+    .in("truck_id", positioned.map((t) => t.truck_id));
+
+  const wasAtHq = new Map((rows ?? []).map((r) => [r.truck_id, r.at_hq === true]));
+  const radius = hq.radiusMeters + HQ_EDGE_BUFFER_METERS;
+
+  const arrived: string[] = [];
+  const departed: string[] = [];
+
+  for (const t of positioned) {
+    const within = haversineMeters(t.lat, t.lng, hq.centerLat, hq.centerLng) <= radius;
+    const was = wasAtHq.get(t.truck_id) ?? false;
+    if (within && !was) arrived.push(t.truck_id);
+    else if (!within && was) departed.push(t.truck_id);
+  }
+
+  if (arrived.length > 0) {
+    await supabase.from("fleet_trucks").update({ at_hq: true }).in("truck_id", arrived);
+    await supabase.from("notifications").insert(
+      arrived.map((truck_id) => ({
+        truck_id,
+        kind: "hq_arrival" as const,
+        title: "Arrived at headquarters",
+        message: `${truck_id} has arrived at PARC OMD - Headquarters & Parking.`,
+      }))
+    );
+  }
+  if (departed.length > 0) {
+    await supabase.from("fleet_trucks").update({ at_hq: false }).in("truck_id", departed);
+  }
 }
 
 // Fallback for when the live Wialon fetch fails — lets the dispatcher paste

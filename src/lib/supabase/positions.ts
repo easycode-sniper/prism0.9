@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { findWialonUnit, getWialonConfig } from "@/lib/wialon/config";
 import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence } from "@/lib/geometry";
 import { listGeofences } from "@/lib/supabase/geofences";
+import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { FACTORY_LAT, FACTORY_LNG } from "@/lib/constants";
 
 export interface PositionCheckResult {
@@ -64,7 +65,8 @@ async function runPositionCheck(
   site: SiteForCheck | null,
   point: [number, number],
   speed: number,
-  driverName: string | null
+  driverName: string | null,
+  geofences: GeofenceRecord[]
 ): Promise<PositionCheckResult> {
   let deviationMeters: number | null = null;
   let onRoute: boolean | null = null;
@@ -116,7 +118,6 @@ async function runPositionCheck(
   };
 
   // ── Geofence arrival: real polygon if uploaded, distance buffer otherwise ──
-  const { data: geofences } = await listGeofences();
   const siteGeofence = geofences.find((g) => g.kind === "site" && g.siteId === dispatch.site_id);
   const factoryGeofence = geofences.find((g) => g.kind === "factory");
 
@@ -278,13 +279,15 @@ export async function checkPositionForDispatch(
   if (!unit) return { error: `Truck ${truckId} not found in Wialon` };
   if (!unit.pos) return { error: `No position data for ${truckId}` };
 
+  const { data: geofences } = await listGeofences();
   const result = await runPositionCheck(
     supabase,
     dispatch,
     site,
     [unit.pos.lat, unit.pos.lng],
     unit.pos.speed,
-    unit.driverName
+    unit.driverName,
+    geofences
   );
 
   return { result };
@@ -292,21 +295,25 @@ export async function checkPositionForDispatch(
 
 // Automatic sweep, called once per fleet poll (FleetProvider) for every
 // currently-active dispatch — this is what actually makes notifications
-// fire in the background. Position/speed/driver come from the fleet
-// poll FleetProvider already did, not a fresh per-dispatch Wialon call.
+// fire in the background. Position/speed/driver AND geofences come
+// from state FleetProvider's poll already has (context), not a fresh
+// fetch per dispatch — with automatic checks now running every 60s for
+// every active dispatch, a per-call geofences fetch here would multiply
+// into a real background request pile-up, not just a single extra call.
 export async function checkPositionAuto(
   dispatchId: string,
   lat: number,
   lng: number,
   speed: number,
-  driverName: string | null
+  driverName: string | null,
+  geofences: GeofenceRecord[]
 ): Promise<{ result?: PositionCheckResult; error?: string }> {
   const supabase = await createClient();
   const loaded = await loadDispatchAndSite(supabase, dispatchId);
   if ("error" in loaded) return { error: loaded.error };
   const { dispatch, site } = loaded;
 
-  const result = await runPositionCheck(supabase, dispatch, site, [lat, lng], speed, driverName);
+  const result = await runPositionCheck(supabase, dispatch, site, [lat, lng], speed, driverName, geofences);
   return { result };
 }
 
@@ -393,7 +400,8 @@ export async function checkPositionManual(
   // No live speed available from a manual paste — speeding simply won't
   // fire for this check, which is correct: this is a live-fetch-failed
   // fallback, not a speed source.
-  const result = await runPositionCheck(supabase, dispatch, site, [lat, lng], 0, null);
+  const { data: geofences } = await listGeofences();
+  const result = await runPositionCheck(supabase, dispatch, site, [lat, lng], 0, null, geofences);
 
   return { result };
 }

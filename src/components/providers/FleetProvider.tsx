@@ -107,7 +107,17 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
     if (result.data) setNotifications(result.data);
   }, []);
 
+  // Guards against overlapping poll cycles — if a cycle's own
+  // notification checks (below) are still draining when the next 60s
+  // tick fires, starting another full cycle on top would pile up
+  // concurrent request generations with nothing to cap them. A plain
+  // ref (not isPolling state) since pollOnce's identity is now stable
+  // and won't pick up a fresh closure over state.
+  const pollingRef = useRef(false);
+
   const pollOnce = useCallback(async () => {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
     try {
       setIsPolling(true);
       // No truck-ID list to pass — the whole Wialon account is this
@@ -129,28 +139,40 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
 
       // The actual notification trigger — this is what previously only
       // ran when someone manually clicked "Check" on a single truck.
-      // Reuses the positions this same poll already fetched, so it's
-      // not an extra Wialon round-trip per dispatch.
+      // Reuses the positions (and geofences) this same poll already
+      // has, so it's not an extra Wialon/Supabase round-trip per
+      // dispatch. Awaited (allSettled, so one failing dispatch doesn't
+      // stop the rest) rather than fire-and-forget, so this cycle's
+      // work is fully done before pollingRef releases — that's what
+      // actually enforces "one generation of checks at a time."
       const truckById = new Map(data.trucks.map((t) => [t.truck_id, t]));
+      const checks: Promise<unknown>[] = [];
       for (const dispatch of dispatchesRef.current) {
         const truck = truckById.get(dispatch.truck_id);
         if (truck?.lat != null && truck.lng != null) {
-          checkPositionAuto(dispatch.id, truck.lat, truck.lng, truck.speed, truck.driverName).catch((err) =>
-            console.error("[FleetProvider] auto position check failed:", err)
+          checks.push(
+            checkPositionAuto(dispatch.id, truck.lat, truck.lng, truck.speed, truck.driverName, geofencesRef.current).catch(
+              (err) => console.error("[FleetProvider] auto position check failed:", err)
+            )
           );
         }
       }
 
       const hq = geofencesRef.current.find((g) => g.kind === "site" && g.siteId == null);
       if (hq?.centerLat != null && hq?.centerLng != null && hq?.radiusMeters != null) {
-        checkHqArrivals(data.trucks, { centerLat: hq.centerLat, centerLng: hq.centerLng, radiusMeters: hq.radiusMeters }).catch(
-          (err) => console.error("[FleetProvider] HQ arrival check failed:", err)
+        checks.push(
+          checkHqArrivals(data.trucks, { centerLat: hq.centerLat, centerLng: hq.centerLng, radiusMeters: hq.radiusMeters }).catch(
+            (err) => console.error("[FleetProvider] HQ arrival check failed:", err)
+          )
         );
       }
+
+      await Promise.allSettled(checks);
     } catch (err) {
       console.error("Fleet poll failed:", err);
     } finally {
       setIsPolling(false);
+      pollingRef.current = false;
     }
   }, [supabase]);
 

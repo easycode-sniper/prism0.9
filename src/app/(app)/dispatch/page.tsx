@@ -1,27 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import {
-  listSites,
-  listTrucks,
-  listActiveDispatches,
-  createBatchDispatch,
-  stopDispatch,
-} from "@/lib/supabase/actions";
+import { createBatchDispatch, stopDispatch } from "@/lib/supabase/actions";
 import { checkPositionForDispatch, checkPositionManual } from "@/lib/supabase/positions";
-import { listGeofences } from "@/lib/supabase/geofences";
-import { listGasStations } from "@/lib/supabase/stations";
-import { createClient } from "@/lib/supabase/client";
 import { FACTORY_NAME } from "@/lib/constants";
 import { haversineMeters } from "@/lib/geometry";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { joinFleetWithDispatches } from "@/lib/fleetJoin";
-import type { SiteRecord, TruckRecord, DispatchRecord } from "@/lib/supabase/actions";
+import type { SiteRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
-import type { GeofenceRecord } from "@/lib/supabase/geofences";
-import type { GasStation } from "@/lib/supabase/stations";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { Radar } from "lucide-react";
 
@@ -43,12 +32,7 @@ export default function DispatchPage() {
   );
   const [truckFocus, setTruckFocus] = useState<[number, number] | null>(null);
   const focusPoint = truckFocus ?? urlFocusPoint;
-  const { fleetData } = useFleet();
-  const [sites, setSites] = useState<SiteRecord[]>([]);
-  const [trucks, setTrucks] = useState<TruckRecord[]>([]);
-  const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
-  const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
-  const [gasStations, setGasStations] = useState<GasStation[]>([]);
+  const { fleetData, dispatches, geofences, gasStations, sites, trucks, refreshDispatches } = useFleet();
 
   const [truckSearch, setTruckSearch] = useState("");
   const [selectedTrucks, setSelectedTrucks] = useState<string[]>([]);
@@ -68,53 +52,16 @@ export default function DispatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    const [sitesRes, trucksRes, dispatchesRes] = await Promise.all([
-      listSites(),
-      listTrucks(),
-      listActiveDispatches(),
-    ]);
-
-    if (sitesRes.data) setSites(sitesRes.data);
-    if (trucksRes.data) setTrucks(trucksRes.data);
-    if (dispatchesRes.data) setDispatches(dispatchesRes.data);
-  }, []);
-
-  const loadMapData = useCallback(async () => {
-    const [geofenceRes, stationsRes] = await Promise.all([
-      listGeofences(),
-      listGasStations(),
-    ]);
-    if (geofenceRes.data) setGeofences(geofenceRes.data);
-    if (stationsRes.data) setGasStations(stationsRes.data);
-  }, []);
-
   // Fleet positions come from the app-wide FleetProvider context
   // (already polling Wialon in the background), joined with the
-  // dispatches already fetched above — not a second independent
-  // Wialon fetch just for this page.
+  // dispatches that same context already fetches — not a second
+  // independent Wialon fetch just for this page. Sites, trucks,
+  // geofences, and gas stations are all shared from that same context
+  // too, so this page does no data-fetching of its own on mount.
   const fleetTrucks = useMemo(
     () => joinFleetWithDispatches(fleetData.trucks, dispatches),
     [fleetData.trucks, dispatches]
   );
-
-  useEffect(() => {
-    loadData();
-    loadMapData();
-    const interval = setInterval(loadMapData, 60_000);
-    return () => clearInterval(interval);
-  }, [loadData, loadMapData]);
-
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase.channel("dispatches-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dispatches" }, () => {
-        loadData();
-        loadMapData();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadData, loadMapData]);
 
   function toggleTruck(truckId: string) {
     setSelectedTrucks((prev) =>
@@ -122,9 +69,9 @@ export default function DispatchPage() {
     );
   }
 
-  // Live driver names come from the fleet feed (loadMapData), not the
-  // truck registry (loadData) — the Step 1 checklist joins them by ID
-  // so it's not just a wall of truck IDs.
+  // Live driver names come from the fleet feed (fleetTrucks), not the
+  // truck registry (trucks) — the Step 1 checklist joins them by ID so
+  // it's not just a wall of truck IDs.
   const driverByTruckId = useMemo(() => {
     const map = new Map<string, string | null>();
     for (const tr of fleetTrucks) map.set(tr.truck_id, tr.driver_name);
@@ -191,15 +138,13 @@ export default function DispatchPage() {
 
     setSelectedTrucks([]); setTruckSearch(""); clearSite();
     setLoading(false);
-    await loadData();
-    await loadMapData();
+    await refreshDispatches();
   }
 
   async function handleStop(dispatchId: string) {
     const result = await stopDispatch(dispatchId);
     if (result.error) { setError(result.error); return; }
-    await loadData();
-    await loadMapData();
+    await refreshDispatches();
   }
 
   async function handleCheckPosition(dispatchId: string, truckId: string) {
@@ -211,8 +156,7 @@ export default function DispatchPage() {
       setCheckResults(prev => new Map(prev).set(dispatchId, result.result!));
     }
     setChecking(null);
-    await loadData();
-    await loadMapData();
+    await refreshDispatches();
   }
 
   async function handleManualCheck(dispatchId: string, lat: number, lng: number) {
@@ -224,8 +168,7 @@ export default function DispatchPage() {
       setCheckResults(prev => new Map(prev).set(dispatchId, result.result!));
     }
     setChecking(null);
-    await loadData();
-    await loadMapData();
+    await refreshDispatches();
   }
 
   // Whole live fleet, not just currently-dispatched trucks — matches the

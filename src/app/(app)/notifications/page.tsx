@@ -1,46 +1,31 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import {
-  getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
   NotificationRecord,
 } from "@/lib/supabase/history";
+import { useFleet } from "@/components/providers/FleetProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { TriangleAlert, Gauge, Flag, Factory } from "lucide-react";
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
-  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    const result = await getNotifications();
-    setNotifications(result.data);
-    setError(result.error);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
+  // Shared app-wide (already realtime-subscribed by FleetProvider)
+  // instead of this page fetching its own copy on every visit.
+  const { notifications, refreshNotifications } = useFleet();
 
   async function handleMarkRead(id: string) {
     await markNotificationRead(id);
-    loadData();
+    refreshNotifications();
   }
 
   async function handleMarkAllRead() {
     await markAllNotificationsRead();
-    loadData();
+    refreshNotifications();
   }
 
   const unreadCount = notifications.filter((n) => !n.read).length;
-
-  if (loading) {
-    return <div className="flex h-full items-center justify-center text-sm text-gray-500">Loading notifications...</div>;
-  }
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -60,8 +45,6 @@ export default function NotificationsPage() {
           </button>
         )}
       </div>
-
-      {error && <div className="mt-4 rounded-md bg-red-900/50 p-3 text-sm text-red-300">{error}</div>}
 
       {notifications.length === 0 ? (
         <p className="mt-8 text-center text-sm text-gray-500">No notifications yet.</p>

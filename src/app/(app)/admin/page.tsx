@@ -1,25 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { uploadKmlZones, listGeofences } from "@/lib/supabase/geofences";
-import type { KmlUploadReport, GeofenceRecord } from "@/lib/supabase/geofences";
+import { uploadKmlZones } from "@/lib/supabase/geofences";
+import type { KmlUploadReport } from "@/lib/supabase/geofences";
+import { useFleet } from "@/components/providers/FleetProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { Users, Settings } from "lucide-react";
 
 export default function AdminPage() {
   const { t } = useTranslation();
-  const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
+  const { geofences, refreshGeofences } = useFleet();
   const [uploading, setUploading] = useState(false);
   const [report, setReport] = useState<KmlUploadReport | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const loadGeofences = useCallback(async () => {
-    const result = await listGeofences();
-    if (result.data) setGeofences(result.data);
-  }, []);
-
-  useEffect(() => { loadGeofences(); }, [loadGeofences]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -31,7 +25,7 @@ export default function AdminPage() {
       const result = await uploadKmlZones(text);
       if (result.error) { setError(result.error); setUploading(false); return; }
       setReport(result.report ?? null);
-      await loadGeofences();
+      await refreshGeofences();
     } catch {
       setError("Failed to read the KML file");
     } finally {

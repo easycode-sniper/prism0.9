@@ -1,14 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import { listActiveDispatches } from "@/lib/supabase/actions";
 import { checkPositionForDispatch } from "@/lib/supabase/positions";
-import type { DispatchRecord } from "@/lib/supabase/actions";
-import type { MonitoringTruck } from "@/lib/supabase/monitoring";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
+import type { MonitoringTruck } from "@/lib/supabase/monitoring";
 import { useFleet } from "@/components/providers/FleetProvider";
-import { createClient } from "@/lib/supabase/client";
 import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 
@@ -18,32 +15,15 @@ const FILTERS: FilterType[] = ["all", "dispatched", "moving", "idle", "offline"]
 
 export default function MonitoringPage() {
   const { t } = useTranslation();
-  const { fleetData } = useFleet();
-  // Fleet positions/driver names come from the app-wide FleetProvider
-  // context (already polling Wialon in the background) instead of a
-  // fresh Wialon fetch on every visit to this page — only the active
-  // dispatches (a fast, same-region Supabase query) are fetched here.
-  const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
+  // Fleet positions and active dispatches both come from the app-wide
+  // FleetProvider context — already polling/subscribed in the
+  // background — instead of this page fetching (and opening its own
+  // realtime channel on) the same data every time it's visited.
+  const { fleetData, dispatches, refreshDispatches } = useFleet();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [checkResults, setCheckResults] = useState<Map<string, PositionCheckResult>>(new Map());
   const [checking, setChecking] = useState<string | null>(null);
-
-  const loadDispatches = useCallback(async () => {
-    const result = await listActiveDispatches();
-    if (result.data) setDispatches(result.data);
-  }, []);
-
-  useEffect(() => { loadDispatches(); }, [loadDispatches]);
-
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel("monitoring-dispatches")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dispatches" }, () => loadDispatches())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadDispatches]);
 
   const trucks = useMemo(
     () => joinFleetWithDispatches(fleetData.trucks, dispatches),
@@ -57,7 +37,7 @@ export default function MonitoringPage() {
       setCheckResults(prev => new Map(prev).set(dispatchId, result.result!));
     }
     setChecking(null);
-    await loadDispatches();
+    await refreshDispatches();
   }
 
   if (trucks.length === 0 && !fleetData.lastUpdated && !fleetData.error) {

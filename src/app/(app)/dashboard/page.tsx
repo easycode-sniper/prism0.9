@@ -5,11 +5,8 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 import { Truck } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
-import { getDriverRatings, DriverRating, getNotifications, NotificationRecord } from "@/lib/supabase/history";
-import { listGeofences } from "@/lib/supabase/geofences";
+import { getDriverRatings, DriverRating } from "@/lib/supabase/history";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
-import { listGasStations } from "@/lib/supabase/stations";
-import type { GasStation } from "@/lib/supabase/stations";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 
@@ -52,13 +49,10 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 
 export default function DashboardPage() {
   const { t } = useTranslation();
-  const { fleetData, refresh, isPolling } = useFleet();
+  const { fleetData, isPolling, geofences, gasStations, notifications } = useFleet();
   const [connectionStatus, setConnectionStatus] = useState<string>("—");
   const [ratings, setRatings] = useState<DriverRating[]>([]);
   const [ratingsError, setRatingsError] = useState<string | null>(null);
-  const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
-  const [gasStations, setGasStations] = useState<GasStation[]>([]);
-  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
   useEffect(() => {
     if (fleetData.error) {
@@ -73,18 +67,6 @@ export default function DashboardPage() {
       setRatings(data);
       setRatingsError(error);
     });
-  }, []);
-
-  useEffect(() => {
-    listGeofences().then(({ data }) => setGeofences(data));
-  }, []);
-
-  useEffect(() => {
-    listGasStations().then(({ data }) => setGasStations(data));
-  }, []);
-
-  useEffect(() => {
-    getNotifications().then(({ data }) => setNotifications(data));
   }, []);
 
   const trucks = fleetData.trucks;

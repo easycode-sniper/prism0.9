@@ -332,6 +332,62 @@ hr {
 .leaflet-popup-close-button { color: var(--text-dim) !important; }
 .leaflet-container { font-family: var(--font-sans); background: var(--bg); }
 
+/* Login hero background — glowing map + ambient light blobs */
+.login-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.35;
+  animation: login-breathe 8s ease-in-out infinite;
+}
+.login-glow-a {
+  width: 480px;
+  height: 480px;
+  top: 8%;
+  left: 12%;
+  background: var(--indigo);
+}
+.login-glow-b {
+  width: 420px;
+  height: 420px;
+  bottom: 5%;
+  right: 10%;
+  background: var(--cyan);
+  animation-delay: 3s;
+}
+@keyframes login-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.15); opacity: 0.45; }
+}
+
+.login-route {
+  stroke-width: 2.5;
+  stroke-dasharray: 12 18;
+  filter: drop-shadow(0 0 6px currentColor);
+  opacity: 0.8;
+  animation: login-route-flow 6s linear infinite;
+}
+.login-route-1 { animation-duration: 7s; }
+.login-route-2 { animation-duration: 9s; animation-delay: 1s; }
+.login-route-3 { animation-duration: 8s; animation-delay: 2.5s; }
+@keyframes login-route-flow {
+  to { stroke-dashoffset: -300; }
+}
+
+.login-ping {
+  filter: drop-shadow(0 0 4px var(--cyan));
+  animation: login-ping-pulse 3s ease-out infinite;
+}
+@keyframes login-ping-pulse {
+  0% { r: 3; opacity: 0.9; }
+  70% { r: 10; opacity: 0; }
+  100% { r: 10; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-glow, .login-route, .login-ping { animation: none; }
+}
+
 /* RTL (Arabic) — targeted overrides, not a full pixel-perfect mirror,
    matching the same scope decision the original single-file app made. */
 html[dir="rtl"] body { text-align: right; }

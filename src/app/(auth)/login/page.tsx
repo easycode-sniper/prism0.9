@@ -44,7 +44,8 @@ export default function LoginPage() {
         >
           <div>
             <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: "var(--indigo)" }}>
-              <span className="text-lg font-bold text-white">P</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/omd-logo.png" alt="OMD" width={28} height={28} style={{ objectFit: "contain" }} />
             </div>
             <h1 className="text-xl font-semibold text-white">Welcome to Prism</h1>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--text-dim)" }}>

@@ -23,7 +23,8 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
     <>
       <div className="brand" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
         <div className="brand-mark" style={{ width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "10px", background: "var(--indigo)" }}>
-          <span style={{ fontSize: "1rem", fontWeight: 700, color: "#fff" }}>P</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/omd-logo.png" alt="OMD" width={24} height={24} style={{ objectFit: "contain" }} />
         </div>
         <div>
           <h1 style={{ fontFamily: "var(--font-mono)", fontSize: "1rem", fontWeight: 600, letterSpacing: ".02em" }}>{t("brand.title")}</h1>

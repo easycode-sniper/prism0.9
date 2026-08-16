@@ -96,6 +96,16 @@ export default function LoginPage() {
               {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
+
+          <p className="mt-4 text-center text-sm" style={{ color: "var(--text-dim)" }}>
+            No account?{" "}
+            <a
+              href="mailto:ferdjellahsouhaibomd@gmail.com?subject=Prism%20access%20request&body=Name%3A%0ACompany%2FRole%3A%0AReason%20for%20access%3A"
+              style={{ color: "var(--indigo)", fontWeight: 600 }}
+            >
+              Request an invite
+            </a>
+          </p>
         </div>
       </div>
     </div>

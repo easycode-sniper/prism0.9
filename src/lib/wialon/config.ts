@@ -85,9 +85,7 @@ async function wialonLogin(config: ResolvedWialonConfig): Promise<string> {
 }
 
 // Get all fleet units
-async function fetchAllUnits(config: ResolvedWialonConfig): Promise<WialonUnit[]> {
-  const sid = await wialonLogin(config);
-
+async function fetchAllUnits(config: ResolvedWialonConfig, sid: string): Promise<WialonUnit[]> {
   const data = await wialonCall(
     config,
     "core/search_items",
@@ -166,15 +164,17 @@ export async function findWialonUnit(truckId: string): Promise<{ id: number; nam
   const config = await getWialonConfig();
   if (!config) return null;
 
-  const units = await fetchAllUnits(config);
+  const sid = await wialonLogin(config);
+  const [units, driverMaps] = await Promise.all([
+    fetchAllUnits(config, sid),
+    fetchWialonDriverMaps(config, sid).catch((err) => {
+      console.warn("Driver library fetch failed — proceeding without driver name:", err.message);
+      return { driverByUnitId: {}, driverByCode: {} };
+    }),
+  ]);
   const matched = matchTrucksToUnits([truckId], units);
   const unit = matched.get(truckId);
   if (!unit) return null;
-
-  const driverMaps = await fetchWialonDriverMaps(config).catch((err) => {
-    console.warn("Driver library fetch failed — proceeding without driver name:", err.message);
-    return { driverByUnitId: {}, driverByCode: {} };
-  });
 
   return {
     id: unit.id,
@@ -195,9 +195,7 @@ interface WialonDriverMaps {
   driverByCode: Record<string, string>;
 }
 
-async function fetchWialonDriverMaps(config: ResolvedWialonConfig): Promise<WialonDriverMaps> {
-  const sid = await wialonLogin(config);
-
+async function fetchWialonDriverMaps(config: ResolvedWialonConfig, sid: string): Promise<WialonDriverMaps> {
   const data = await wialonCall(
     config,
     "core/search_items",
@@ -256,17 +254,23 @@ export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
   }
 
   try {
-    const units = await fetchAllUnits(config);
+    // One login shared by both calls (previously each did its own),
+    // and the two independent lookups run in parallel rather than
+    // sequentially — cuts what was 4 round-trips to the Wialon relay
+    // down to 2 concurrent ones.
+    const sid = await wialonLogin(config);
+    const [units, driverMaps] = await Promise.all([
+      fetchAllUnits(config, sid),
+      // Resolved once for the whole fleet, not per-truck — the same
+      // pattern findWialonUnit uses for a single truck, just applied
+      // in bulk so labeling 84 markers with driver names doesn't mean
+      // 84 driver-map fetches.
+      fetchWialonDriverMaps(config, sid).catch((err) => {
+        console.warn("Driver library fetch failed — proceeding without driver names:", err.message);
+        return { driverByUnitId: {}, driverByCode: {} };
+      }),
+    ]);
     const matched = matchTrucksToUnits(allTruckIds, units);
-
-    // Resolved once for the whole fleet, not per-truck — the same pattern
-    // findWialonUnit uses for a single truck, just applied in bulk so
-    // labeling 84 markers with driver names doesn't mean 84 driver-map
-    // fetches.
-    const driverMaps = await fetchWialonDriverMaps(config).catch((err) => {
-      console.warn("Driver library fetch failed — proceeding without driver names:", err.message);
-      return { driverByUnitId: {}, driverByCode: {} };
-    });
 
     const now = Date.now() / 1000;
     const trucks: FleetTruck[] = allTruckIds.map((truckId) => {

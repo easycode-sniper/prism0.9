@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { getMonitoringData } from "@/lib/supabase/monitoring";
+import { listActiveDispatches } from "@/lib/supabase/actions";
 import { checkPositionForDispatch } from "@/lib/supabase/positions";
-import type { MonitoringTruck, MonitoringData } from "@/lib/supabase/monitoring";
+import type { DispatchRecord } from "@/lib/supabase/actions";
+import type { MonitoringTruck } from "@/lib/supabase/monitoring";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
+import { useFleet } from "@/components/providers/FleetProvider";
+import { createClient } from "@/lib/supabase/client";
+import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 type FilterType = "all" | "dispatched" | "moving" | "idle" | "offline";
@@ -14,21 +18,37 @@ const FILTERS: FilterType[] = ["all", "dispatched", "moving", "idle", "offline"]
 
 export default function MonitoringPage() {
   const { t } = useTranslation();
-  const [data, setData] = useState<MonitoringData | null>(null);
+  const { fleetData } = useFleet();
+  // Fleet positions/driver names come from the app-wide FleetProvider
+  // context (already polling Wialon in the background) instead of a
+  // fresh Wialon fetch on every visit to this page — only the active
+  // dispatches (a fast, same-region Supabase query) are fetched here.
+  const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
-  const [loading, setLoading] = useState(true);
   const [checkResults, setCheckResults] = useState<Map<string, PositionCheckResult>>(new Map());
   const [checking, setChecking] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    const result = await getMonitoringData();
-    setData(result);
-    setLoading(false);
+  const loadDispatches = useCallback(async () => {
+    const result = await listActiveDispatches();
+    if (result.data) setDispatches(result.data);
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadDispatches(); }, [loadDispatches]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("monitoring-dispatches")
+      .on("postgres_changes", { event: "*", schema: "public", table: "dispatches" }, () => loadDispatches())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadDispatches]);
+
+  const trucks = useMemo(
+    () => joinFleetWithDispatches(fleetData.trucks, dispatches),
+    [fleetData.trucks, dispatches]
+  );
 
   async function handleCheckPosition(dispatchId: string, truckId: string) {
     setChecking(truckId);
@@ -37,18 +57,16 @@ export default function MonitoringPage() {
       setCheckResults(prev => new Map(prev).set(dispatchId, result.result!));
     }
     setChecking(null);
-    await loadData();
+    await loadDispatches();
   }
 
-  if (loading && !data) {
+  if (trucks.length === 0 && !fleetData.lastUpdated && !fleetData.error) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-sm text-gray-500">Loading fleet data...</div>
+        <div className="text-sm text-gray-500">Waiting for first fleet sync...</div>
       </div>
     );
   }
-
-  const trucks = data?.trucks ?? [];
 
   // Matches the legacy app's search scope exactly: driver name or truck
   // ID only (not site/client — that's what the filter buttons are for).

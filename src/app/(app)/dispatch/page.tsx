@@ -11,15 +11,15 @@ import {
   stopDispatch,
 } from "@/lib/supabase/actions";
 import { checkPositionForDispatch, checkPositionManual } from "@/lib/supabase/positions";
-import { getMonitoringData } from "@/lib/supabase/monitoring";
 import { listGeofences } from "@/lib/supabase/geofences";
 import { listGasStations } from "@/lib/supabase/stations";
 import { createClient } from "@/lib/supabase/client";
 import { FACTORY_NAME } from "@/lib/constants";
 import { haversineMeters } from "@/lib/geometry";
+import { useFleet } from "@/components/providers/FleetProvider";
+import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import type { SiteRecord, TruckRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
-import type { MonitoringTruck } from "@/lib/supabase/monitoring";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import type { GasStation } from "@/lib/supabase/stations";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
@@ -43,10 +43,10 @@ export default function DispatchPage() {
   );
   const [truckFocus, setTruckFocus] = useState<[number, number] | null>(null);
   const focusPoint = truckFocus ?? urlFocusPoint;
+  const { fleetData } = useFleet();
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [trucks, setTrucks] = useState<TruckRecord[]>([]);
   const [dispatches, setDispatches] = useState<DispatchRecord[]>([]);
-  const [fleetTrucks, setFleetTrucks] = useState<MonitoringTruck[]>([]);
   const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
   const [gasStations, setGasStations] = useState<GasStation[]>([]);
 
@@ -81,15 +81,22 @@ export default function DispatchPage() {
   }, []);
 
   const loadMapData = useCallback(async () => {
-    const [monitoring, geofenceRes, stationsRes] = await Promise.all([
-      getMonitoringData(),
+    const [geofenceRes, stationsRes] = await Promise.all([
       listGeofences(),
       listGasStations(),
     ]);
-    setFleetTrucks(monitoring.trucks);
     if (geofenceRes.data) setGeofences(geofenceRes.data);
     if (stationsRes.data) setGasStations(stationsRes.data);
   }, []);
+
+  // Fleet positions come from the app-wide FleetProvider context
+  // (already polling Wialon in the background), joined with the
+  // dispatches already fetched above — not a second independent
+  // Wialon fetch just for this page.
+  const fleetTrucks = useMemo(
+    () => joinFleetWithDispatches(fleetData.trucks, dispatches),
+    [fleetData.trucks, dispatches]
+  );
 
   useEffect(() => {
     loadData();

@@ -8,6 +8,7 @@ import {
   NotificationRecord,
 } from "@/lib/supabase/history";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { TriangleAlert, Gauge, Flag, Factory } from "lucide-react";
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
@@ -99,11 +100,12 @@ export default function NotificationsPage() {
 }
 
 function NotificationIcon({ kind }: { kind: NotificationRecord["kind"] }) {
-  const icons: Record<NotificationRecord["kind"], string> = {
-    off_route: "🔴",
-    speeding: "🟠",
-    site_arrival: "🟢",
-    factory_arrival: "🟣",
+  const config: Record<NotificationRecord["kind"], { icon: typeof TriangleAlert; color: string }> = {
+    off_route: { icon: TriangleAlert, color: "#f87171" },
+    speeding: { icon: Gauge, color: "#fb923c" },
+    site_arrival: { icon: Flag, color: "#4ade80" },
+    factory_arrival: { icon: Factory, color: "#a855f7" },
   };
-  return <span className="text-sm">{icons[kind]}</span>;
+  const { icon: Icon, color } = config[kind];
+  return <Icon size={16} strokeWidth={2.25} color={color} />;
 }

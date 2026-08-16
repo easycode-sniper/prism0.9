@@ -23,6 +23,7 @@ import type { MonitoringTruck } from "@/lib/supabase/monitoring";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import type { GasStation } from "@/lib/supabase/stations";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { Radar } from "lucide-react";
 
 // A truck within this distance of a station is treated as "at the pump".
 const STATION_PROXIMITY_METERS = 150;
@@ -318,7 +319,10 @@ export default function DispatchPage() {
               color: liveFleetOn ? "#4ade80" : "var(--text-dim)",
             }}
           >
-            📡 Live Fleet {liveFleetOn ? "ON" : "OFF"}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <Radar size={14} strokeWidth={2.25} />
+              Live Fleet {liveFleetOn ? "ON" : "OFF"}
+            </span>
           </button>
 
           {liveFleetOn && (
@@ -421,7 +425,7 @@ export default function DispatchPage() {
               className="w-full mb-3"
               style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
             >
-              <option>🏭 {FACTORY_NAME}</option>
+              <option>{FACTORY_NAME}</option>
             </select>
 
             <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Destination — client or site name</label>
@@ -560,8 +564,8 @@ function ActiveDispatchRow({
       )}
 
       <div className="flex gap-2 mt-2">
-        <button onClick={onCheckPosition} disabled={checking} className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)" }}>
-          {checking ? "..." : "📡 Fetch Live Position"}
+        <button onClick={onCheckPosition} disabled={checking} className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          {checking ? "..." : (<><Radar size={13} strokeWidth={2.25} /> Fetch Live Position</>)}
         </button>
         <button onClick={onStop} className="btn-sm danger">Stop</button>
       </div>

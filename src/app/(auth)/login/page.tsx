@@ -29,9 +29,9 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--bg)" }}>
-      <div className="w-full max-w-sm space-y-6 p-8" style={{ background: "linear-gradient(180deg, var(--panel) 0%, #0d0d18 100%)", border: "1px solid var(--line)", borderRadius: "10px" }}>
+      <div className="w-full max-w-sm space-y-6 p-8" style={{ background: "linear-gradient(180deg, var(--panel) 0%, #0d0d18 100%)", border: "1px solid var(--line)", borderRadius: "12px" }}>
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl" style={{ background: "linear-gradient(135deg, var(--indigo), var(--purple))" }}>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl" style={{ background: "var(--indigo)" }}>
             <span className="text-2xl font-bold text-white">P</span>
           </div>
           <h1 className="text-xl font-semibold text-white">Prism</h1>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { uploadKmlZones, listGeofences } from "@/lib/supabase/geofences";
 import type { KmlUploadReport, GeofenceRecord } from "@/lib/supabase/geofences";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { Users, Settings } from "lucide-react";
 
 export default function AdminPage() {
   const { t } = useTranslation();
@@ -52,11 +53,11 @@ export default function AdminPage() {
       </div>
 
       <div className="flex gap-3">
-        <Link href="/admin/users" className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)" }}>
-          👥 User Management
+        <Link href="/admin/users" className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          <Users size={14} strokeWidth={2.25} /> User Management
         </Link>
-        <Link href="/admin/settings" className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)" }}>
-          ⚙️ Wialon Settings
+        <Link href="/admin/settings" className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          <Settings size={14} strokeWidth={2.25} /> Wialon Settings
         </Link>
       </div>
 

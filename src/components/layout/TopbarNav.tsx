@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LayoutDashboard, Map, Radar, History as HistoryIcon, Bell, Settings } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { useFleet } from "@/components/providers/FleetProvider";
 import type { Language } from "@/lib/i18n/translations";
 
-const NAV_ITEMS: { href: string; key: string }[] = [
-  { href: "/dashboard", key: "nav.dashboard" },
-  { href: "/dispatch", key: "nav.dispatch" },
-  { href: "/monitoring", key: "nav.monitoring" },
-  { href: "/history", key: "nav.history" },
-  { href: "/notifications", key: "nav.notifications" },
+const NAV_ITEMS: { href: string; key: string; icon: typeof LayoutDashboard }[] = [
+  { href: "/dashboard", key: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/dispatch", key: "nav.dispatch", icon: Map },
+  { href: "/monitoring", key: "nav.monitoring", icon: Radar },
+  { href: "/history", key: "nav.history", icon: HistoryIcon },
+  { href: "/notifications", key: "nav.notifications", icon: Bell },
 ];
 
 export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
@@ -21,7 +22,7 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
   return (
     <>
       <div className="brand" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        <div className="brand-mark" style={{ width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "8px", background: "linear-gradient(135deg, var(--indigo), var(--purple))" }}>
+        <div className="brand-mark" style={{ width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "10px", background: "var(--indigo)" }}>
           <span style={{ fontSize: "1rem", fontWeight: 700, color: "#fff" }}>P</span>
         </div>
         <div>
@@ -33,11 +34,13 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
       <nav id="tabs" style={{ display: "flex", gap: "6px", background: "var(--panel-2)", padding: "4px", borderRadius: "10px", border: "1px solid var(--line)" }}>
         {NAV_ITEMS.map((item) => (
           <Link key={item.href} href={item.href} className="tab-btn" style={tabStyle(pathname === item.href)}>
+            <item.icon size={15} strokeWidth={2.25} />
             {t(item.key)}
           </Link>
         ))}
         {isAdmin && (
           <Link href="/admin" className="tab-btn" style={tabStyle(pathname.startsWith("/admin"))}>
+            <Settings size={15} strokeWidth={2.25} />
             {t("nav.admin")}
           </Link>
         )}
@@ -87,7 +90,7 @@ export function LanguageSwitcher() {
 
 function tabStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? "linear-gradient(135deg, var(--indigo), var(--purple))" : "transparent",
+    background: active ? "var(--indigo)" : "transparent",
     border: "none",
     color: active ? "#fff" : "var(--text-dim)",
     fontFamily: "var(--font-sans)",
@@ -99,6 +102,8 @@ function tabStyle(active: boolean): React.CSSProperties {
     transition: ".15s",
     textDecoration: "none",
     boxShadow: active ? "0 2px 10px rgba(109,91,255,.35)" : "none",
-    display: "inline-block",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
   };
 }

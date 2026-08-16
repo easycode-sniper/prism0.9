@@ -161,7 +161,7 @@ async function runPositionCheck(
       dispatch_id: dispatch.id,
       truck_id: dispatch.truck_id,
       kind: "off_route",
-      title: "🔴 Truck left assigned route",
+      title: "Truck left assigned route",
       message: `${dispatch.truck_id} has deviated from its route to ${siteName} (${(deviationMeters! / 1000).toFixed(1)}km off).`,
     });
   }
@@ -170,7 +170,7 @@ async function runPositionCheck(
       dispatch_id: dispatch.id,
       truck_id: dispatch.truck_id,
       kind: "speeding",
-      title: "🟠 Speed limit exceeded",
+      title: "Speed limit exceeded",
       message: `${dispatch.truck_id} is going ${Math.round(speed)}km/h on the run to ${siteName} (limit ${SPEED_LIMIT_KMH}km/h).`,
     });
   }
@@ -179,7 +179,7 @@ async function runPositionCheck(
       dispatch_id: dispatch.id,
       truck_id: dispatch.truck_id,
       kind: "site_arrival",
-      title: "🟢 Arrived at destination",
+      title: "Arrived at destination",
       message: `${dispatch.truck_id} has arrived at ${siteName}.`,
     });
   }
@@ -188,7 +188,7 @@ async function runPositionCheck(
       dispatch_id: dispatch.id,
       truck_id: dispatch.truck_id,
       kind: "factory_arrival",
-      title: "🟣 Arrived at factory",
+      title: "Arrived at factory",
       message: `${dispatch.truck_id} has arrived at Usine Amouda Ciment.`,
     });
   }

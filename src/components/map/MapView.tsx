@@ -6,6 +6,20 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import { Moon, Satellite as SatelliteIcon, MapPin, Tag, Fuel } from "lucide-react";
+
+// Leaflet markers/popups are raw HTML strings, not React — these are
+// inline stroke-style SVGs (lucide's visual language: 24x24, stroke
+// currentColor, round caps) for the icons baked into that HTML.
+const SVG_ICONS = {
+  fuel: `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M4 22V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v18"/><path d="M14 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V7l-3-3"/></svg>`,
+  factory: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M4 20V10l6 4v-4l6 4V6l4 3v11"/><path d="M4 20V10"/></svg>`,
+  parking: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 16V8h4a2.5 2.5 0 0 1 0 5H9"/></svg>`,
+  user: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>`,
+  target: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>`,
+  alert: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.9 18a1.5 1.5 0 0 0 1.3 2.2h17.6a1.5 1.5 0 0 0 1.3-2.2L13.7 3.9a1.5 1.5 0 0 0-2.6 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  truck: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7V8Z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="17.5" cy="18.5" r="1.5"/></svg>`,
+};
 
 export interface TruckMarkerData {
   lat: number;
@@ -112,9 +126,9 @@ function buildTruckIcon(
 // The factory and home base are landmarks, not just another zone —
 // always visible regardless of the Zones toggle or zoom level, with
 // their own icon rather than a plain circle marker.
-function buildLandmarkIcon(emoji: string, color: string): L.DivIcon {
+function buildLandmarkIcon(svg: string, color: string): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:30px;height:30px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:16px;">${emoji}</div>`,
+    html: `<div style="width:30px;height:30px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;">${svg}</div>`,
     className: "",
     iconSize: [30, 30],
     iconAnchor: [15, 15],
@@ -148,7 +162,7 @@ const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fb923c, #d
 
 function buildStationIcon(occupied: boolean): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#f59e0b" : "#334155"};border:2px solid rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;font-size:9px;">⛽</div>`,
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#f59e0b" : "#334155"};border:2px solid rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;color:#fff;">${SVG_ICONS.fuel}</div>`,
     className: "",
     iconSize: [16, 16],
     iconAnchor: [8, 8],
@@ -281,13 +295,13 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       marker.bindPopup(
         `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5; min-width: 160px;">
           <strong style="font-size: 13px; color: #22d3ee;">${m.label}</strong>
-          ${m.driverName ? `<div style="color: #9a9ab0; margin-top: 2px;">👤 ${m.driverName}</div>` : ""}
+          ${m.driverName ? `<div style="color: #9a9ab0; margin-top: 2px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.user} ${m.driverName}</div>` : ""}
           <div style="margin-top: 6px; display: flex; justify-content: space-between;">
             <span style="color: ${statusColor(m.status, m.offRoute)}; text-transform: capitalize; font-weight: 600;">● ${m.status}</span>
             ${m.speed != null ? `<span>${Math.round(m.speed)} km/h</span>` : ""}
           </div>
-          ${m.offRoute ? `<div style="color: #f87171; margin-top: 4px;">⚠ Off route</div>` : ""}
-          ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #26263c;">🎯 ${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</div>` : ""}
+          ${m.offRoute ? `<div style="color: #f87171; margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.alert} Off route</div>` : ""}
+          ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #26263c; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.target} <span>${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</span></div>` : ""}
           ${m.ageMinutes != null ? `<div style="color: #6b6b80; margin-top: 6px; font-size: 11px;">Updated ${m.ageMinutes < 1 ? "just now" : `${m.ageMinutes}m ago`}</div>` : ""}
         </div>`
       );
@@ -326,7 +340,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       const marker = L.marker([s.lat, s.lng], { icon: buildStationIcon(!!s.truckHere) });
       marker.bindPopup(
         `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5;">
-          <strong style="color: #f59e0b;">⛽ ${s.name}</strong>${s.truckHere ? `<br>🚚 ${s.truckHere} fueling` : ""}
+          <strong style="color: #f59e0b; display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${s.name}</strong>${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${s.truckHere} fueling</div>` : ""}
         </div>`
       );
       layer.addLayer(marker);
@@ -373,7 +387,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       if (!point) continue;
 
       const marker = L.marker(point, {
-        icon: buildLandmarkIcon(isFactory ? "🏭" : "🅿️", isFactory ? "#6d5bff" : "#22d3ee"),
+        icon: buildLandmarkIcon(isFactory ? SVG_ICONS.factory : SVG_ICONS.parking, isFactory ? "#6d5bff" : "#22d3ee"),
       });
       marker.bindPopup(`<strong style="color:#22d3ee;">${z.name}</strong>`);
       layer.addLayer(marker);
@@ -418,19 +432,29 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           padding: "4px",
         }}
       >
-        <ToggleButton active={baseLayer === "dark"} onClick={() => setBaseLayer("dark")} label="🌑 Dark" />
-        <ToggleButton active={baseLayer === "satellite"} onClick={() => setBaseLayer("satellite")} label="🛰️ Satellite" />
+        <ToggleButton active={baseLayer === "dark"} onClick={() => setBaseLayer("dark")} label="Dark" icon={Moon} />
+        <ToggleButton active={baseLayer === "satellite"} onClick={() => setBaseLayer("satellite")} label="Satellite" icon={SatelliteIcon} />
         <span style={{ width: 1, background: "var(--line)", margin: "2px 2px" }} />
-        <ToggleButton active={showZones} onClick={() => setShowZones((v) => !v)} label="📍 Zones" />
-        <ToggleButton active={showNames} onClick={() => setShowNames((v) => !v)} label="🏷️ Names" />
-        <ToggleButton active={showStations} onClick={() => setShowStations((v) => !v)} label="⛽ Stations" />
+        <ToggleButton active={showZones} onClick={() => setShowZones((v) => !v)} label="Zones" icon={MapPin} />
+        <ToggleButton active={showNames} onClick={() => setShowNames((v) => !v)} label="Names" icon={Tag} />
+        <ToggleButton active={showStations} onClick={() => setShowStations((v) => !v)} label="Stations" icon={Fuel} />
       </div>
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );
 }
 
-function ToggleButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function ToggleButton({
+  active,
+  onClick,
+  label,
+  icon: Icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon: typeof Moon;
+}) {
   return (
     <button
       type="button"
@@ -445,8 +469,12 @@ function ToggleButton({ active, onClick, label }: { active: boolean; onClick: ()
         fontWeight: 600,
         cursor: "pointer",
         whiteSpace: "nowrap",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "5px",
       }}
     >
+      <Icon size={13} strokeWidth={2.25} />
       {label}
     </button>
   );

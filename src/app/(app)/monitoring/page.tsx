@@ -141,13 +141,7 @@ function MonitoringRow({
   onCheckPosition: () => void;
 }) {
   const isOffRoute = truck.dispatched && truck.last_on_route === false;
-  const statusLabel = isOffRoute
-    ? "🔴 off-route"
-    : truck.status === "moving"
-      ? "🟢 moving"
-      : truck.status === "idle"
-        ? "🔵 idle"
-        : "⚪ offline";
+  const statusLabel = isOffRoute ? "off-route" : truck.status;
   const statusColor = isOffRoute ? "#f87171" : truck.status === "moving" ? "#4ade80" : truck.status === "idle" ? "#22d3ee" : "var(--text-dim)";
 
   const locateHref = truck.lat != null && truck.lng != null
@@ -159,7 +153,10 @@ function MonitoringRow({
       <td className="px-4 py-2 font-mono text-cyan-400">{truck.truck_id}</td>
       <td className="px-4 py-2 text-white">{truck.driver_name || "—"}</td>
       <td className="px-4 py-2">
-        <span className="inline-flex rounded px-2 py-0.5 text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+        <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium" style={{ color: statusColor }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor, display: "inline-block" }} />
+          {statusLabel}
+        </span>
       </td>
       <td className="px-4 py-2 text-gray-300">{truck.speed != null ? `${truck.speed} km/h` : "—"}</td>
       <td className="px-4 py-2 text-gray-400">

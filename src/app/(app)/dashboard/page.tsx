@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
+import { Truck } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { getDriverRatings, DriverRating, getNotifications, NotificationRecord } from "@/lib/supabase/history";
 import { listGeofences } from "@/lib/supabase/geofences";
@@ -93,7 +94,7 @@ export default function DashboardPage() {
   const offline = trucks.filter((t) => t.status === "offline").length;
 
   const statusChart = {
-    labels: ["Moving 🟢", "Idle/Stopped 🟠", "Offline/No Signal 🔴"],
+    labels: ["Moving", "Idle/Stopped", "Offline/No Signal"],
     datasets: [{
       data: [moving, idle, offline],
       backgroundColor: ["#22c55e", "#f59e0b", "#ef4444"],
@@ -108,7 +109,7 @@ export default function DashboardPage() {
   }
 
   const geofenceChart = {
-    labels: ["At Factory 🔵", "At Base (PARC OMD)", "At Customer Site", "In Transit"],
+    labels: ["At Factory", "At Base (PARC OMD)", "At Customer Site", "In Transit"],
     datasets: [{
       data: [occupancy.factory, occupancy.base, occupancy.customer_site, occupancy.in_transit],
       backgroundColor: ["#3b82f6", "#8b5cf6", "#22c55e", "#06b6d4"],
@@ -126,7 +127,7 @@ export default function DashboardPage() {
     .filter((x): x is { truckId: string; stationName: string } => x !== null);
 
   const fuelChart = {
-    labels: ["At Gas Station ⛽", "Not at Gas Station"],
+    labels: ["At Gas Station", "Not at Gas Station"],
     datasets: [{
       data: [fuelingTrucks.length, trucksWithPosition.length - fuelingTrucks.length],
       backgroundColor: ["#f59e0b", "#334155"],
@@ -200,7 +201,10 @@ export default function DashboardPage() {
           {fuelingTrucks.length > 0 && (
             <ul style={{ marginTop: '8px', fontSize: '.78rem', color: 'var(--text-dim)', listStyle: 'none', padding: 0 }}>
               {fuelingTrucks.map((f) => (
-                <li key={f.truckId}>🚚 <strong style={{ color: 'var(--amber)' }}>{f.truckId}</strong> — {f.stationName}</li>
+                <li key={f.truckId} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Truck size={13} strokeWidth={2.25} />
+                  <strong style={{ color: 'var(--amber)' }}>{f.truckId}</strong> — {f.stationName}
+                </li>
               ))}
             </ul>
           )}

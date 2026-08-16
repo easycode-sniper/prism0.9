@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getHistoryData, HistoryRecord } from "@/lib/supabase/history";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { Printer } from "lucide-react";
 
 export default function HistoryPage() {
   const { t } = useTranslation();
@@ -91,9 +92,9 @@ export default function HistoryPage() {
         <div className="flex gap-2">
           <button
             onClick={printDailySummary}
-            className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-800"
           >
-            🖨 Print Daily Summary
+            <Printer size={14} strokeWidth={2.25} /> Print Daily Summary
           </button>
           {records.length > 0 && (
             <button

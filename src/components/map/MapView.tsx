@@ -169,105 +169,143 @@ function buildStationIcon(occupied: boolean): L.DivIcon {
   });
 }
 
+// ── Persistent map singleton ──
+// The Dispatch page (the only consumer of MapView) gets unmounted by
+// Next.js every time you navigate away and remounted when you come
+// back — that used to mean a brand new Leaflet map every visit: fresh
+// tile fetches, rebuilt marker layers, and Dark/Zones/Names/Stations
+// toggles reset to their defaults, even though nothing about the map
+// actually needed to change. The map (and its container DOM node) now
+// live in this module-level singleton instead of component state, so
+// they survive unmount — MapView just re-parents the same persistent
+// container into wherever it's rendered this time, instead of
+// rebuilding it. Only one MapView is ever on screen at once, so a
+// single singleton (not a pool) is enough.
+interface MapCore {
+  container: HTMLDivElement;
+  map: L.Map;
+  truckLayer: L.MarkerClusterGroup;
+  siteLayer: L.MarkerClusterGroup;
+  stationLayer: L.MarkerClusterGroup;
+  zonesLayer: L.LayerGroup;
+  landmarksLayer: L.LayerGroup;
+  routeLayer: L.Polyline | null;
+  tileLayers: { dark: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer };
+  ui: { baseLayer: "dark" | "satellite"; showZones: boolean; showNames: boolean; showStations: boolean };
+}
+
+let core: MapCore | null = null;
+let hiddenHolder: HTMLDivElement | null = null;
+
+function getHiddenHolder(): HTMLDivElement {
+  if (!hiddenHolder) {
+    hiddenHolder = document.createElement("div");
+    hiddenHolder.style.display = "none";
+    document.body.appendChild(hiddenHolder);
+  }
+  return hiddenHolder;
+}
+
+function getOrCreateMapCore(): MapCore {
+  if (core) return core;
+
+  const container = document.createElement("div");
+  container.style.height = "100%";
+  container.style.width = "100%";
+  getHiddenHolder().appendChild(container);
+
+  const map = L.map(container, { center: [35.25, 3.0], zoom: 7, zoomControl: true });
+
+  const dark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    maxZoom: 19,
+  }).addTo(map);
+
+  const satellite = L.tileLayer(SATELLITE_TILES, { attribution: "&copy; Esri", maxZoom: 19 });
+
+  // No place names on raw satellite imagery on its own — this reference
+  // layer adds them back when satellite mode is active.
+  const satelliteLabels = L.tileLayer(SATELLITE_LABELS_TILES, { maxZoom: 19 });
+
+  const truckLayer = L.markerClusterGroup({
+    disableClusteringAtZoom: 11,
+    spiderfyOnMaxZoom: true,
+    iconCreateFunction: buildClusterIcon(TRUCK_CLUSTER_GRADIENT),
+  }).addTo(map);
+  const siteLayer = L.markerClusterGroup({
+    disableClusteringAtZoom: 11,
+    spiderfyOnMaxZoom: true,
+    iconCreateFunction: buildClusterIcon(SITE_CLUSTER_GRADIENT),
+  }).addTo(map);
+  // Always attached, like the other marker-cluster layers — toggling a
+  // populated MarkerClusterGroup on/off the map (rather than just
+  // clearing its markers) crashes mid-animation on `_leaflet_pos`.
+  const stationLayer = L.markerClusterGroup({
+    disableClusteringAtZoom: 11,
+    spiderfyOnMaxZoom: true,
+    iconCreateFunction: buildClusterIcon(STATION_CLUSTER_GRADIENT),
+  }).addTo(map);
+  const zonesLayer = L.layerGroup().addTo(map);
+  // Never gated behind the Zones toggle or clustering — these two are
+  // landmarks the operator needs oriented against at any zoom level.
+  const landmarksLayer = L.layerGroup().addTo(map);
+
+  core = {
+    container,
+    map,
+    truckLayer,
+    siteLayer,
+    stationLayer,
+    zonesLayer,
+    landmarksLayer,
+    routeLayer: null,
+    tileLayers: { dark, satellite, satelliteLabels },
+    ui: { baseLayer: "dark", showZones: true, showNames: true, showStations: true },
+  };
+  return core;
+}
+
 export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], routeLine = null, focusPoint = null }: MapViewProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const truckLayerRef = useRef<L.MarkerClusterGroup | null>(null);
-  const siteLayerRef = useRef<L.MarkerClusterGroup | null>(null);
-  const stationLayerRef = useRef<L.MarkerClusterGroup | null>(null);
-  const zonesLayerRef = useRef<L.LayerGroup | null>(null);
-  const landmarksLayerRef = useRef<L.LayerGroup | null>(null);
-  const routeLayerRef = useRef<L.Polyline | null>(null);
-  const tileLayersRef = useRef<{ dark: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer } | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">("dark");
-  const [showZones, setShowZones] = useState(true);
-  const [showNames, setShowNames] = useState(true);
-  const [showStations, setShowStations] = useState(true);
+  const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">(() => getOrCreateMapCore().ui.baseLayer);
+  const [showZones, setShowZones] = useState(() => getOrCreateMapCore().ui.showZones);
+  const [showNames, setShowNames] = useState(() => getOrCreateMapCore().ui.showNames);
+  const [showStations, setShowStations] = useState(() => getOrCreateMapCore().ui.showStations);
 
-  // Initialize map once
+  // Re-parent the persistent map container into this mount point; on
+  // unmount, park it in the hidden holder instead of destroying it.
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-
-    const map = L.map(containerRef.current, {
-      center: [35.25, 3.0],
-      zoom: 7,
-      zoomControl: true,
-    });
-
-    const dark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-      maxZoom: 19,
-    }).addTo(map);
-
-    const satellite = L.tileLayer(SATELLITE_TILES, {
-      attribution: "&copy; Esri",
-      maxZoom: 19,
-    });
-
-    // No place names on raw satellite imagery on its own — this reference
-    // layer adds them back when satellite mode is active.
-    const satelliteLabels = L.tileLayer(SATELLITE_LABELS_TILES, {
-      maxZoom: 19,
-    });
-
-    tileLayersRef.current = { dark, satellite, satelliteLabels };
-
-    truckLayerRef.current = L.markerClusterGroup({
-      disableClusteringAtZoom: 11,
-      spiderfyOnMaxZoom: true,
-      iconCreateFunction: buildClusterIcon(TRUCK_CLUSTER_GRADIENT),
-    }).addTo(map);
-    siteLayerRef.current = L.markerClusterGroup({
-      disableClusteringAtZoom: 11,
-      spiderfyOnMaxZoom: true,
-      iconCreateFunction: buildClusterIcon(SITE_CLUSTER_GRADIENT),
-    }).addTo(map);
-    // Always attached, like the other marker-cluster layers — toggling a
-    // populated MarkerClusterGroup on/off the map (rather than just
-    // clearing its markers) crashes mid-animation on `_leaflet_pos`.
-    stationLayerRef.current = L.markerClusterGroup({
-      disableClusteringAtZoom: 11,
-      spiderfyOnMaxZoom: true,
-      iconCreateFunction: buildClusterIcon(STATION_CLUSTER_GRADIENT),
-    }).addTo(map);
-    zonesLayerRef.current = L.layerGroup().addTo(map);
-    // Never gated behind the Zones toggle or clustering — these two are
-    // landmarks the operator needs oriented against at any zoom level.
-    landmarksLayerRef.current = L.layerGroup().addTo(map);
-
-    mapRef.current = map;
-    setTimeout(() => map.invalidateSize(), 100);
-
+    const c = getOrCreateMapCore();
+    if (wrapperRef.current) {
+      wrapperRef.current.appendChild(c.container);
+      c.map.invalidateSize();
+    }
     return () => {
-      map.remove();
-      mapRef.current = null;
+      getHiddenHolder().appendChild(c.container);
     };
   }, []);
 
   // Base layer switching (dark vs satellite + labels overlay)
   useEffect(() => {
-    const map = mapRef.current;
-    const tiles = tileLayersRef.current;
-    if (!map || !tiles) return;
+    const { map, tileLayers } = getOrCreateMapCore();
+    core!.ui.baseLayer = baseLayer;
 
     if (baseLayer === "dark") {
-      map.removeLayer(tiles.satellite);
-      map.removeLayer(tiles.satelliteLabels);
-      if (!map.hasLayer(tiles.dark)) tiles.dark.addTo(map);
+      map.removeLayer(tileLayers.satellite);
+      map.removeLayer(tileLayers.satelliteLabels);
+      if (!map.hasLayer(tileLayers.dark)) tileLayers.dark.addTo(map);
     } else {
-      map.removeLayer(tiles.dark);
-      if (!map.hasLayer(tiles.satellite)) tiles.satellite.addTo(map);
-      if (!map.hasLayer(tiles.satelliteLabels)) tiles.satelliteLabels.addTo(map);
+      map.removeLayer(tileLayers.dark);
+      if (!map.hasLayer(tileLayers.satellite)) tileLayers.satellite.addTo(map);
+      if (!map.hasLayer(tileLayers.satelliteLabels)) tileLayers.satelliteLabels.addTo(map);
     }
   }, [baseLayer]);
 
   // Zones + site markers visibility
   useEffect(() => {
-    const map = mapRef.current;
-    const siteLayer = siteLayerRef.current;
-    const zonesLayer = zonesLayerRef.current;
-    if (!map || !siteLayer || !zonesLayer) return;
+    const { map, siteLayer, zonesLayer } = getOrCreateMapCore();
+    core!.ui.showZones = showZones;
 
     if (showZones) {
       if (!map.hasLayer(siteLayer)) siteLayer.addTo(map);
@@ -281,9 +319,9 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
   // Truck markers — hidden entirely until Names is on, not just their
   // labels (Names is the master toggle for the truck layer).
   useEffect(() => {
-    const layer = truckLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
+    const { truckLayer } = getOrCreateMapCore();
+    core!.ui.showNames = showNames;
+    truckLayer.clearLayers();
 
     if (!showNames) return;
 
@@ -306,15 +344,14 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
         </div>`
       );
 
-      layer.addLayer(marker);
+      truckLayer.addLayer(marker);
     }
   }, [truckMarkers, showNames]);
 
   // Site markers
   useEffect(() => {
-    const layer = siteLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
+    const { siteLayer } = getOrCreateMapCore();
+    siteLayer.clearLayers();
 
     for (const s of siteMarkers) {
       const marker = L.marker([s.lat, s.lng], { icon: buildSiteIcon() });
@@ -323,16 +360,16 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           <strong style="color: #a7a0ff;">${s.name}</strong>${s.client ? `<br>${s.client}` : ""}
         </div>`
       );
-      layer.addLayer(marker);
+      siteLayer.addLayer(marker);
     }
   }, [siteMarkers]);
 
   // Gas station markers — layer stays on the map; toggling just clears
-  // vs. repopulates its markers (see mount effect for why).
+  // vs. repopulates its markers (see getOrCreateMapCore for why).
   useEffect(() => {
-    const layer = stationLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
+    const { stationLayer } = getOrCreateMapCore();
+    core!.ui.showStations = showStations;
+    stationLayer.clearLayers();
 
     if (!showStations) return;
 
@@ -343,15 +380,14 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           <strong style="color: #f59e0b; display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${s.name}</strong>${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${s.truckHere} fueling</div>` : ""}
         </div>`
       );
-      layer.addLayer(marker);
+      stationLayer.addLayer(marker);
     }
   }, [stationMarkers, showStations]);
 
   // Zone polygons/circles
   useEffect(() => {
-    const layer = zonesLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
+    const { zonesLayer } = getOrCreateMapCore();
+    zonesLayer.clearLayers();
 
     for (const z of zones) {
       const color = z.kind === "factory" ? "#6d5bff" : "#22d3ee";
@@ -362,16 +398,15 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           : null;
       if (!shape) continue;
       shape.bindPopup(`<strong style="color:#22d3ee;">${z.name}</strong>`);
-      layer.addLayer(shape);
+      zonesLayer.addLayer(shape);
     }
   }, [zones]);
 
   // Factory + home base landmark icons — the base is the 'site' zone
   // with no siteId (a real customer site always has one).
   useEffect(() => {
-    const layer = landmarksLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
+    const { landmarksLayer } = getOrCreateMapCore();
+    landmarksLayer.clearLayers();
 
     for (const z of zones) {
       const isFactory = z.kind === "factory";
@@ -390,31 +425,34 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
         icon: buildLandmarkIcon(isFactory ? SVG_ICONS.factory : SVG_ICONS.parking, isFactory ? "#6d5bff" : "#22d3ee"),
       });
       marker.bindPopup(`<strong style="color:#22d3ee;">${z.name}</strong>`);
-      layer.addLayer(marker);
+      landmarksLayer.addLayer(marker);
     }
   }, [zones]);
 
   // Pan/zoom to a specific point on request (e.g. "Locate" from Monitoring)
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !focusPoint) return;
-    map.setView(focusPoint, 13);
+    if (!focusPoint) return;
+    getOrCreateMapCore().map.setView(focusPoint, 13);
   }, [focusPoint]);
 
   // Route polyline
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
+    const c = getOrCreateMapCore();
 
-    if (routeLayerRef.current) {
-      map.removeLayer(routeLayerRef.current);
-      routeLayerRef.current = null;
+    if (c.routeLayer) {
+      c.map.removeLayer(c.routeLayer);
+      c.routeLayer = null;
     }
 
     if (routeLine && routeLine.length >= 2) {
-      routeLayerRef.current = L.polyline(routeLine, { color: "#22d3ee", weight: 4, opacity: 0.85 }).addTo(map);
+      c.routeLayer = L.polyline(routeLine, { color: "#22d3ee", weight: 4, opacity: 0.85 }).addTo(c.map);
     }
   }, [routeLine]);
+
+  function toggleBaseLayer(v: "dark" | "satellite") { setBaseLayer(v); }
+  function toggleZones() { setShowZones((v) => !v); }
+  function toggleNames() { setShowNames((v) => !v); }
+  function toggleStations() { setShowStations((v) => !v); }
 
   return (
     <div className="relative h-full w-full">
@@ -432,14 +470,14 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           padding: "4px",
         }}
       >
-        <ToggleButton active={baseLayer === "dark"} onClick={() => setBaseLayer("dark")} label="Dark" icon={Moon} />
-        <ToggleButton active={baseLayer === "satellite"} onClick={() => setBaseLayer("satellite")} label="Satellite" icon={SatelliteIcon} />
+        <ToggleButton active={baseLayer === "dark"} onClick={() => toggleBaseLayer("dark")} label="Dark" icon={Moon} />
+        <ToggleButton active={baseLayer === "satellite"} onClick={() => toggleBaseLayer("satellite")} label="Satellite" icon={SatelliteIcon} />
         <span style={{ width: 1, background: "var(--line)", margin: "2px 2px" }} />
-        <ToggleButton active={showZones} onClick={() => setShowZones((v) => !v)} label="Zones" icon={MapPin} />
-        <ToggleButton active={showNames} onClick={() => setShowNames((v) => !v)} label="Names" icon={Tag} />
-        <ToggleButton active={showStations} onClick={() => setShowStations((v) => !v)} label="Stations" icon={Fuel} />
+        <ToggleButton active={showZones} onClick={toggleZones} label="Zones" icon={MapPin} />
+        <ToggleButton active={showNames} onClick={toggleNames} label="Names" icon={Tag} />
+        <ToggleButton active={showStations} onClick={toggleStations} label="Stations" icon={Fuel} />
       </div>
-      <div ref={containerRef} className="h-full w-full" />
+      <div ref={wrapperRef} className="h-full w-full" />
     </div>
   );
 }

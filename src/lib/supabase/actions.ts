@@ -157,21 +157,6 @@ export async function listSites() {
   return { data: data ?? [] };
 }
 
-export async function listTrucks() {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("fleet_trucks")
-    .select("truck_id, name, status")
-    .eq("status", "active")
-    .order("truck_id");
-
-  if (error) {
-    return { error: error.message, data: [] };
-  }
-
-  return { data: data ?? [] };
-}
-
 // Types for dispatch records
 
 export interface SiteRecord {
@@ -180,12 +165,6 @@ export interface SiteRecord {
   client: string | null;
   lat: number | null;
   lng: number | null;
-}
-
-export interface TruckRecord {
-  truck_id: string;
-  name: string | null;
-  status: string;
 }
 
 export interface DispatchRecord {

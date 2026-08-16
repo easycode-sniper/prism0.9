@@ -11,7 +11,6 @@ export interface MonitoringTruck {
   speed: number;
   course: number | null;
   age_minutes: number | null;
-  matched: boolean;
   driver_name: string | null;
   // Dispatch info
   dispatched: boolean;

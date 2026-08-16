@@ -51,14 +51,12 @@ export interface WialonUnit {
 
 export interface FleetTruck {
   truck_id: string;
-  matched: boolean;
   lat: number | null;
   lng: number | null;
   speed: number;
   course: number;
   age_minutes: number | null;
   status: "moving" | "idle" | "offline";
-  unit_name: string | null;
   driverName: string | null;
 }
 
@@ -231,23 +229,17 @@ function resolveDriverName(unit: WialonUnit, maps: WialonDriverMaps): string | n
   return null; // graceful — caller falls back to showing just the truck ID
 }
 
-// Main export: get fleet data
-export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
+// Main export: get fleet data. The whole Wialon account is this
+// company's fleet (confirmed — unlike the Wialon geofence/zone export,
+// which does mix in stale entries from other companies), so every unit
+// Wialon returns is a truck; there's no separate "which trucks are
+// ours" registry to match against anymore. A unit's own name is the
+// truck ID everywhere in the app now.
+export async function getFleetData(): Promise<FleetData> {
   const config = await getWialonConfig();
   if (!config) {
     return {
-      trucks: allTruckIds.map((truck_id) => ({
-        truck_id,
-        matched: false,
-        lat: null,
-        lng: null,
-        speed: 0,
-        course: 0,
-        age_minutes: null,
-        status: "offline",
-        unit_name: null,
-        driverName: null,
-      })),
+      trucks: [],
       lastUpdated: null,
       error: "Wialon is not configured — set the API token in Admin → Settings.",
     };
@@ -263,47 +255,37 @@ export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
       fetchAllUnits(config, sid),
       // Resolved once for the whole fleet, not per-truck — the same
       // pattern findWialonUnit uses for a single truck, just applied
-      // in bulk so labeling 84 markers with driver names doesn't mean
-      // 84 driver-map fetches.
+      // in bulk so labeling every marker with a driver name doesn't
+      // mean one driver-map fetch per truck.
       fetchWialonDriverMaps(config, sid).catch((err) => {
         console.warn("Driver library fetch failed — proceeding without driver names:", err.message);
         return { driverByUnitId: {}, driverByCode: {} };
       }),
     ]);
-    const matched = matchTrucksToUnits(allTruckIds, units);
 
     const now = Date.now() / 1000;
-    const trucks: FleetTruck[] = allTruckIds.map((truckId) => {
-      const unit = matched.get(truckId);
-
-      if (!unit || !unit.pos) {
+    const trucks: FleetTruck[] = units.map((unit) => {
+      if (!unit.pos) {
         return {
-          truck_id: truckId,
-          matched: !!unit,
+          truck_id: unit.name,
           lat: null,
           lng: null,
           speed: 0,
           course: 0,
           age_minutes: null,
           status: "offline",
-          unit_name: unit?.name || null,
-          driverName: unit ? resolveDriverName(unit, driverMaps) : null,
+          driverName: resolveDriverName(unit, driverMaps),
         };
       }
 
-      const ageMinutes = Math.round((now - unit.pos.timestamp) / 60);
-      const status = classifyStatus(unit);
-
       return {
-        truck_id: truckId,
-        matched: true,
+        truck_id: unit.name,
         lat: unit.pos.lat,
         lng: unit.pos.lng,
         speed: unit.pos.speed,
         course: unit.pos.course,
-        age_minutes: ageMinutes,
-        status,
-        unit_name: unit.name,
+        age_minutes: Math.round((now - unit.pos.timestamp) / 60),
+        status: classifyStatus(unit),
         driverName: resolveDriverName(unit, driverMaps),
       };
     });
@@ -315,18 +297,7 @@ export async function getFleetData(allTruckIds: string[]): Promise<FleetData> {
     };
   } catch (err: any) {
     return {
-      trucks: allTruckIds.map((truck_id) => ({
-        truck_id,
-        matched: false,
-        lat: null,
-        lng: null,
-        speed: 0,
-        course: 0,
-        age_minutes: null,
-        status: "offline",
-        unit_name: null,
-        driverName: null,
-      })),
+      trucks: [],
       lastUpdated: null,
       error: err.message,
     };

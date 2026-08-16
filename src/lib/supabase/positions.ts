@@ -344,8 +344,15 @@ export async function checkHqArrivals(
     else if (!within && was) departed.push(t.truck_id);
   }
 
+  // Upsert, not update — a truck's fleet_trucks row is no longer
+  // guaranteed to pre-exist (Wialon itself is the fleet roster now,
+  // this table only holds this one per-truck flag), so an update
+  // targeting a nonexistent row would silently do nothing.
   if (arrived.length > 0) {
-    await supabase.from("fleet_trucks").update({ at_hq: true }).in("truck_id", arrived);
+    await supabase.from("fleet_trucks").upsert(
+      arrived.map((truck_id) => ({ truck_id, at_hq: true })),
+      { onConflict: "truck_id" }
+    );
     await supabase.from("notifications").insert(
       arrived.map((truck_id) => ({
         truck_id,
@@ -356,7 +363,10 @@ export async function checkHqArrivals(
     );
   }
   if (departed.length > 0) {
-    await supabase.from("fleet_trucks").update({ at_hq: false }).in("truck_id", departed);
+    await supabase.from("fleet_trucks").upsert(
+      departed.map((truck_id) => ({ truck_id, at_hq: false })),
+      { onConflict: "truck_id" }
+    );
   }
 }
 

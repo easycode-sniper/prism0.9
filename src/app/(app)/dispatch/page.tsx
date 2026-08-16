@@ -32,7 +32,7 @@ export default function DispatchPage() {
   );
   const [truckFocus, setTruckFocus] = useState<[number, number] | null>(null);
   const focusPoint = truckFocus ?? urlFocusPoint;
-  const { fleetData, dispatches, geofences, gasStations, sites, trucks, refreshDispatches } = useFleet();
+  const { fleetData, dispatches, geofences, gasStations, sites, refreshDispatches } = useFleet();
 
   const [truckSearch, setTruckSearch] = useState("");
   const [selectedTrucks, setSelectedTrucks] = useState<string[]>([]);
@@ -69,15 +69,6 @@ export default function DispatchPage() {
     );
   }
 
-  // Live driver names come from the fleet feed (fleetTrucks), not the
-  // truck registry (trucks) — the Step 1 checklist joins them by ID so
-  // it's not just a wall of truck IDs.
-  const driverByTruckId = useMemo(() => {
-    const map = new Map<string, string | null>();
-    for (const tr of fleetTrucks) map.set(tr.truck_id, tr.driver_name);
-    return map;
-  }, [fleetTrucks]);
-
   const filteredFleet = useMemo(() => {
     let list = fleetTrucks;
     if (fleetFilter === "dispatched") list = list.filter((tr) => tr.dispatched);
@@ -93,11 +84,14 @@ export default function DispatchPage() {
     return list;
   }, [fleetTrucks, fleetFilter, fleetSearch]);
 
+  // Step 1's picker and the Live Fleet panel above it are the same
+  // live Wialon feed now, not a separate manually-maintained registry
+  // — no more truck showing up in one list but not the other.
   const filteredTrucks = useMemo(() => {
     const q = truckSearch.trim().toLowerCase();
-    if (!q) return trucks;
-    return trucks.filter((tr) => tr.truck_id.toLowerCase().includes(q));
-  }, [trucks, truckSearch]);
+    if (!q) return fleetTrucks;
+    return fleetTrucks.filter((tr) => tr.truck_id.toLowerCase().includes(q));
+  }, [fleetTrucks, truckSearch]);
 
   // Full list by default (not search-triggered-only) — the destination
   // listbox should show every site immediately, narrowing as you type.
@@ -356,7 +350,7 @@ export default function DispatchPage() {
                   <label key={tr.truck_id} className="flex items-center gap-2 rounded px-2 py-1 text-sm cursor-pointer hover:bg-black/20">
                     <input type="checkbox" checked={selectedTrucks.includes(tr.truck_id)} onChange={() => toggleTruck(tr.truck_id)} />
                     <span className="truck-id">{tr.truck_id}</span>
-                    <span style={{ color: "var(--text-dim)" }}>{driverByTruckId.get(tr.truck_id) || "—"}</span>
+                    <span style={{ color: "var(--text-dim)" }}>{tr.driver_name || "—"}</span>
                   </label>
                 ))
               )}

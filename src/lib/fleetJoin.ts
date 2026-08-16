@@ -20,7 +20,6 @@ export function joinFleetWithDispatches(trucks: FleetTruck[], dispatches: Dispat
       speed: t.speed,
       course: t.course,
       age_minutes: t.age_minutes,
-      matched: t.matched,
       driver_name: t.driverName,
       dispatched: !!d,
       dispatch_id: d?.id ?? null,

@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { getFleetData, FleetData, FleetTruck } from "@/lib/wialon/config";
-import { listActiveDispatches, listSites, listTrucks } from "@/lib/supabase/actions";
-import type { DispatchRecord, SiteRecord, TruckRecord } from "@/lib/supabase/actions";
+import { listActiveDispatches, listSites } from "@/lib/supabase/actions";
+import type { DispatchRecord, SiteRecord } from "@/lib/supabase/actions";
 import { listGeofences } from "@/lib/supabase/geofences";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { listGasStations } from "@/lib/supabase/stations";
@@ -27,7 +27,6 @@ interface FleetContextType {
   geofences: GeofenceRecord[];
   gasStations: GasStation[];
   sites: SiteRecord[];
-  trucks: TruckRecord[];
   notifications: NotificationRecord[];
   refreshGeofences: () => Promise<void>;
   refreshDispatches: () => Promise<void>;
@@ -44,7 +43,6 @@ const FleetContext = createContext<FleetContextType>({
   geofences: [],
   gasStations: [],
   sites: [],
-  trucks: [],
   notifications: [],
   refreshGeofences: async () => {},
   refreshDispatches: async () => {},
@@ -66,7 +64,6 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   const [geofences, setGeofences] = useState<GeofenceRecord[]>([]);
   const [gasStations, setGasStations] = useState<GasStation[]>([]);
   const [sites, setSites] = useState<SiteRecord[]>([]);
-  const [trucks, setTrucks] = useState<TruckRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
@@ -98,21 +95,12 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
     if (result.data) setNotifications(result.data);
   }, []);
 
-  const getTruckIds = useCallback(async (): Promise<string[]> => {
-    const { data } = await supabase
-      .from("fleet_trucks")
-      .select("truck_id")
-      .eq("status", "active");
-    return (data ?? []).map((t: any) => t.truck_id);
-  }, [supabase]);
-
   const pollOnce = useCallback(async () => {
     try {
       setIsPolling(true);
-      const truckIds = await getTruckIds();
-      if (truckIds.length === 0) return;
-
-      const data = await getFleetData(truckIds);
+      // No truck-ID list to pass — the whole Wialon account is this
+      // company's fleet, so every unit it returns is a truck.
+      const data = await getFleetData();
       setFleetData(data);
 
       // Persist snapshot to Supabase
@@ -134,7 +122,7 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
       const truckById = new Map(data.trucks.map((t) => [t.truck_id, t]));
       for (const dispatch of dispatchesRef.current) {
         const truck = truckById.get(dispatch.truck_id);
-        if (truck?.matched && truck.lat != null && truck.lng != null) {
+        if (truck?.lat != null && truck.lng != null) {
           checkPositionAuto(dispatch.id, truck.lat, truck.lng, truck.speed, truck.driverName).catch((err) =>
             console.error("[FleetProvider] auto position check failed:", err)
           );
@@ -152,7 +140,7 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsPolling(false);
     }
-  }, [getTruckIds, supabase]);
+  }, [supabase]);
 
   useEffect(() => {
     pollOnce();
@@ -163,21 +151,20 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   }, [pollOnce]);
 
   // Reference/list data — fetched once for the whole app, not once per
-  // page. Sites and the truck registry change rarely enough that a
-  // 5-minute refresh is plenty; geofences/notifications get their own
-  // realtime channels below instead of polling.
+  // page. Sites change rarely enough that a 5-minute refresh is
+  // plenty; geofences/notifications get their own realtime channels
+  // below instead of polling. The truck roster no longer lives here —
+  // fleetData.trucks (from Wialon, via pollOnce) is the fleet now.
   useEffect(() => {
     loadDispatches();
     loadGeofences();
     loadNotifications();
     listGasStations().then(({ data }) => setGasStations(data));
     listSites().then(({ data }) => { if (data) setSites(data); });
-    listTrucks().then(({ data }) => { if (data) setTrucks(data); });
 
     const refInterval = setInterval(() => {
       listGasStations().then(({ data }) => setGasStations(data));
       listSites().then(({ data }) => { if (data) setSites(data); });
-      listTrucks().then(({ data }) => { if (data) setTrucks(data); });
     }, 5 * 60_000);
     return () => clearInterval(refInterval);
   }, [loadDispatches, loadGeofences, loadNotifications]);
@@ -210,7 +197,6 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
         geofences,
         gasStations,
         sites,
-        trucks,
         notifications,
         refreshGeofences: loadGeofences,
         refreshDispatches: loadDispatches,

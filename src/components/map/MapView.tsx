@@ -167,9 +167,9 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
   const tileLayersRef = useRef<{ dark: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer } | null>(null);
 
   const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">("dark");
-  const [showZones, setShowZones] = useState(false);
-  const [showNames, setShowNames] = useState(false);
-  const [showStations, setShowStations] = useState(false);
+  const [showZones, setShowZones] = useState(true);
+  const [showNames, setShowNames] = useState(true);
+  const [showStations, setShowStations] = useState(true);
 
   // Initialize map once
   useEffect(() => {

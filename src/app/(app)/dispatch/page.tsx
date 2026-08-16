@@ -457,8 +457,8 @@ export default function DispatchPage() {
             <div
               className="rounded-md px-3 py-2 text-xs mb-1"
               style={{
-                background: selectedSite ? "rgba(21,156,131,0.08)" : "rgba(109,91,255,0.08)",
-                border: `1px solid ${selectedSite ? "rgba(21,156,131,0.3)" : "rgba(109,91,255,0.25)"}`,
+                background: selectedSite ? "rgba(21,156,131,0.08)" : "rgba(88,101,242,0.08)",
+                border: `1px solid ${selectedSite ? "rgba(21,156,131,0.3)" : "rgba(88,101,242,0.25)"}`,
                 color: selectedSite ? "#4ade80" : "var(--indigo)",
               }}
             >

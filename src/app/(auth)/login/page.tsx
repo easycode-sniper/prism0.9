@@ -47,10 +47,10 @@ export default function LoginPage() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/omd-logo.png" alt="OMD" width={28} height={28} style={{ objectFit: "contain" }} />
             </div>
-            <h1 className="text-xl font-semibold text-white">Welcome to Prism</h1>
+            <h1 className="text-xl font-semibold text-white">Welcome back!</h1>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--text-dim)" }}>
-              Real-time GPS dispatch and route tracking for OMD Transport&rsquo;s cement fleet —
-              every truck, every route, every arrival, live.
+              Good to see you again — your fleet&rsquo;s been busy. Sign in to catch up on every
+              truck, every route, every arrival, live.
             </p>
           </div>
           <TruckArrivalScene />

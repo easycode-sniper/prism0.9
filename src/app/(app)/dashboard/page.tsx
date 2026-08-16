@@ -257,7 +257,7 @@ export default function DashboardPage() {
                     <span
                       style={{
                         padding: '3px 10px', borderRadius: '20px', fontSize: '.78rem', fontWeight: 600,
-                        background: d.score >= 90 ? 'rgba(74,222,128,.15)' : d.score >= 70 ? 'rgba(109,91,255,.15)' : 'rgba(248,113,113,.15)',
+                        background: d.score >= 90 ? 'rgba(74,222,128,.15)' : d.score >= 70 ? 'rgba(88,101,242,.15)' : 'rgba(248,113,113,.15)',
                         color: d.score >= 90 ? 'var(--green)' : d.score >= 70 ? '#a7a0ff' : 'var(--red)',
                       }}
                     >

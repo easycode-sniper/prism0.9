@@ -8,7 +8,7 @@
   --line: #26263c;
   --text: #e7e7f5;
   --text-dim: #8f8fb0;
-  --indigo: #6d5bff;
+  --indigo: #5865f2;
   --purple: #a855f7;
   --amber: #ffb703;
   --cyan: #22d3ee;
@@ -88,7 +88,7 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea {
 
 input:focus, select:focus, textarea:focus {
   border-color: var(--indigo);
-  box-shadow: 0 0 0 3px rgba(109, 91, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.15);
 }
 
 input::placeholder, textarea::placeholder {
@@ -107,7 +107,7 @@ input::placeholder, textarea::placeholder {
   font-family: var(--font-sans);
   background: var(--indigo);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(109, 91, 255, 0.25);
+  box-shadow: 0 4px 16px rgba(88, 101, 242, 0.25);
   transition: filter 0.15s, transform 0.15s;
 }
 
@@ -194,7 +194,7 @@ input::placeholder, textarea::placeholder {
 .status-pill.pending { background: rgba(255, 183, 3, 0.15); color: var(--amber); }
 .status-pill.completed { background: rgba(74, 222, 128, 0.15); color: var(--green); }
 .status-pill.stopped { background: rgba(248, 113, 113, 0.15); color: var(--red); }
-.status-pill.dispatched { background: rgba(109, 91, 255, 0.15); color: var(--indigo); }
+.status-pill.dispatched { background: rgba(88, 101, 242, 0.15); color: var(--indigo); }
 
 /* KPI cards */
 .kpi-card {
@@ -264,7 +264,7 @@ tbody td {
 }
 
 tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: rgba(109, 91, 255, 0.05); }
+tbody tr:hover { background: rgba(88, 101, 242, 0.05); }
 
 /* Monospace truck cells */
 .truck-id {

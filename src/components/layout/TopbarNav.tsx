@@ -102,7 +102,7 @@ function tabStyle(active: boolean): React.CSSProperties {
     cursor: "pointer",
     transition: ".15s",
     textDecoration: "none",
-    boxShadow: active ? "0 2px 10px rgba(109,91,255,.35)" : "none",
+    boxShadow: active ? "0 2px 10px rgba(88,101,242,.35)" : "none",
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",

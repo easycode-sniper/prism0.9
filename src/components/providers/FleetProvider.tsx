@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { getFleetData, FleetData, FleetTruck } from "@/lib/wialon/config";
+import type { FleetData, FleetTruck } from "@/lib/wialon/config";
 import { listActiveDispatches, listSites } from "@/lib/supabase/actions";
 import type { DispatchRecord, SiteRecord } from "@/lib/supabase/actions";
 import { listGeofences } from "@/lib/supabase/geofences";
@@ -10,7 +10,6 @@ import { listGasStations } from "@/lib/supabase/stations";
 import type { GasStation } from "@/lib/supabase/stations";
 import { getNotifications } from "@/lib/supabase/history";
 import type { NotificationRecord } from "@/lib/supabase/history";
-import { checkPositionAuto, checkHqArrivals } from "@/lib/supabase/positions";
 import { createClient } from "@/lib/supabase/client";
 
 interface FleetContextType {
@@ -66,27 +65,11 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   // Stable for the component's lifetime — NOT `createClient()` called
-  // directly in the render body, which returns a new client (and
-  // therefore a new identity) on every render. That instability was
-  // the actual bug: pollOnce, and both realtime channel effects below,
-  // all depend on `supabase`, so a fresh identity on every render tore
-  // them down and immediately re-fired them — including re-running the
-  // full Wialon poll right away instead of on its 60s schedule. Since
-  // pollOnce's own writes trigger the realtime channels that cause a
-  // re-render, this was a feedback loop: poll -> DB write -> realtime
-  // event -> re-render -> new client -> effects reset -> poll again,
-  // compounding into near-continuous full re-fetches and freezing the
-  // tab (this provider wraps every page, so it wasn't page-specific).
+  // directly in the render body, which returns a new client (and so a
+  // new identity) on every render. Everything below depends on this
+  // client, so an unstable identity tears down and re-fires every read
+  // and every channel subscription on each re-render.
   const [supabase] = useState(() => createClient());
-
-  // pollOnce reads these via ref rather than closing over the state
-  // directly, so checking positions each poll doesn't require
-  // recreating (and re-scheduling) pollOnce every time a dispatch or
-  // geofence changes.
-  const dispatchesRef = useRef<DispatchRecord[]>([]);
-  const geofencesRef = useRef<GeofenceRecord[]>([]);
-  useEffect(() => { dispatchesRef.current = dispatches; }, [dispatches]);
-  useEffect(() => { geofencesRef.current = geofences; }, [geofences]);
 
   const activeRuns = dispatches.length;
   const offRouteCount = dispatches.filter((d) => d.last_on_route === false).length;
@@ -125,86 +108,59 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
     return () => { Object.values(timers).forEach(clearTimeout); };
   }, []);
 
-  // Guards against overlapping poll cycles — if a cycle's own
-  // notification checks (below) are still draining when the next 60s
-  // tick fires, starting another full cycle on top would pile up
-  // concurrent request generations with nothing to cap them. A plain
-  // ref (not isPolling state) since pollOnce's identity is now stable
-  // and won't pick up a fresh closure over state.
+  // Guards against overlapping reads, so a slow fetch can't have a
+  // second one stacked on top of it.
   const pollingRef = useRef(false);
 
+  // Reads the fleet from the newest fleet_snapshots row instead of
+  // calling Wialon. The scheduled tick (app/api/tick, driven by pg_cron)
+  // writes that row every minute, so the browser no longer logs into
+  // Wialon at all — one poll happens for the whole company rather than
+  // one per open tab, and it keeps happening when nobody has the app
+  // open, which is the entire point of moving it server-side.
   const pollOnce = useCallback(async () => {
     if (pollingRef.current) return;
     pollingRef.current = true;
     try {
       setIsPolling(true);
-      // No truck-ID list to pass — the whole Wialon account is this
-      // company's fleet, so every unit it returns is a truck.
-      const data = await getFleetData();
-      setFleetData(data);
-
-      // Persist snapshot to Supabase. The error is checked rather than
-      // discarded: this insert failed on every poll for months — the
-      // fleet_snapshots table had never been created in the project, and
-      // nothing surfaced it.
-      const { error: snapshotError } = await supabase
+      const { data, error } = await supabase
         .from("fleet_snapshots")
-        .insert({
-          snapshot_data: data.trucks,
-          truck_count: data.trucks.length,
-          moving_count: data.trucks.filter((t: FleetTruck) => t.status === "moving").length,
-          idle_count: data.trucks.filter((t: FleetTruck) => t.status === "idle").length,
-          offline_count: data.trucks.filter((t: FleetTruck) => t.status === "offline").length,
-          captured_at: new Date().toISOString(),
+        .select("snapshot_data, captured_at")
+        .order("captured_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        setFleetData((prev) => ({ ...prev, error: error.message }));
+        return;
+      }
+      if (!data) {
+        setFleetData({
+          trucks: [],
+          lastUpdated: null,
+          error: "No fleet snapshot yet — the monitoring job may not be running.",
         });
-
-      if (snapshotError) console.error("[FleetProvider] snapshot insert failed:", snapshotError);
-
-      // The actual notification trigger — this is what previously only
-      // ran when someone manually clicked "Check" on a single truck.
-      // Reuses the positions (and geofences) this same poll already
-      // has, so it's not an extra Wialon/Supabase round-trip per
-      // dispatch. Awaited (allSettled, so one failing dispatch doesn't
-      // stop the rest) rather than fire-and-forget, so this cycle's
-      // work is fully done before pollingRef releases — that's what
-      // actually enforces "one generation of checks at a time."
-      const truckById = new Map(data.trucks.map((t) => [t.truck_id, t]));
-      const checks: Promise<unknown>[] = [];
-      for (const dispatch of dispatchesRef.current) {
-        const truck = truckById.get(dispatch.truck_id);
-        if (truck?.lat != null && truck.lng != null) {
-          checks.push(
-            checkPositionAuto(dispatch.id, truck.lat, truck.lng, truck.speed, truck.driverName, geofencesRef.current).catch(
-              (err) => console.error("[FleetProvider] auto position check failed:", err)
-            )
-          );
-        }
+        return;
       }
 
-      const hq = geofencesRef.current.find((g) => g.kind === "site" && g.siteId == null);
-      if (hq?.centerLat != null && hq?.centerLng != null && hq?.radiusMeters != null) {
-        checks.push(
-          checkHqArrivals(data.trucks, { centerLat: hq.centerLat, centerLng: hq.centerLng, radiusMeters: hq.radiusMeters }).catch(
-            (err) => console.error("[FleetProvider] HQ arrival check failed:", err)
-          )
-        );
-      }
-
-      await Promise.allSettled(checks);
+      setFleetData({
+        trucks: (data.snapshot_data ?? []) as FleetTruck[],
+        lastUpdated: new Date(data.captured_at),
+        error: null,
+      });
     } catch (err) {
-      console.error("Fleet poll failed:", err);
+      console.error("Fleet read failed:", err);
     } finally {
       setIsPolling(false);
       pollingRef.current = false;
     }
   }, [supabase]);
 
-  // Polling follows tab visibility. A hidden tab has nobody reading the
-  // map, but its cycle still costs a Wialon fetch, a snapshot write, a
-  // position check per active dispatch and an HQ sweep — and every tab
-  // the operator left open was paying that independently, all writing to
-  // the same rows. Hidden tabs now stop entirely and poll immediately on
-  // return, so coming back doesn't mean waiting up to 60s for fresh data.
+  // Reads follow tab visibility: a hidden tab has nobody looking at the
+  // map, and re-reads immediately on return rather than showing stale
+  // data for up to a minute. This is only a safety net now — the
+  // realtime subscription below is the primary path, and the interval
+  // covers the case where the socket drops without reconnecting.
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
 
@@ -250,6 +206,18 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
     }, 5 * 60_000);
     return () => clearInterval(refInterval);
   }, [loadDispatches, loadGeofences, loadNotifications]);
+
+  // The tick writes one snapshot row a minute; this turns that write
+  // into a push, so the map updates without the browser asking.
+  useEffect(() => {
+    const channel = supabase
+      .channel("fleet-provider-snapshots")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "fleet_snapshots" }, () =>
+        coalesce("snapshots", pollOnce)
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [pollOnce, coalesce, supabase]);
 
   useEffect(() => {
     const channel = supabase

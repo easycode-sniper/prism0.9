@@ -22,6 +22,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // `api` is excluded: these routes authenticate themselves and have no
+    // session to redirect. /api/tick is called by pg_net from Supabase,
+    // which carries a shared secret rather than a cookie — left in the
+    // matcher, it would be bounced to /login and the schedule would
+    // silently never run.
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

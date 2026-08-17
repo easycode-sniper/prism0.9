@@ -39,7 +39,13 @@ AS $$
   RETURNING public.fleet_trucks.truck_id;
 $$;
 
+-- anon needs revoking by name, not just via PUBLIC: Supabase grants
+-- EXECUTE to anon and authenticated directly through default privileges,
+-- so REVOKE ... FROM PUBLIC alone leaves the function callable without
+-- signing in (the database linter flags this as
+-- anon_security_definer_function_executable).
 REVOKE ALL ON FUNCTION public.mark_trucks_hq_state(TEXT[], BOOLEAN) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.mark_trucks_hq_state(TEXT[], BOOLEAN) FROM anon;
 GRANT EXECUTE ON FUNCTION public.mark_trucks_hq_state(TEXT[], BOOLEAN) TO authenticated;
 
 -- ── Fleet snapshots are append-only telemetry ──

@@ -9,7 +9,7 @@
 // Runs with the service role, so RLS write policies don't apply.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getFleetData, type FleetTruck } from "@/lib/wialon/config";
+import { loadWialonConfig, fetchFleetData, type FleetTruck } from "@/lib/fleet/wialon";
 import { loadGeofences } from "@/lib/fleet/geofences";
 import { loadDispatchAndSite, runPositionCheck, runHqArrivalCheck } from "@/lib/fleet/positionCheck";
 
@@ -26,7 +26,23 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   const startedAt = Date.now();
   const warnings: string[] = [];
 
-  const fleet = await getFleetData();
+  // Resolved with the tick's own (service-role) client. Reading it via
+  // the session-scoped helper returns nothing here — there is no session
+  // — and surfaces as "Wialon is not configured" on a project where it
+  // is configured perfectly well.
+  const config = await loadWialonConfig(supabase);
+  if (!config) {
+    return {
+      ok: false,
+      trucks: 0,
+      dispatchesChecked: 0,
+      durationMs: Date.now() - startedAt,
+      error: "Wialon is not configured — set the API token in Admin → Settings.",
+      warnings,
+    };
+  }
+
+  const fleet = await fetchFleetData(config);
   if (fleet.error) {
     return {
       ok: false,

@@ -65,7 +65,6 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   const [gasStations, setGasStations] = useState<GasStation[]>([]);
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   // Stable for the component's lifetime — NOT `createClient()` called
   // directly in the render body, which returns a new client (and
   // therefore a new identity) on every render. That instability was
@@ -107,6 +106,25 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
     if (result.data) setNotifications(result.data);
   }, []);
 
+  // Realtime delivers one event per row, but a poll writes rows in
+  // batches — one dispatch update per active run, one notification per
+  // arriving truck. Refetching per event meant a batch of N rows cost N
+  // server-action round trips and N re-renders of every consumer of this
+  // context (including the Leaflet marker rebuild). Coalescing collapses
+  // each burst into a single refetch once the burst settles.
+  const refreshTimers = useRef<Record<string, NodeJS.Timeout | undefined>>({});
+  const coalesce = useCallback((key: string, fn: () => void) => {
+    clearTimeout(refreshTimers.current[key]);
+    refreshTimers.current[key] = setTimeout(() => {
+      delete refreshTimers.current[key];
+      fn();
+    }, 400);
+  }, []);
+  useEffect(() => {
+    const timers = refreshTimers.current;
+    return () => { Object.values(timers).forEach(clearTimeout); };
+  }, []);
+
   // Guards against overlapping poll cycles — if a cycle's own
   // notification checks (below) are still draining when the next 60s
   // tick fires, starting another full cycle on top would pile up
@@ -125,8 +143,11 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
       const data = await getFleetData();
       setFleetData(data);
 
-      // Persist snapshot to Supabase
-      await supabase
+      // Persist snapshot to Supabase. The error is checked rather than
+      // discarded: this insert failed on every poll for months — the
+      // fleet_snapshots table had never been created in the project, and
+      // nothing surfaced it.
+      const { error: snapshotError } = await supabase
         .from("fleet_snapshots")
         .insert({
           snapshot_data: data.trucks,
@@ -136,6 +157,8 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
           offline_count: data.trucks.filter((t: FleetTruck) => t.status === "offline").length,
           captured_at: new Date().toISOString(),
         });
+
+      if (snapshotError) console.error("[FleetProvider] snapshot insert failed:", snapshotError);
 
       // The actual notification trigger — this is what previously only
       // ran when someone manually clicked "Check" on a single truck.
@@ -176,11 +199,36 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [supabase]);
 
+  // Polling follows tab visibility. A hidden tab has nobody reading the
+  // map, but its cycle still costs a Wialon fetch, a snapshot write, a
+  // position check per active dispatch and an HQ sweep — and every tab
+  // the operator left open was paying that independently, all writing to
+  // the same rows. Hidden tabs now stop entirely and poll immediately on
+  // return, so coming back doesn't mean waiting up to 60s for fresh data.
   useEffect(() => {
-    pollOnce();
-    intervalRef.current = setInterval(pollOnce, 60_000);
+    let interval: NodeJS.Timeout | null = null;
+
+    const start = () => {
+      if (!interval) interval = setInterval(pollOnce, 60_000);
+    };
+    const stop = () => {
+      if (interval) { clearInterval(interval); interval = null; }
+    };
+
+    const sync = () => {
+      if (document.visibilityState === "visible") {
+        pollOnce();
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    sync();
+    document.addEventListener("visibilitychange", sync);
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      document.removeEventListener("visibilitychange", sync);
+      stop();
     };
   }, [pollOnce]);
 
@@ -206,18 +254,22 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const channel = supabase
       .channel("fleet-provider-dispatches")
-      .on("postgres_changes", { event: "*", schema: "public", table: "dispatches" }, () => loadDispatches())
+      .on("postgres_changes", { event: "*", schema: "public", table: "dispatches" }, () =>
+        coalesce("dispatches", loadDispatches)
+      )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [loadDispatches, supabase]);
+  }, [loadDispatches, coalesce, supabase]);
 
   useEffect(() => {
     const channel = supabase
       .channel("fleet-provider-notifications")
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => loadNotifications())
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () =>
+        coalesce("notifications", loadNotifications)
+      )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [loadNotifications, supabase]);
+  }, [loadNotifications, coalesce, supabase]);
 
   return (
     <FleetContext.Provider

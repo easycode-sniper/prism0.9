@@ -13,6 +13,7 @@ import type { SiteRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { Radar, Check, X } from "lucide-react";
+import { formatDateTime } from "@/lib/format";
 
 // A truck within this distance of a station is treated as "at the pump".
 const STATION_PROXIMITY_METERS = 150;
@@ -537,7 +538,7 @@ function ActiveDispatchRow({
         <span className="text-sm text-white">{siteName}</span>
       </div>
       <div className="mt-1 flex gap-3 text-xs" style={{ color: "var(--text-dim)" }}>
-        <span>{new Date(dispatch.dispatched_at).toLocaleString()}</span>
+        <span>{formatDateTime(dispatch.dispatched_at)}</span>
         <span>By: {dispName}</span>
       </div>
 

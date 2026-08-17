@@ -1,6 +1,7 @@
 "use client";
 
 import { useFleet } from "@/components/providers/FleetProvider";
+import { formatTime } from "@/lib/format";
 
 export function OperationsStrip() {
   const { fleetData, activeRuns, offRouteCount } = useFleet();
@@ -28,7 +29,7 @@ export function OperationsStrip() {
       </div>
       <span style={{ width: '1px', height: '16px', background: 'var(--line)' }}></span>
       <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-        Last update <strong style={{ color: 'var(--text)', fontSize: '.78rem' }}>{fleetData.lastUpdated ? fleetData.lastUpdated.toLocaleTimeString() : "Not yet synced"}</strong>
+        Last update <strong style={{ color: 'var(--text)', fontSize: '.78rem' }}>{fleetData.lastUpdated ? formatTime(fleetData.lastUpdated) : "Not yet synced"}</strong>
       </div>
     </div>
   );

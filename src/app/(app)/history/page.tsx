@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getHistoryData, HistoryRecord } from "@/lib/supabase/history";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { Printer } from "lucide-react";
+import { formatTime, formatDateTime, formatDateLong } from "@/lib/format";
 
 export default function HistoryPage() {
   const { t } = useTranslation();
@@ -132,8 +133,8 @@ export default function HistoryPage() {
                   <td className="px-4 py-3 font-mono text-cyan-400">{r.truck_id}</td>
                   <td className="px-4 py-3 text-white">{r.site_name || "—"}</td>
                   <td className="px-4 py-3 text-gray-400">{r.client || "—"}</td>
-                  <td className="px-4 py-3 text-gray-400">{new Date(r.dispatched_at).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-gray-400">{r.stopped_at ? new Date(r.stopped_at).toLocaleString() : "—"}</td>
+                  <td className="px-4 py-3 text-gray-400">{formatDateTime(r.dispatched_at)}</td>
+                  <td className="px-4 py-3 text-gray-400">{r.stopped_at ? formatDateTime(r.stopped_at) : "—"}</td>
                   <td className="px-4 py-3 text-gray-400">{r.duration_minutes != null ? `${r.duration_minutes} min` : "—"}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={r.status} />
@@ -154,7 +155,7 @@ export default function HistoryPage() {
       {/* Print-only daily summary — hidden on screen, shown via @media print (#print-area rule in globals.css) */}
       <div id="print-area">
         <h1 style={{ fontSize: "20px", fontWeight: 700, marginBottom: 4 }}>OMD Transport — Daily Dispatch Summary</h1>
-        <p style={{ fontSize: "13px", marginBottom: 16 }}>{new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+        <p style={{ fontSize: "13px", marginBottom: 16 }}>{formatDateLong(new Date())}</p>
 
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 20, fontSize: "13px" }}>
           <tbody>
@@ -200,7 +201,7 @@ export default function HistoryPage() {
                   <td style={{ padding: "4px" }}>{r.truck_id}</td>
                   <td style={{ padding: "4px" }}>{r.driver_name || "—"}</td>
                   <td style={{ padding: "4px" }}>{r.site_name || "—"}</td>
-                  <td style={{ padding: "4px" }}>{new Date(r.dispatched_at).toLocaleTimeString()}</td>
+                  <td style={{ padding: "4px" }}>{formatTime(r.dispatched_at)}</td>
                   <td style={{ padding: "4px" }}>{r.duration_minutes != null ? `${r.duration_minutes} min` : "—"}</td>
                   <td style={{ padding: "4px" }}>{r.status}</td>
                   <td style={{ padding: "4px" }}>

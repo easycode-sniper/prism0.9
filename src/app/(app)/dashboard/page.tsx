@@ -9,6 +9,7 @@ import { getDriverRatings, DriverRating } from "@/lib/supabase/history";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { formatTime } from "@/lib/format";
 
 // A truck within this distance of a station is treated as "at the pump".
 const STATION_PROXIMITY_METERS = 150;
@@ -145,7 +146,7 @@ export default function DashboardPage() {
           <p style={{ color: 'var(--text-dim)', fontSize: '.85rem', marginTop: '4px' }}>{t("dashboard.subtitle")}</p>
           <p style={{ fontSize: '.78rem', color: connectionStatus.includes('●') ? 'var(--green)' : 'var(--amber)', marginTop: '2px' }}>{connectionStatus}</p>
           <p style={{ fontSize: '.78rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-            Live polling {isPolling ? "active" : "—"} {fleetData.lastUpdated ? `· ${fleetData.lastUpdated.toLocaleTimeString()}` : ""}
+            Live polling {isPolling ? "active" : "—"} {fleetData.lastUpdated ? `· ${formatTime(fleetData.lastUpdated)}` : ""}
           </p>
         </div>
       </div>

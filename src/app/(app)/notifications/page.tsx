@@ -8,6 +8,7 @@ import {
 import { useFleet } from "@/components/providers/FleetProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { TriangleAlert, Gauge, Flag, Factory, ParkingCircle } from "lucide-react";
+import { formatDateTime } from "@/lib/format";
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
@@ -69,7 +70,7 @@ export default function NotificationsPage() {
                   <span className="font-mono text-xs text-cyan-400">{n.truck_id}</span>
                 </div>
                 <p className="mt-0.5 text-sm text-gray-400">{n.message}</p>
-                <span className="mt-1 text-xs text-gray-600">{new Date(n.created_at).toLocaleString()}</span>
+                <span className="mt-1 text-xs text-gray-600">{formatDateTime(n.created_at)}</span>
               </div>
               {!n.read && (
                 <div className="mt-1 h-2 w-2 rounded-full bg-indigo-500" />

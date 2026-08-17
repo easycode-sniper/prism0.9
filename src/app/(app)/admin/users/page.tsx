@@ -9,6 +9,7 @@ import {
   adminEnableUser,
   AdminUser,
 } from "@/lib/supabase/admin-actions";
+import { formatDate } from "@/lib/format";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -144,7 +145,7 @@ export default function AdminUsersPage() {
                   </select>
                 </td>
                 <td className="px-4 py-3 text-gray-400 text-xs">
-                  {new Date(u.created_at).toLocaleDateString()}
+                  {formatDate(u.created_at)}
                 </td>
                 <td className="px-4 py-3">
                   {u.role !== "admin" && (

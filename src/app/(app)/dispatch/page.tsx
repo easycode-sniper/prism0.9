@@ -12,10 +12,18 @@ import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import type { SiteRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
-import { Radar } from "lucide-react";
+import { Radar, Check, X } from "lucide-react";
 
 // A truck within this distance of a station is treated as "at the pump".
 const STATION_PROXIMITY_METERS = 150;
+
+// Shared by the live-fleet list and the truck picker so a truck reads
+// the same colour in both — they used to carry their own copies.
+function statusColor(status: string): string {
+  if (status === "moving") return "var(--green)";
+  if (status === "idle") return "var(--cyan)";
+  return "var(--text-dim)";
+}
 
 // Leaflet touches `window` at import time, so it can't be part of the
 // server-rendered bundle for this ("use client") page.
@@ -304,7 +312,7 @@ export default function DispatchPage() {
                       <div>
                         <div className="text-sm text-white font-medium">{tr.driver_name || "—"}</div>
                         <div className="flex items-center gap-1 text-xs" style={{ color: "var(--text-dim)" }}>
-                          <span style={{ color: tr.status === "moving" ? "#4ade80" : tr.status === "idle" ? "#22d3ee" : "var(--text-dim)" }}>●</span>
+                          <span style={{ color: statusColor(tr.status) }}>●</span>
                           {tr.status} {tr.speed} km/h
                         </div>
                       </div>
@@ -327,9 +335,16 @@ export default function DispatchPage() {
             {selectedTrucks.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {selectedTrucks.map((id) => (
-                  <span key={id} className="truck-id inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--indigo)" }}>
-                    {id}
-                    <button type="button" onClick={() => toggleTruck(id)} aria-label={`Remove ${id}`} style={{ color: "var(--text-dim)" }}>×</button>
+                  <span key={id} className="truck-chip">
+                    <span className="truck-id">{id}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleTruck(id)}
+                      aria-label={`Remove ${id}`}
+                      className="truck-chip__remove"
+                    >
+                      <X size={11} strokeWidth={2.5} />
+                    </button>
                   </span>
                 ))}
               </div>
@@ -342,18 +357,44 @@ export default function DispatchPage() {
               className="search-input w-full mb-2"
               style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
             />
-            <div className="max-h-40 overflow-y-auto rounded-md p-1" style={{ border: "1px solid var(--line)", background: "var(--panel-2)" }}>
-              {filteredTrucks.length === 0 ? (
-                <p className="text-xs p-2" style={{ color: "var(--text-dim)" }}>No matching trucks.</p>
-              ) : (
-                filteredTrucks.map((tr) => (
-                  <label key={tr.truck_id} className="flex items-center gap-2 rounded px-2 py-1 text-sm cursor-pointer hover:bg-black/20">
-                    <input type="checkbox" checked={selectedTrucks.includes(tr.truck_id)} onChange={() => toggleTruck(tr.truck_id)} />
-                    <span className="truck-id">{tr.truck_id}</span>
-                    <span style={{ color: "var(--text-dim)" }}>{tr.driver_name || "—"}</span>
-                  </label>
-                ))
-              )}
+            <div className="truck-picker">
+              <div className="truck-picker__scroll">
+                {filteredTrucks.length === 0 ? (
+                  <p className="text-xs px-2 py-3 text-center" style={{ color: "var(--text-dim)" }}>No matching trucks.</p>
+                ) : (
+                  filteredTrucks.map((tr) => {
+                    const selected = selectedTrucks.includes(tr.truck_id);
+                    return (
+                      <label
+                        key={tr.truck_id}
+                        className={`truck-option${selected ? " is-selected" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="truck-option__input"
+                          checked={selected}
+                          onChange={() => toggleTruck(tr.truck_id)}
+                        />
+                        <span className="truck-option__box" aria-hidden="true">
+                          <Check size={12} strokeWidth={3} />
+                        </span>
+                        <span
+                          className="truck-option__dot"
+                          style={{ background: statusColor(tr.status) }}
+                          aria-hidden="true"
+                        />
+                        <span
+                          className={`truck-option__name${tr.driver_name ? "" : " truck-option__name--empty"}`}
+                          title={tr.driver_name ?? undefined}
+                        >
+                          {tr.driver_name || "Unnamed driver"}
+                        </span>
+                        <span className="truck-id truck-option__id">{tr.truck_id}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
 

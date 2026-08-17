@@ -8,6 +8,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { Moon, Satellite as SatelliteIcon, MapPin, Tag, Fuel } from "lucide-react";
 import { formatAge } from "@/lib/format";
+import { useTheme } from "@/lib/theme/ThemeProvider";
 
 // Leaflet markers/popups are raw HTML strings, not React — these are
 // inline stroke-style SVGs (lucide's visual language: 24x24, stroke
@@ -191,7 +192,7 @@ interface MapCore {
   zonesLayer: L.LayerGroup;
   landmarksLayer: L.LayerGroup;
   routeLayer: L.Polyline | null;
-  tileLayers: { dark: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer };
+  tileLayers: { dark: L.TileLayer; light: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer };
   ui: { baseLayer: "dark" | "satellite"; showZones: boolean; showNames: boolean; showStations: boolean };
 }
 
@@ -221,6 +222,14 @@ function getOrCreateMapCore(): MapCore {
     attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
     maxZoom: 19,
   }).addTo(map);
+
+  // CARTO's light sibling of the dark basemap — same cartography and
+  // label placement, so switching theme changes the value of the map
+  // rather than its shape.
+  const light = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    maxZoom: 19,
+  });
 
   const satellite = L.tileLayer(SATELLITE_TILES, { attribution: "&copy; Esri", maxZoom: 19 });
 
@@ -260,7 +269,7 @@ function getOrCreateMapCore(): MapCore {
     zonesLayer,
     landmarksLayer,
     routeLayer: null,
-    tileLayers: { dark, satellite, satelliteLabels },
+    tileLayers: { dark, light, satellite, satelliteLabels },
     ui: { baseLayer: "dark", showZones: true, showNames: true, showStations: true },
   };
   return core;
@@ -269,6 +278,7 @@ function getOrCreateMapCore(): MapCore {
 export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], routeLine = null, focusPoint = null }: MapViewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  const { theme } = useTheme();
   const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">(() => getOrCreateMapCore().ui.baseLayer);
   const [showZones, setShowZones] = useState(() => getOrCreateMapCore().ui.showZones);
   const [showNames, setShowNames] = useState(() => getOrCreateMapCore().ui.showNames);
@@ -287,21 +297,28 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     };
   }, []);
 
-  // Base layer switching (dark vs satellite + labels overlay)
+  // Base layer switching (basemap vs satellite + labels overlay). The
+  // toggle picks the KIND of map; the theme picks which basemap that is,
+  // so a light UI never sits over a near-black map.
   useEffect(() => {
     const { map, tileLayers } = getOrCreateMapCore();
     core!.ui.baseLayer = baseLayer;
 
+    const basemap = theme === "light" ? tileLayers.light : tileLayers.dark;
+    const otherBasemap = theme === "light" ? tileLayers.dark : tileLayers.light;
+
     if (baseLayer === "dark") {
       map.removeLayer(tileLayers.satellite);
       map.removeLayer(tileLayers.satelliteLabels);
-      if (!map.hasLayer(tileLayers.dark)) tileLayers.dark.addTo(map);
+      map.removeLayer(otherBasemap);
+      if (!map.hasLayer(basemap)) basemap.addTo(map);
     } else {
       map.removeLayer(tileLayers.dark);
+      map.removeLayer(tileLayers.light);
       if (!map.hasLayer(tileLayers.satellite)) tileLayers.satellite.addTo(map);
       if (!map.hasLayer(tileLayers.satelliteLabels)) tileLayers.satelliteLabels.addTo(map);
     }
-  }, [baseLayer]);
+  }, [baseLayer, theme]);
 
   // Zones + site markers visibility
   useEffect(() => {

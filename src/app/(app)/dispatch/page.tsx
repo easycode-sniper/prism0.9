@@ -269,7 +269,7 @@ export default function DispatchPage() {
             style={{
               background: liveFleetOn ? "rgba(21,156,131,0.12)" : "var(--panel-2)",
               border: `1px solid ${liveFleetOn ? "#159c83" : "var(--line)"}`,
-              color: liveFleetOn ? "#4ade80" : "var(--text-dim)",
+              color: liveFleetOn ? "var(--green)" : "var(--text-dim)",
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
@@ -450,7 +450,7 @@ export default function DispatchPage() {
               style={{
                 background: selectedSite ? "rgba(21,156,131,0.08)" : "rgba(88,101,242,0.08)",
                 border: `1px solid ${selectedSite ? "rgba(21,156,131,0.3)" : "rgba(88,101,242,0.25)"}`,
-                color: selectedSite ? "#4ade80" : "var(--indigo)",
+                color: selectedSite ? "var(--green)" : "var(--indigo)",
               }}
             >
               {selectedSite ? `Destination set: ${selectedSite.name}. Ready to dispatch.` : "Choose a destination to prepare the route."}

@@ -21,9 +21,22 @@ export const metadata: Metadata = {
   description: "Fleet route verification and monitoring",
 };
 
+// Runs before first paint, ahead of React, so the stored theme is on the
+// document when the first pixels land. Without it a light-theme operator
+// gets a dark flash on every navigation — and a dark-theme one gets a
+// white flash, which at night is worse.
+const themeBootstrap = `
+(function(){try{var t=localStorage.getItem("prism-theme");
+document.documentElement.setAttribute("data-theme",t==="light"?"light":"dark");
+}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html lang="en" data-theme="dark" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
       </body>

@@ -141,7 +141,7 @@ function MonitoringRow({
 }) {
   const isOffRoute = truck.dispatched && truck.last_on_route === false;
   const statusLabel = isOffRoute ? "off-route" : truck.status;
-  const statusColor = isOffRoute ? "#f87171" : truck.status === "moving" ? "#4ade80" : truck.status === "idle" ? "#22d3ee" : "var(--text-dim)";
+  const statusColor = isOffRoute ? "var(--red)" : truck.status === "moving" ? "var(--green)" : truck.status === "idle" ? "var(--cyan)" : "var(--text-dim)";
 
   const locateHref = truck.lat != null && truck.lng != null
     ? `/dispatch?lat=${truck.lat}&lng=${truck.lng}`

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Bell, Settings } from "lucide-react";
+import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Bell, Settings, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/lib/theme/ThemeProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { useFleet } from "@/components/providers/FleetProvider";
 import type { Language } from "@/lib/i18n/translations";
@@ -55,6 +56,48 @@ export function FleetActiveCount() {
   const { activeRuns, fleetData } = useFleet();
   return (
     <span>Active: <strong style={{ color: "var(--amber)" }}>{activeRuns}</strong> / <span>{fleetData.trucks.length || "—"}</span></span>
+  );
+}
+
+// Sits directly beside the language switcher and borrows its shape — a
+// segmented control in the same pill — so the two read as one cluster of
+// "how this app is set up for me" rather than two unrelated widgets.
+export function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const options: { value: "dark" | "light"; label: string; Icon: typeof Sun }[] = [
+    { value: "dark", label: "Dark", Icon: Moon },
+    { value: "light", label: "Light", Icon: Sun },
+  ];
+
+  return (
+    <div
+      role="group"
+      aria-label="Theme"
+      style={{ display: "flex", gap: "2px", background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "2px" }}
+    >
+      {options.map(({ value, label, Icon }) => (
+        <button
+          key={value}
+          onClick={() => setTheme(value)}
+          title={`${label} theme`}
+          aria-label={`${label} theme`}
+          aria-pressed={theme === value}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: theme === value ? "var(--indigo)" : "transparent",
+            color: theme === value ? "#fff" : "var(--text-dim)",
+            border: "none",
+            borderRadius: "4px",
+            padding: "4px 8px",
+            cursor: "pointer",
+          }}
+        >
+          <Icon size={13} strokeWidth={2.4} />
+        </button>
+      ))}
+    </div>
   );
 }
 

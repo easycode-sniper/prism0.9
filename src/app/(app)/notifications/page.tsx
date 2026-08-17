@@ -85,11 +85,11 @@ export default function NotificationsPage() {
 
 function NotificationIcon({ kind }: { kind: NotificationRecord["kind"] }) {
   const config: Record<NotificationRecord["kind"], { icon: typeof TriangleAlert; color: string }> = {
-    off_route: { icon: TriangleAlert, color: "#f87171" },
+    off_route: { icon: TriangleAlert, color: "var(--red)" },
     speeding: { icon: Gauge, color: "#fb923c" },
-    site_arrival: { icon: Flag, color: "#4ade80" },
-    factory_arrival: { icon: Factory, color: "#a855f7" },
-    hq_arrival: { icon: ParkingCircle, color: "#22d3ee" },
+    site_arrival: { icon: Flag, color: "var(--green)" },
+    factory_arrival: { icon: Factory, color: "var(--purple)" },
+    hq_arrival: { icon: ParkingCircle, color: "var(--cyan)" },
   };
   const { icon: Icon, color } = config[kind];
   return <Icon size={16} strokeWidth={2.25} color={color} />;

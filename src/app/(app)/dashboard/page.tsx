@@ -125,7 +125,7 @@ export default function DashboardPage() {
     labels: ["Off Route", "Speeding", "Site Arrival", "Factory Arrival", "HQ Arrival"],
     datasets: [{
       data: [alertCounts.off_route, alertCounts.speeding, alertCounts.site_arrival, alertCounts.factory_arrival, alertCounts.hq_arrival],
-      backgroundColor: ["#ef4444", "#f97316", "#22c55e", "#3b82f6", "#22d3ee"],
+      backgroundColor: ["#ef4444", "#f97316", "#22c55e", "#3b82f6", "var(--cyan)"],
       borderWidth: 0,
     }],
   };
@@ -161,19 +161,19 @@ export default function DashboardPage() {
 
       {/* Charts */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', gridAutoRows: 'min-content' }}>
-        <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px' }}>
+        <div className="surface" style={{ padding: '16px' }}>
           <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Fleet Status Distribution</h3>
           <div style={{ position: 'relative', height: '220px' }}>
             <Doughnut data={statusChart} options={chartOptions} />
           </div>
         </div>
-        <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px' }}>
+        <div className="surface" style={{ padding: '16px' }}>
           <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Geofence Occupancy</h3>
           <div style={{ position: 'relative', height: '220px' }}>
             <Doughnut data={geofenceChart} options={chartOptions} />
           </div>
         </div>
-        <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px' }}>
+        <div className="surface" style={{ padding: '16px' }}>
           <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '4px' }}>Fuel Stop Analysis</h3>
           <p style={{ fontSize: '.72rem', color: 'var(--text-dim)', marginBottom: '6px' }}>
             Live proximity to a known station (&lt;{STATION_PROXIMITY_METERS}m)
@@ -192,7 +192,7 @@ export default function DashboardPage() {
             </ul>
           )}
         </div>
-        <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px' }}>
+        <div className="surface" style={{ padding: '16px' }}>
           <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Alert Types Distribution</h3>
           <div style={{ position: 'relative', height: '220px' }}>
             <Doughnut data={alertChart} options={chartOptions} />
@@ -201,7 +201,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Driver Ratings */}
-      <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px', marginTop: '16px' }}>
+      <div className="surface" style={{ padding: '16px', marginTop: '16px' }}>
         <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '4px' }}>
           Driver ratings{' '}
           <span style={{ fontWeight: 400, color: 'var(--text-dim)', fontSize: '.75rem' }}>
@@ -241,7 +241,7 @@ export default function DashboardPage() {
                       style={{
                         padding: '3px 10px', borderRadius: '20px', fontSize: '.78rem', fontWeight: 600,
                         background: d.score >= 90 ? 'rgba(74,222,128,.15)' : d.score >= 70 ? 'rgba(88,101,242,.15)' : 'rgba(248,113,113,.15)',
-                        color: d.score >= 90 ? 'var(--green)' : d.score >= 70 ? '#a7a0ff' : 'var(--red)',
+                        color: d.score >= 90 ? 'var(--green)' : d.score >= 70 ? 'var(--indigo)' : 'var(--red)',
                       }}
                     >
                       {d.score}%
@@ -259,7 +259,7 @@ export default function DashboardPage() {
 
 function KPICard({ value, label, color }: { value: number; label: string; color: string }) {
   return (
-    <div style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: '10px', padding: '14px 18px', minWidth: '130px', flex: 1 }}>
+    <div className="kpi-card">
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.6rem', fontWeight: 700, color }}>{value}</div>
       <div style={{ fontSize: '.75rem', color: 'var(--text-dim)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
     </div>

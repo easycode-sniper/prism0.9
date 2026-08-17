@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* ── Theme tokens ──────────────────────────────────────────────
+   Dark is the default and the operational norm. Light exists because
+   the parc office is bright during the day; user_settings.theme has
+   carried a 'light' option since the first migration.
+
+   Every colour the app paints resolves through one of these. That is
+   what makes the toggle a token swap rather than a second stylesheet —
+   and it is also why the values below are the only place a colour
+   decision lives. Status colours are re-derived rather than reused for
+   light: #22d3ee on white is roughly 1.9:1 and unreadable, so each has
+   a darker sibling that keeps the same meaning. */
 :root {
   --bg: #0a0a14;
   --panel: #12121f;
@@ -14,6 +25,67 @@
   --cyan: #22d3ee;
   --red: #f87171;
   --green: #4ade80;
+
+  /* Direction C: glass floats, data sits on something opaque. */
+  --glass-fill: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-sheen: rgba(255, 255, 255, 0.32);
+  --glass-edge: rgba(255, 255, 255, 0.26);
+  --glass-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  --glass-blur: 20px;
+
+  /* Opaque sibling of .glass — same silhouette, no blur, for tables. */
+  --surface: #14141f;
+  --surface-raised: rgba(255, 255, 255, 0.04);
+
+  /* The atmosphere the blur samples. Without it backdrop-filter has
+     nothing to refract and glass collapses to a flat translucent box. */
+  --aurora-a: #5865f2;
+  --aurora-b: #22d3ee;
+  --aurora-a-opacity: 0.30;
+  --aurora-b-opacity: 0.16;
+
+  --map-tiles: dark;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #eef0f7;
+  --panel: #ffffff;
+  --panel-2: #ffffff;
+  --panel-3: #f1f3f9;
+  --line: #d9dded;
+  --text: #14161f;
+  --text-dim: #5b6076;
+  --indigo: #4750e0;
+  --purple: #7c3aed;
+  --amber: #b45309;
+  --cyan: #0d7f96;
+  --red: #dc2626;
+  --green: #15803d;
+
+  /* Light glass is the reverse problem: the panel must be brighter than
+     its backdrop, not dimmer. This is close to the original reference
+     snippet, which was authored for exactly this case. */
+  --glass-fill: rgba(255, 255, 255, 0.58);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-sheen: rgba(255, 255, 255, 0.95);
+  --glass-edge: rgba(255, 255, 255, 0.85);
+  --glass-shadow: 0 8px 30px rgba(20, 26, 60, 0.10);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --glass-blur: 20px;
+
+  --surface: #ffffff;
+  --surface-raised: rgba(20, 26, 60, 0.035);
+
+  --aurora-a: #5865f2;
+  --aurora-b: #22d3ee;
+  --aurora-a-opacity: 0.20;
+  --aurora-b-opacity: 0.13;
+
+  --map-tiles: light;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -51,8 +123,101 @@ a, button, input, select {
 
 /* ---------- Prism Design System ---------- */
 
+/* ── Direction C: glass on top, solid underneath ───────────────
+   Glass is for things that float — chrome, headline figures,
+   transient overlays. Dense data sits on .surface, because 0.8rem
+   text over a live blur is where the style stops being a style and
+   starts being a legibility tax. Both share the same silhouette so
+   the page still reads as one system. */
+
+.glass {
+  position: relative;
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+}
+
+/* The sheen and the edge light are what stop glass reading as a flat
+   translucent rectangle; they can only be pseudo-elements. overflow
+   is deliberately NOT hidden on .glass itself — that would clip
+   dropdowns and map popups — so each is inset to the border radius. */
+.glass::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-sheen), transparent);
+  pointer-events: none;
+}
+
+.glass::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 1px;
+  background: linear-gradient(180deg, var(--glass-edge), transparent 70%);
+  pointer-events: none;
+}
+
+/* Chrome spans the full width, so it drops the side radii and the
+   edge light along with them. */
+.glass-bar {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+.glass-bar::after { display: none; }
+
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+/* Ambient wash behind the glass. Fixed rather than absolute so it
+   stays put while a page scrolls under it. */
+.aurora {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.aurora span {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(100px);
+}
+
+/* Backdrop-filter is expensive to animate and some engines skip it
+   entirely; the fallback is a slightly more opaque panel rather than a
+   transparent one, so text never lands on bare background. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: var(--panel-2); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--panel-2);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .aurora { display: none; }
+}
+
 .panel {
-  background: linear-gradient(180deg, var(--panel) 0%, #0d0d18 100%);
+  background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 10px;
 }
@@ -198,12 +363,27 @@ input::placeholder, textarea::placeholder {
 
 /* KPI cards */
 .kpi-card {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px 18px;
+  position: relative;
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+  padding: 16px 18px;
   min-width: 130px;
   flex: 1;
+}
+
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-sheen), transparent);
+  pointer-events: none;
 }
 
 .kpi-card .kpi-value {
@@ -228,9 +408,9 @@ input::placeholder, textarea::placeholder {
 
 /* Table */
 .table-wrap {
-  background: var(--panel-2);
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
@@ -259,12 +439,12 @@ thead th {
 
 tbody td {
   padding: 12px 16px;
-  border-bottom: var(--line-subtle, rgba(38, 38, 60, 0.5));
+  border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
 
 tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: rgba(88, 101, 242, 0.05); }
+tbody tr:hover { background: var(--surface-raised); }
 
 /* Monospace truck cells */
 .truck-id {

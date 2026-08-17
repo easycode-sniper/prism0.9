@@ -148,7 +148,14 @@ function MonitoringRow({
 
   return (
     <tr className="text-sm hover:bg-gray-800/30">
-      <td className="px-4 py-2 font-mono text-cyan-400">{truck.truck_id}</td>
+      <td className="px-4 py-2 font-mono text-cyan-400">
+        <span className="inline-flex items-center gap-1.5">
+          {truck.truck_id}
+          {truck.category === "staff" && (
+            <span className="vehicle-tag" title="Staff car — excluded from notifications">staff</span>
+          )}
+        </span>
+      </td>
       <td className="px-4 py-2 text-white">{truck.driver_name || "—"}</td>
       <td className="px-4 py-2">
         <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium" style={{ color: statusColor }}>

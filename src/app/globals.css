@@ -554,6 +554,24 @@ hr {
   color: var(--text);
 }
 
+/* Staff-car marker. These are tracked and mapped like any other unit
+   but are deliberately excluded from notifications, so the exclusion is
+   visible in the UI rather than being invisible behaviour. */
+.vehicle-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
 /* RTL (Arabic) — targeted overrides, not a full pixel-perfect mirror,
    matching the same scope decision the original single-file app made. */
 html[dir="rtl"] body { text-align: right; }

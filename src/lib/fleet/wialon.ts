@@ -57,8 +57,13 @@ export interface WialonUnit {
   pos: WialonPosition | null;
 }
 
+export type VehicleCategory = "truck" | "staff";
+
 export interface FleetTruck {
   truck_id: string;
+  // Absent on snapshots written before categories existed; treat as
+  // "truck" when missing so old rows keep rendering.
+  category?: VehicleCategory;
   lat: number | null;
   lng: number | null;
   speed: number;

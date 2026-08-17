@@ -9,7 +9,7 @@
 // Runs with the service role, so RLS write policies don't apply.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadWialonConfig, fetchFleetData, type FleetTruck } from "@/lib/fleet/wialon";
+import { loadWialonConfig, fetchFleetData, type FleetTruck, type VehicleCategory } from "@/lib/fleet/wialon";
 import { loadGeofences } from "@/lib/fleet/geofences";
 import { loadDispatchAndSite, runPositionCheck, runHqArrivalCheck } from "@/lib/fleet/positionCheck";
 
@@ -54,16 +54,40 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     };
   }
 
+  // Staff cars are tracked and mapped like everything else, but they
+  // shuttle in and out of HQ all day and their arrivals aren't
+  // actionable — they buried the real ones. Classification is per
+  // vehicle in fleet_trucks, not a rule about ID shape: one real cargo
+  // truck (00031-115-35) sits inside the staff-looking ID range, and
+  // muting a real truck by accident is the failure nobody notices.
+  const { data: categoryRows, error: categoryError } = await supabase
+    .from("fleet_trucks")
+    .select("truck_id, category");
+  if (categoryError) warnings.push(`categories: ${categoryError.message}`);
+
+  const categoryOf = new Map<string, VehicleCategory>(
+    (categoryRows ?? []).map((r) => [r.truck_id as string, (r.category ?? "truck") as VehicleCategory])
+  );
+
+  // Stamped onto the snapshot so the browser can label them without a
+  // second query, and so a snapshot records how a unit was classified
+  // at the time it was taken.
+  const trucks: FleetTruck[] = fleet.trucks.map((t) => ({
+    ...t,
+    category: categoryOf.get(t.truck_id) ?? "truck",
+  }));
+  const cargoTrucks = trucks.filter((t) => t.category !== "staff");
+
   // The snapshot doubles as this job's heartbeat — pg_net is
   // fire-and-forget and won't report a failed tick, so a gap in
   // fleet_snapshots is the signal that the schedule has stopped.
   // It's also what the browser now reads its truck positions from.
   const { error: snapshotError } = await supabase.from("fleet_snapshots").insert({
-    snapshot_data: fleet.trucks,
-    truck_count: fleet.trucks.length,
-    moving_count: fleet.trucks.filter((t: FleetTruck) => t.status === "moving").length,
-    idle_count: fleet.trucks.filter((t: FleetTruck) => t.status === "idle").length,
-    offline_count: fleet.trucks.filter((t: FleetTruck) => t.status === "offline").length,
+    snapshot_data: trucks,
+    truck_count: trucks.length,
+    moving_count: trucks.filter((t: FleetTruck) => t.status === "moving").length,
+    idle_count: trucks.filter((t: FleetTruck) => t.status === "idle").length,
+    offline_count: trucks.filter((t: FleetTruck) => t.status === "offline").length,
     captured_at: new Date().toISOString(),
   });
   if (snapshotError) warnings.push(`snapshot: ${snapshotError.message}`);
@@ -77,7 +101,7 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   if (geofenceError) warnings.push(`geofences: ${geofenceError}`);
   if (dispatchError) warnings.push(`dispatches: ${dispatchError.message}`);
 
-  const truckById = new Map(fleet.trucks.map((t) => [t.truck_id, t]));
+  const truckById = new Map(trucks.map((t) => [t.truck_id, t]));
   const active = (dispatches ?? []) as { id: string; truck_id: string }[];
 
   // Sequential rather than Promise.all: a tick runs inside one
@@ -116,7 +140,7 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   const hq = geofences.find((g) => g.kind === "site" && g.siteId == null);
   if (hq?.centerLat != null && hq?.centerLng != null && hq?.radiusMeters != null) {
     try {
-      await runHqArrivalCheck(supabase, fleet.trucks, {
+      await runHqArrivalCheck(supabase, cargoTrucks, {
         centerLat: hq.centerLat,
         centerLng: hq.centerLng,
         radiusMeters: hq.radiusMeters,
@@ -128,7 +152,7 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
 
   return {
     ok: true,
-    trucks: fleet.trucks.length,
+    trucks: trucks.length,
     dispatchesChecked: checked,
     durationMs: Date.now() - startedAt,
     error: null,

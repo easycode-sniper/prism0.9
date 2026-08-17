@@ -316,7 +316,12 @@ export default function DispatchPage() {
                           {tr.status} {tr.speed} km/h
                         </div>
                       </div>
-                      <span className="truck-id text-xs">{tr.truck_id}</span>
+                      <span className="flex items-center gap-1.5">
+                        {tr.category === "staff" && (
+                          <span className="vehicle-tag" title="Staff car — excluded from notifications">staff</span>
+                        )}
+                        <span className="truck-id text-xs">{tr.truck_id}</span>
+                      </span>
                     </button>
                   ))
                 )}

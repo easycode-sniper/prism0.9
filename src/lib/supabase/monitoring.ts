@@ -3,8 +3,11 @@
 // context; only these plain types are still used, by fleetJoin.ts and
 // the pages that render its output.
 
+import type { VehicleCategory } from "@/lib/fleet/wialon";
+
 export interface MonitoringTruck {
   truck_id: string;
+  category: VehicleCategory;
   status: "moving" | "idle" | "offline";
   lat: number | null;
   lng: number | null;

@@ -14,6 +14,8 @@ export function joinFleetWithDispatches(trucks: FleetTruck[], dispatches: Dispat
     const d = dispatchByTruck.get(t.truck_id);
     return {
       truck_id: t.truck_id,
+      // Snapshots predating vehicle categories have no value here.
+      category: t.category ?? "truck",
       status: t.status,
       lat: t.lat,
       lng: t.lng,

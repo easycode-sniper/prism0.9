@@ -21,27 +21,41 @@ geofences, notifications, history) lives in **Supabase**.
 
 ## How it works
 
-`FleetProvider` (`src/components/providers/FleetProvider.tsx`) is the heart of the app.
-It mounts once in the authenticated layout and, every 60 seconds:
+Monitoring runs **server-side on a schedule**, not in the browser.
 
-1. Fetches the whole fleet from Wialon in one shot — one login, then units and the
-   driver library in parallel (`src/lib/wialon/config.ts`).
-2. Writes a `fleet_snapshots` row for history.
-3. Runs a position check for every active dispatch: projects the truck onto its
-   stored OSRM route geometry, computes deviation and ETA, and fires a notification
-   on each `false → true` transition (off-route, speeding, site arrival, factory
-   arrival). Transition flags on the `dispatches` row are what keep it from
-   re-notifying on every poll.
+Every minute `pg_cron` (inside Supabase) calls `dispatch_fleet_tick()`,
+which uses `pg_net` to POST to `/api/tick` on this app. That handler
+(`src/lib/fleet/tick.ts`) runs one cycle with the Supabase service role:
+
+1. Fetches the whole fleet from Wialon in one shot — one login, then units
+   and the driver library in parallel (`src/lib/wialon/config.ts`).
+2. Writes a `fleet_snapshots` row. This is both the fleet feed the browser
+   reads and the job's heartbeat: `pg_net` is fire-and-forget and won't
+   report a failed tick, so a gap in that table is the alarm.
+3. Runs a position check for every active dispatch — projects the truck
+   onto its stored OSRM route geometry, computes deviation and ETA, and
+   fires a notification on each `false → true` transition (off-route,
+   speeding, site arrival, factory arrival). Transition flags on the
+   `dispatches` row are what stop it re-notifying every minute.
 4. Checks the whole fleet against the HQ geofence for arrivals at PARC OMD.
 
-Every page reads fleet data, dispatches, geofences, stations and notifications from
-this one provider rather than fetching its own copy. Notifications additionally
-arrive over Supabase Realtime, which drives an in-browser alert tone
-(`src/lib/sound.ts`).
+The schedule lives in Postgres because it does minute-level cron on
+Supabase's free plan; the tick itself stays in Next.js so it can reuse the
+existing Wialon client, geometry and position-check code.
 
-The Wialon API token is never bundled into client JS — `src/lib/wialon/config.ts` and
-everything under `src/lib/supabase/` are `"use server"` modules, so the browser calls
-them as Server Actions.
+`/api/tick` is a public URL, so it authenticates with a shared secret
+(`CRON_SECRET`, matched against `fleet_tick_secret` in Supabase Vault) and
+is excluded from the middleware matcher — otherwise the unauthenticated
+call would be redirected to `/login`.
+
+**The browser only reads.** `FleetProvider` takes the newest
+`fleet_snapshots` row and subscribes to realtime for the rest — it never
+calls Wialon. Every page reads fleet data, dispatches, geofences, stations
+and notifications from that one provider. New notifications also drive an
+in-browser alert tone (`src/lib/sound.ts`).
+
+The Wialon token never reaches client JS: `src/lib/wialon/config.ts` and
+everything under `src/lib/supabase/` are `"use server"` modules.
 
 ## Getting started
 
@@ -69,7 +83,8 @@ Fill in from your Supabase dashboard (Settings → API):
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | browser + server |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | browser + server, RLS-scoped |
-| `SUPABASE_SERVICE_ROLE_KEY` | server only — admin user management |
+| `SUPABASE_SERVICE_ROLE_KEY` | server only — admin user management, scheduled tick |
+| `CRON_SECRET` | server only — shared secret for `/api/tick` |
 
 `.env.local` is gitignored. Never commit it, and never expose the service-role key
 to the client.
@@ -91,6 +106,10 @@ the CLI:
 | `008_geofence_rpcs.sql` | PostGIS read/write RPCs for geofences |
 | `009_gas_stations.sql` | Gas station registry + seed rows |
 | `010_hq_arrival.sql` | `fleet_trucks.at_hq` flag, `hq_arrival` notification kind |
+| `011_wialon_is_the_roster.sql` | Drops the stale `fleet_trucks` foreign key on dispatches |
+| `012_hq_state_rpc_and_snapshot_writes.sql` | Race-free HQ transition RPC; snapshot insert policy |
+| `013_dispatch_telemetry_updates.sql` | Lets any signed-in session record dispatch telemetry |
+| `014_scheduled_fleet_tick.sql` | `pg_cron` + `pg_net` schedule, snapshot realtime and pruning |
 
 ### 4. Create the first admin
 
@@ -146,12 +165,15 @@ src/
 │   ├── (app)/                 # Authenticated shell: topbar, FleetProvider, i18n
 │   │   ├── dashboard/ dispatch/ monitoring/ history/
 │   │   ├── notifications/ reports/ admin/
+│   ├── api/tick/              # Scheduled monitoring endpoint (pg_cron calls this)
 │   └── actions/auth.ts        # Sign-in / sign-out server actions
 ├── components/
 │   ├── providers/             # FleetProvider, notification sound listener
 │   ├── layout/                # Topbar, nav, login-page scenery
 │   └── map/MapView.tsx        # Leaflet map (persistent singleton across navigation)
 ├── lib/
+│   ├── fleet/                 # Client-agnostic core: tick orchestration,
+│   │                          #   position/HQ checks, geofence loading
 │   ├── wialon/config.ts       # Wialon relay client, driver resolution, fleet shaping
 │   ├── supabase/              # Server actions per domain: dispatches, geofences,
 │   │                          #   positions, history, stations, admin, auth
@@ -183,17 +205,10 @@ the original app's scope.
 
 ## Known limitations
 
-- **Monitoring runs in the browser.** The poll loop, snapshot writes and all position
-  checks live in `FleetProvider`, so nothing is monitored while no one has the app
-  open, and each additional open tab repeats the same work.
-- **Snapshot and HQ-arrival writes are admin-only.** `fleet_snapshots` and
-  `fleet_trucks` only carry admin RLS write policies, so those writes are rejected for
-  operators.
-- **`dispatches.truck_id` still has a foreign key to `fleet_trucks`**, but the roster
-  is Wialon now and `truck_id` is the raw Wialon unit name — dispatching a truck whose
-  Wialon name isn't in the seeded `fleet_trucks` list will fail.
 - **`app_config` is readable by any authenticated user**, and it holds the Wialon
   token.
+- **`hq_arrival` plays no sound** — `AlertKind` in `src/lib/sound.ts` predates that
+  notification kind, so the switch falls through silently.
 - **`npm run lint` doesn't run** — the project has no `eslint.config.js` for ESLint 9.
   `npx tsc --noEmit` and `npm run build` both work.
 - `/reports` is a stub.

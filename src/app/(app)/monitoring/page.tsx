@@ -8,6 +8,7 @@ import type { MonitoringTruck } from "@/lib/supabase/monitoring";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { formatAge } from "@/lib/format";
 
 type FilterType = "all" | "dispatched" | "moving" | "idle" | "offline";
 
@@ -171,7 +172,7 @@ function MonitoringRow({
           <span className="text-gray-600">—</span>
         )}
       </td>
-      <td className="px-4 py-2 text-gray-400">{truck.age_minutes != null ? `${truck.age_minutes}min ago` : "—"}</td>
+      <td className="px-4 py-2 text-gray-400">{formatAge(truck.age_minutes)}</td>
       <td className="px-4 py-2 text-right">
         {truck.dispatched && truck.last_on_route == null && truck.dispatch_id && (
           <button

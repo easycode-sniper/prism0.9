@@ -7,6 +7,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { Moon, Satellite as SatelliteIcon, MapPin, Tag, Fuel } from "lucide-react";
+import { formatAge } from "@/lib/format";
 
 // Leaflet markers/popups are raw HTML strings, not React — these are
 // inline stroke-style SVGs (lucide's visual language: 24x24, stroke
@@ -340,7 +341,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           </div>
           ${m.offRoute ? `<div style="color: #f87171; margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.alert} Off route</div>` : ""}
           ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #26263c; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.target} <span>${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</span></div>` : ""}
-          ${m.ageMinutes != null ? `<div style="color: #6b6b80; margin-top: 6px; font-size: 11px;">Updated ${m.ageMinutes < 1 ? "just now" : `${m.ageMinutes}m ago`}</div>` : ""}
+          ${m.ageMinutes != null ? `<div style="color: #6b6b80; margin-top: 6px; font-size: 11px;">Updated ${formatAge(m.ageMinutes)}</div>` : ""}
         </div>`
       );
 

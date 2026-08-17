@@ -16,28 +16,46 @@ import { runFleetTick } from "@/lib/fleet/tick";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Rejections log which case they are. A missing env var, a call with no
-// header, and a genuinely wrong secret are three different problems with
-// three different fixes, and they used to be indistinguishable from the
-// outside: every one produced a bare 401 on a schedule nobody was
-// watching. The response stays a plain 401 either way — the detail goes
-// to the server log only, and only lengths are logged, never the value.
-function authorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    console.error("[tick] rejected: CRON_SECRET is not set on this deployment");
+// Primary auth: a single-use token Postgres minted for this call and
+// stored in tick_nonces. Redeeming it is a delete, so it can't be
+// replayed, and minting one requires database write access — which
+// makes this strictly harder to forge than a static secret, and needs
+// nothing configured by hand in two places.
+async function redeemedNonce(request: NextRequest): Promise<boolean> {
+  const nonce = request.headers.get("x-tick-nonce");
+  if (!nonce) return false;
+
+  const { data, error } = await createServiceClient()
+    .from("tick_nonces")
+    .delete()
+    .eq("nonce", nonce)
+    .gt("created_at", new Date(Date.now() - 3 * 60_000).toISOString())
+    .select("nonce");
+
+  if (error) {
+    console.error("[tick] rejected: could not redeem nonce:", error.message);
     return false;
   }
+  if (!data || data.length === 0) {
+    console.error("[tick] rejected: nonce unknown, expired, or already used");
+    return false;
+  }
+  return true;
+}
+
+// Fallback auth, kept for manual curl testing and for anyone who does
+// set CRON_SECRET. Absent env var is no longer an error — the nonce is
+// the normal path — so this only reports a genuine mismatch.
+function matchesSecret(request: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
 
   const provided =
     request.headers.get("x-cron-secret") ??
     request.headers.get("authorization")?.replace(/^Bearer /, "") ??
     "";
 
-  if (!provided) {
-    console.error("[tick] rejected: request carried no x-cron-secret header");
-    return false;
-  }
+  if (!provided) return false;
 
   // Compare as fixed-length buffers so the check can't be timed, and so
   // a length mismatch doesn't throw instead of returning false.
@@ -57,7 +75,7 @@ function authorized(request: NextRequest): boolean {
 }
 
 async function handle(request: NextRequest) {
-  if (!authorized(request)) {
+  if (!(await redeemedNonce(request)) && !matchesSecret(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

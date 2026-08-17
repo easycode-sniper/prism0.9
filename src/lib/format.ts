@@ -12,6 +12,14 @@
 
 const LOCALE = "en-GB";
 
+// Operations happen in Algeria, which sits on UTC+1 year-round with no
+// daylight saving. Report boundaries are pinned to it rather than to the
+// viewer's machine: a shift that starts at 00:00 has to mean the same
+// instant whoever runs the report, or a truck entering just after
+// midnight lands on the wrong day.
+export const OPS_TIMEZONE = "Africa/Algiers";
+export const OPS_UTC_OFFSET = "+01:00";
+
 const TIME: Intl.DateTimeFormatOptions = {
   hour: "2-digit",
   minute: "2-digit",
@@ -101,4 +109,48 @@ export function formatAge(minutes: number | null | undefined): string {
   // out every fourth year matters far less on a staleness readout than
   // reporting three years as two.
   return ago(Math.floor(days / 365), "year");
+}
+
+/** 17/08/2026 14:05 — pinned to operations time, whatever the viewer's clock says. */
+export function formatOpsDateTime(value: Date | string | number): string {
+  const d = asDate(value);
+  return d.toLocaleString(LOCALE, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: OPS_TIMEZONE,
+  }).replace(",", "");
+}
+
+/**
+ * Turns a datetime-local input value ("2026-08-17T00:00") into an
+ * instant. The browser would read it as the viewer's local time; these
+ * are operations-local, so the offset is applied explicitly.
+ */
+export function opsLocalToInstant(localValue: string): string | null {
+  if (!localValue) return null;
+  const withSeconds = localValue.length === 16 ? `${localValue}:00` : localValue;
+  const d = new Date(`${withSeconds}${OPS_UTC_OFFSET}`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Current operations-local wall clock as a datetime-local input value. */
+export function opsNowLocalValue(offsetDays = 0, endOfDay = false): string {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: OPS_TIMEZONE,
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+
+  const base = new Date(`${get("year")}-${get("month")}-${get("day")}T00:00:00${OPS_UTC_OFFSET}`);
+  base.setUTCDate(base.getUTCDate() + offsetDays);
+
+  const d = new Intl.DateTimeFormat("en-CA", {
+    timeZone: OPS_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(base);
+  return `${d}T${endOfDay ? "23:59" : "00:00"}`;
 }

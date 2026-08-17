@@ -275,10 +275,13 @@ const HQ_EDGE_BUFFER_METERS = 50;
 // runs for the whole fleet every poll.
 export async function runHqArrivalCheck(
   supabase: SupabaseClient,
-  trucks: { truck_id: string; lat: number | null; lng: number | null }[],
+  trucks: { truck_id: string; lat: number | null; lng: number | null; driverName?: string | null }[],
   hq: { centerLat: number; centerLng: number; radiusMeters: number }
 ): Promise<void> {
-  const positioned = trucks.filter((t): t is { truck_id: string; lat: number; lng: number } => t.lat != null && t.lng != null);
+  const positioned = trucks.filter(
+    (t): t is { truck_id: string; lat: number; lng: number; driverName?: string | null } =>
+      t.lat != null && t.lng != null
+  );
   if (positioned.length === 0) return;
 
   const { data: rows } = await supabase
@@ -329,6 +332,24 @@ export async function runHqArrivalCheck(
 
     const toNotify = ((transitioned ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
     if (toNotify.length > 0) {
+      // The permanent gate record for Rapport Parc. Written from the
+      // same compare-and-set result as the notification, so the log and
+      // the feed can never disagree about whether an entry happened.
+      // The driver name is stamped from this moment's fleet data rather
+      // than resolved at read time — drivers change, and a log that
+      // rewrites its own history is worse than no log.
+      const driverOf = new Map(positioned.map((t) => [t.truck_id, t.driverName ?? null]));
+      const enteredAt = new Date().toISOString();
+
+      const { error: entryError } = await supabase.from("hq_entries").insert(
+        toNotify.map((truck_id) => ({
+          truck_id,
+          driver_name: driverOf.get(truck_id) ?? null,
+          entered_at: enteredAt,
+        }))
+      );
+      if (entryError) console.error("[hqArrivalCheck] parc entry log failed:", entryError);
+
       await supabase.from("notifications").insert(
         toNotify.map((truck_id) => ({
           truck_id,

@@ -351,29 +351,53 @@ export async function checkHqArrivals(
     else if (!within && was) departed.push(t.truck_id);
   }
 
-  // Upsert, not update — a truck's fleet_trucks row is no longer
-  // guaranteed to pre-exist (Wialon itself is the fleet roster now,
-  // this table only holds this one per-truck flag), so an update
-  // targeting a nonexistent row would silently do nothing.
+  // The flag is written through mark_trucks_hq_state rather than a
+  // direct upsert, for two reasons.
+  //
+  // First, RLS: fleet_trucks only carries an admin FOR ALL write
+  // policy, so the old upsert was silently rejected for every
+  // operator. at_hq never flipped, so each poll re-detected the same
+  // arrival and inserted another notification — 7,436 duplicate rows
+  // across 41 trucks in three hours, in production.
+  //
+  // Second, the RPC returns only the trucks whose flag actually
+  // changed, and does the compare-and-set in one statement. That's
+  // what makes this safe with FleetProvider running in several tabs
+  // at once: previously two tabs could both read at_hq = false and
+  // both notify. Now the second one's write finds the flag already
+  // set and returns nothing to notify about.
   if (arrived.length > 0) {
-    await supabase.from("fleet_trucks").upsert(
-      arrived.map((truck_id) => ({ truck_id, at_hq: true })),
-      { onConflict: "truck_id" }
-    );
-    await supabase.from("notifications").insert(
-      arrived.map((truck_id) => ({
-        truck_id,
-        kind: "hq_arrival" as const,
-        title: "Arrived at headquarters",
-        message: `${truck_id} has arrived at PARC OMD - Headquarters & Parking.`,
-      }))
-    );
+    const { data: transitioned, error } = await supabase.rpc("mark_trucks_hq_state", {
+      p_truck_ids: arrived,
+      p_at_hq: true,
+    });
+
+    if (error) {
+      // Don't notify if the flag didn't persist — that's exactly the
+      // loop that produced the duplicate storm.
+      console.error("[checkHqArrivals] HQ state write failed, skipping notifications:", error);
+      return;
+    }
+
+    const toNotify = ((transitioned ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
+    if (toNotify.length > 0) {
+      await supabase.from("notifications").insert(
+        toNotify.map((truck_id) => ({
+          truck_id,
+          kind: "hq_arrival" as const,
+          title: "Arrived at headquarters",
+          message: `${truck_id} has arrived at PARC OMD - Headquarters & Parking.`,
+        }))
+      );
+    }
   }
+
   if (departed.length > 0) {
-    await supabase.from("fleet_trucks").upsert(
-      departed.map((truck_id) => ({ truck_id, at_hq: false })),
-      { onConflict: "truck_id" }
-    );
+    const { error } = await supabase.rpc("mark_trucks_hq_state", {
+      p_truck_ids: departed,
+      p_at_hq: false,
+    });
+    if (error) console.error("[checkHqArrivals] HQ departure write failed:", error);
   }
 }
 

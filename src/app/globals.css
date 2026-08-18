@@ -26,14 +26,30 @@
   --red: #f87171;
   --green: #4ade80;
 
-  /* Direction C: glass floats, data sits on something opaque. */
-  --glass-fill: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.10);
-  --glass-sheen: rgba(255, 255, 255, 0.32);
-  --glass-edge: rgba(255, 255, 255, 0.26);
-  --glass-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
-  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.10);
-  --glass-blur: 20px;
+  /* Liquid glass: glass floats, data sits on something opaque. The rim
+     is a gradient ring rather than a flat border (edge lensing) and a
+     specular arc sits over the corner light would enter from — without
+     it a blurred panel reads as flat grey plastic instead of glass. */
+  --glass-fill: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.62), 0 3px 10px rgba(0, 0, 0, 0.28);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-blur: 22px;
+  --glass-sat: 175%;
+  --glass-bright: 1.05;
+  --glass-radius: 20px;
+  --glass-spec: rgba(255, 255, 255, 0.20);
+  --glass-spec2: rgba(255, 255, 255, 0.08);
+  --glass-rim: linear-gradient(140deg,
+    rgba(255, 255, 255, 0.62) 0%,
+    rgba(255, 255, 255, 0.16) 22%,
+    rgba(255, 255, 255, 0.02) 46%,
+    rgba(255, 255, 255, 0.12) 72%,
+    rgba(255, 255, 255, 0.42) 100%);
+
+  /* Recessed well for nav/segmented controls — a shallow trench the
+     active segment floats out of. */
+  --well-bg: rgba(0, 0, 0, 0.22);
+  --well-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.48), inset 0 -1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.07);
 
   /* Opaque sibling of .glass — same silhouette, no blur, for tables. */
   --surface: #14141f;
@@ -66,15 +82,29 @@
   --green: #15803d;
 
   /* Light glass is the reverse problem: the panel must be brighter than
-     its backdrop, not dimmer. This is close to the original reference
-     snippet, which was authored for exactly this case. */
-  --glass-fill: rgba(255, 255, 255, 0.58);
-  --glass-border: rgba(255, 255, 255, 0.75);
-  --glass-sheen: rgba(255, 255, 255, 0.95);
-  --glass-edge: rgba(255, 255, 255, 0.85);
-  --glass-shadow: 0 8px 30px rgba(20, 26, 60, 0.10);
+     its backdrop, not dimmer. And a white rim is invisible on a light
+     page, so it inverts — it darkens to a cool blue-grey where the glass
+     turns away from the light and keeps only a thin white catch at the
+     entry corner. Fill stays above the page's own brightness or the
+     panel reads as a hole instead of a raised surface. */
+  --glass-fill: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 18px 40px -18px rgba(60, 70, 130, 0.34), 0 2px 6px rgba(60, 70, 130, 0.10);
   --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  --glass-blur: 20px;
+  --glass-blur: 22px;
+  --glass-sat: 180%;
+  --glass-bright: 1.02;
+  --glass-radius: 20px;
+  --glass-spec: rgba(255, 255, 255, 0.70);
+  --glass-spec2: rgba(120, 130, 190, 0.10);
+  --glass-rim: linear-gradient(140deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(120, 130, 190, 0.30) 28%,
+    rgba(120, 130, 190, 0.18) 50%,
+    rgba(120, 130, 190, 0.26) 74%,
+    rgba(255, 255, 255, 0.65) 100%);
+
+  --well-bg: rgba(120, 130, 190, 0.14);
+  --well-shadow: inset 0 2px 4px rgba(60, 70, 130, 0.16), 0 0 0 1px rgba(120, 130, 190, 0.18);
 
   --surface: #ffffff;
   --surface-raised: rgba(20, 26, 60, 0.035);
@@ -123,59 +153,65 @@ a, button, input, select {
 
 /* ---------- Prism Design System ---------- */
 
-/* ── Direction C: glass on top, solid underneath ───────────────
+/* ── Liquid glass, solid underneath ────────────────────────────
    Glass is for things that float — chrome, headline figures,
    transient overlays. Dense data sits on .surface, because 0.8rem
    text over a live blur is where the style stops being a style and
    starts being a legibility tax. Both share the same silhouette so
    the page still reads as one system. */
 
-.glass {
+.glass, .kpi-card {
   position: relative;
   background: var(--glass-fill);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
+  border-radius: var(--glass-radius);
   box-shadow: var(--glass-shadow), var(--glass-inset);
 }
 
-/* The sheen and the edge light are what stop glass reading as a flat
-   translucent rectangle; they can only be pseudo-elements. overflow
-   is deliberately NOT hidden on .glass itself — that would clip
-   dropdowns and map popups — so each is inset to the border radius. */
-.glass::before {
+/* Specular arc: a broad highlight where the light source is, plus a weak
+   bounce off the opposite corner. overflow is deliberately NOT hidden on
+   .glass itself — that would clip dropdowns and map popups — so this is
+   a pseudo-element inset to the border radius rather than a mask on the
+   box itself. */
+.glass::before, .kpi-card::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 12px;
-  right: 12px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--glass-sheen), transparent);
+  inset: 0;
+  border-radius: inherit;
   pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 14% -12%, var(--glass-spec), transparent 55%),
+    radial-gradient(90% 60% at 90% 112%, var(--glass-spec2), transparent 62%);
 }
 
-.glass::after {
+/* Edge lensing: the border is a gradient ring, not a flat colour — bright
+   at the corner light enters, thin through the middle, bright again where
+   it exits, the way a real bevel catches a room. Masked so only the ring
+   itself paints, never the fill underneath it. */
+.glass::after, .kpi-card::after {
   content: "";
   position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 0;
-  width: 1px;
-  background: linear-gradient(180deg, var(--glass-edge), transparent 70%);
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.25px;
   pointer-events: none;
+  background: var(--glass-rim);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
 
-/* Chrome spans the full width, so it drops the side radii and the
-   edge light along with them. */
-.glass-bar {
-  border-radius: 0;
-  border-left: none;
-  border-right: none;
-  border-top: none;
+/* Both pseudo-elements are absolutely positioned, which puts them in a
+   later paint step than ordinary flow content — without this, the
+   specular highlight would wash out over real text instead of sitting
+   under it. Promotes every direct child into the same stacking context,
+   no markup changes required. */
+.glass > *, .kpi-card > * {
+  position: relative;
+  z-index: 1;
 }
-
-.glass-bar::after { display: none; }
 
 .surface {
   background: var(--surface);
@@ -204,15 +240,17 @@ a, button, input, select {
    entirely; the fallback is a slightly more opaque panel rather than a
    transparent one, so text never lands on bare background. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass { background: var(--panel-2); }
+  .glass, .kpi-card { background: var(--panel-2); }
+  .glass::before, .glass::after, .kpi-card::before, .kpi-card::after { display: none; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .glass {
+  .glass, .kpi-card {
     background: var(--panel-2);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
+  .glass::before, .glass::after, .kpi-card::before, .kpi-card::after { display: none; }
   .aurora { display: none; }
 }
 
@@ -391,29 +429,13 @@ input::placeholder, textarea::placeholder {
 .status-pill.stopped { background: rgba(248, 113, 113, 0.15); color: var(--red); }
 .status-pill.dispatched { background: rgba(88, 101, 242, 0.15); color: var(--indigo); }
 
-/* KPI cards */
+/* KPI cards — base surface (fill, blur, rim, specular) comes from the
+   shared .glass, .kpi-card rules above; this is just the layout and the
+   value/label typography. */
 .kpi-card {
-  position: relative;
-  background: var(--glass-fill);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
-  box-shadow: var(--glass-shadow), var(--glass-inset);
   padding: 16px 18px;
   min-width: 130px;
   flex: 1;
-}
-
-.kpi-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 12px;
-  right: 12px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--glass-sheen), transparent);
-  pointer-events: none;
 }
 
 .kpi-card .kpi-value {

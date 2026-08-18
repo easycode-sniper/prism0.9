@@ -10,7 +10,7 @@ export async function Topbar({ profile }: { profile: Awaited<ReturnType<typeof g
   }
 
   return (
-    <header id="topbar" className="glass glass-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid var(--glass-border)', zIndex: 2500 }}>
+    <header id="topbar" className="glass" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 20px', margin: '14px 16px 0', zIndex: 2500 }}>
       <TopbarNav isAdmin={profile?.role === "admin"} />
 
       <div id="topbar-stats" style={{ display: 'flex', alignItems: 'center', gap: '14px', fontFamily: 'var(--font-mono)', fontSize: '.8rem', color: 'var(--text-dim)' }}>

@@ -34,7 +34,7 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
         </div>
       </div>
 
-      <nav id="tabs" style={{ display: "flex", gap: "6px", background: "var(--panel-2)", padding: "4px", borderRadius: "10px", border: "1px solid var(--line)" }}>
+      <nav id="tabs" style={{ display: "flex", gap: "4px", background: "var(--well-bg)", padding: "4px", borderRadius: "14px", boxShadow: "var(--well-shadow)" }}>
         {NAV_ITEMS.map((item) => (
           <Link key={item.href} href={item.href} className="tab-btn" style={tabStyle(pathname === item.href)}>
             <item.icon size={15} strokeWidth={2.25} />
@@ -73,7 +73,7 @@ export function ThemeToggle() {
     <div
       role="group"
       aria-label="Theme"
-      style={{ display: "flex", gap: "2px", background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "2px" }}
+      style={{ display: "flex", gap: "2px", background: "var(--well-bg)", boxShadow: "var(--well-shadow)", borderRadius: "10px", padding: "3px" }}
     >
       {options.map(({ value, label, Icon }) => (
         <button
@@ -86,12 +86,13 @@ export function ThemeToggle() {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            background: theme === value ? "var(--indigo)" : "transparent",
+            background: theme === value ? "linear-gradient(160deg, color-mix(in srgb, var(--indigo) 55%, white), var(--indigo))" : "transparent",
             color: theme === value ? "#fff" : "var(--text-dim)",
             border: "none",
-            borderRadius: "4px",
-            padding: "4px 8px",
+            borderRadius: "7px",
+            padding: "5px 9px",
             cursor: "pointer",
+            boxShadow: theme === value ? "0 3px 8px color-mix(in srgb, var(--indigo) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35)" : "none",
           }}
         >
           <Icon size={13} strokeWidth={2.4} />
@@ -110,20 +111,21 @@ export function LanguageSwitcher() {
   ];
 
   return (
-    <div style={{ display: "flex", gap: "2px", background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "2px" }}>
+    <div style={{ display: "flex", gap: "2px", background: "var(--well-bg)", boxShadow: "var(--well-shadow)", borderRadius: "10px", padding: "3px" }}>
       {options.map((opt) => (
         <button
           key={opt.code}
           onClick={() => setLanguage(opt.code)}
           style={{
-            background: language === opt.code ? "var(--indigo)" : "transparent",
+            background: language === opt.code ? "linear-gradient(160deg, color-mix(in srgb, var(--indigo) 55%, white), var(--indigo))" : "transparent",
             color: language === opt.code ? "#fff" : "var(--text-dim)",
             border: "none",
-            borderRadius: "4px",
-            padding: "3px 8px",
+            borderRadius: "7px",
+            padding: "4px 9px",
             fontSize: ".72rem",
             fontWeight: 600,
             cursor: "pointer",
+            boxShadow: language === opt.code ? "0 3px 8px color-mix(in srgb, var(--indigo) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35)" : "none",
           }}
         >
           {opt.label}
@@ -135,18 +137,20 @@ export function LanguageSwitcher() {
 
 function tabStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? "var(--indigo)" : "transparent",
+    background: active ? "linear-gradient(160deg, color-mix(in srgb, var(--indigo) 55%, white), var(--indigo))" : "transparent",
     border: "none",
     color: active ? "#fff" : "var(--text-dim)",
     fontFamily: "var(--font-sans)",
     fontSize: ".85rem",
     fontWeight: 600,
     padding: "8px 16px",
-    borderRadius: "7px",
+    borderRadius: "11px",
     cursor: "pointer",
     transition: ".15s",
     textDecoration: "none",
-    boxShadow: active ? "0 2px 10px rgba(88,101,242,.35)" : "none",
+    boxShadow: active
+      ? "0 4px 12px color-mix(in srgb, var(--indigo) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.35)"
+      : "none",
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",

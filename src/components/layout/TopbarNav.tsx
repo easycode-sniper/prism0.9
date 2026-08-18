@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Bell, Settings, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Users, Bell, Settings, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { useFleet } from "@/components/providers/FleetProvider";
@@ -14,6 +14,7 @@ const NAV_ITEMS: { href: string; key: string; icon: typeof LayoutDashboard }[] =
   { href: "/monitoring", key: "nav.monitoring", icon: Radar },
   { href: "/history", key: "nav.history", icon: HistoryIcon },
   { href: "/reports", key: "nav.reports", icon: FileText },
+  { href: "/drivers", key: "nav.drivers", icon: Users },
   { href: "/notifications", key: "nav.notifications", icon: Bell },
 ];
 

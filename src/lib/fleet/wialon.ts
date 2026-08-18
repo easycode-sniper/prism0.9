@@ -182,7 +182,19 @@ interface WialonDriverMaps {
   driverByCode: Record<string, string>;
 }
 
-async function fetchWialonDriverMaps(config: ResolvedWialonConfig, sid: string): Promise<WialonDriverMaps> {
+/** One driver as Wialon stores it. `boundUnitId` is the truck they're
+ *  currently assigned to, absent for most of the library. */
+export interface WialonDriver {
+  id: number;
+  name: string;
+  code: string | null;
+  boundUnitId: number | null;
+}
+
+/** Every driver in the account's resources, flattened. This is the raw
+ *  library — placeholders and long-departed staff included — because
+ *  deciding who is real is the caller's job, not this function's. */
+async function fetchWialonDriverList(config: ResolvedWialonConfig, sid: string): Promise<WialonDriver[]> {
   const data = await wialonCall(
     config,
     "core/search_items",
@@ -197,18 +209,53 @@ async function fetchWialonDriverMaps(config: ResolvedWialonConfig, sid: string):
   );
   if (data.error) throw new Error(`Wialon resource search failed (code ${data.error})`);
 
-  const driverByUnitId: Record<number, string> = {};
-  const driverByCode: Record<string, string> = {};
-
+  const drivers: WialonDriver[] = [];
   for (const resource of data.items || []) {
-    const drvrs = resource.drvrs || {};
-    for (const drv of Object.values(drvrs) as any[]) {
-      if (drv.bu) driverByUnitId[drv.bu] = drv.n;
-      if (drv.c) driverByCode[drv.c] = drv.n;
+    for (const drv of Object.values(resource.drvrs || {}) as any[]) {
+      if (!drv?.n) continue;
+      drivers.push({
+        id: drv.id,
+        name: String(drv.n),
+        code: drv.c ? String(drv.c) : null,
+        boundUnitId: drv.bu || null,
+      });
     }
   }
+  return drivers;
+}
 
+// The two lookup maps the fleet path needs, derived from that same list
+// rather than a second call to Wialon.
+function buildDriverMaps(drivers: WialonDriver[]): WialonDriverMaps {
+  const driverByUnitId: Record<number, string> = {};
+  const driverByCode: Record<string, string> = {};
+  for (const drv of drivers) {
+    if (drv.boundUnitId) driverByUnitId[drv.boundUnitId] = drv.name;
+    if (drv.code) driverByCode[drv.code] = drv.name;
+  }
   return { driverByUnitId, driverByCode };
+}
+
+async function fetchWialonDriverMaps(config: ResolvedWialonConfig, sid: string): Promise<WialonDriverMaps> {
+  return buildDriverMaps(await fetchWialonDriverList(config, sid));
+}
+
+/** Public entry point for the Drivers page: log in, return the whole
+ *  driver library. Deduplicated by name, because a driver defined on two
+ *  resources is one person and would otherwise render as two cards. */
+export async function fetchWialonDrivers(config: ResolvedWialonConfig): Promise<WialonDriver[]> {
+  const sid = await wialonLogin(config);
+  const drivers = await fetchWialonDriverList(config, sid);
+
+  const seen = new Set<string>();
+  const unique: WialonDriver[] = [];
+  for (const drv of drivers) {
+    const key = drv.name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(drv);
+  }
+  return unique;
 }
 
 function resolveDriverName(unit: WialonUnit, maps: WialonDriverMaps): string | null {

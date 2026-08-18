@@ -151,12 +151,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI Row */}
-      <div style={{ display: 'flex', gap: '14px', marginBottom: '20px', flexWrap: 'wrap' }}>
+      {/* KPI Row. auto-fit rather than a fixed 8 columns so the row reflows
+          on a narrow screen instead of squeezing eight unreadable cards
+          onto one line. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: '10px', marginBottom: '20px' }}>
         <KPICard value={total} label="Total fleet" color="var(--indigo)" />
         <KPICard value={moving} label="Moving" color="var(--green)" />
         <KPICard value={idle} label="Idle" color="var(--cyan)" />
         <KPICard value={offline} label="Offline" color="var(--purple)" />
+        <KPICard placeholder />
+        <KPICard placeholder />
+        <KPICard placeholder />
+        <KPICard placeholder />
       </div>
 
       {/* Charts */}
@@ -257,11 +263,28 @@ export default function DashboardPage() {
   );
 }
 
-function KPICard({ value, label, color }: { value: number; label: string; color: string }) {
+// `placeholder` renders a reserved slot: the card is real, the metric
+// behind it isn't wired up yet. Typography comes from .kpi-value /
+// .kpi-label in globals.css so there's one place to resize a card.
+function KPICard({ value, label, color, placeholder }: {
+  value?: number;
+  label?: string;
+  color?: string;
+  placeholder?: boolean;
+}) {
+  if (placeholder) {
+    return (
+      <div className="kpi-card kpi-card--empty">
+        <div className="kpi-value">—</div>
+        <div className="kpi-label">&nbsp;</div>
+      </div>
+    );
+  }
+
   return (
     <div className="kpi-card">
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.6rem', fontWeight: 700, color }}>{value}</div>
-      <div style={{ fontSize: '.75rem', color: 'var(--text-dim)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
+      <div className="kpi-value" style={{ color }}>{value}</div>
+      <div className="kpi-label">{label}</div>
     </div>
   );
 }

@@ -132,7 +132,7 @@ export default function ReportsPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-6">
-      <h1 className="text-2xl font-semibold text-white">Rapport Parc</h1>
+      <h1 className="text-2xl font-semibold t-primary">Rapport Parc</h1>
       <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>
         Trucks that entered PARC OMD — headquarters &amp; parking. Times in Algeria local time ({OPS_TIMEZONE}).
       </p>

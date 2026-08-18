@@ -32,15 +32,15 @@ export default function NotificationsPage() {
     <div className="mx-auto max-w-4xl p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">{t("notifications.title")}</h1>
-          <p className="mt-1 text-sm text-gray-400">
+          <h1 className="text-2xl font-semibold t-primary">{t("notifications.title")}</h1>
+          <p className="mt-1 text-sm t-dim">
             {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
           </p>
         </div>
         {unreadCount > 0 && (
           <button
             onClick={handleMarkAllRead}
-            className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-800"
+            className="rounded-md border bd px-3 py-1.5 text-sm t-primary transition bg-raised-hover"
           >
             Mark all read
           </button>
@@ -48,7 +48,7 @@ export default function NotificationsPage() {
       </div>
 
       {notifications.length === 0 ? (
-        <p className="mt-8 text-center text-sm text-gray-500">No notifications yet.</p>
+        <p className="mt-8 text-center text-sm t-dim">No notifications yet.</p>
       ) : (
         <div className="mt-6 space-y-2">
           {notifications.map((n) => (
@@ -57,8 +57,8 @@ export default function NotificationsPage() {
               onClick={() => !n.read && handleMarkRead(n.id)}
               className={`flex items-start gap-3 rounded-lg border p-4 transition ${
                 n.read
-                  ? "border-gray-800 bg-gray-900/30"
-                  : "border-indigo-900/50 bg-gray-900/70 cursor-pointer hover:bg-gray-800/70"
+                  ? "bd bg-panel/30"
+                  : "border-indigo-900/50 bg-panel/70 cursor-pointer bg-raised-hover"
               }`}
             >
               <div className="mt-0.5">
@@ -66,11 +66,11 @@ export default function NotificationsPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-white">{n.title}</span>
-                  <span className="font-mono text-xs text-cyan-400">{n.truck_id}</span>
+                  <span className="text-sm font-medium t-primary">{n.title}</span>
+                  <span className="font-mono text-xs c-cyan">{n.truck_id}</span>
                 </div>
-                <p className="mt-0.5 text-sm text-gray-400">{n.message}</p>
-                <span className="mt-1 text-xs text-gray-600">{formatDateTime(n.created_at)}</span>
+                <p className="mt-0.5 text-sm t-dim">{n.message}</p>
+                <span className="mt-1 text-xs t-faint">{formatDateTime(n.created_at)}</span>
               </div>
               {!n.read && (
                 <div className="mt-1 h-2 w-2 rounded-full bg-indigo-500" />

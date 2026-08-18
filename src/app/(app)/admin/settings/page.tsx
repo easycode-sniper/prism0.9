@@ -51,52 +51,52 @@ export default function AdminSettingsPage() {
   }
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center text-sm text-gray-500">Loading settings...</div>;
+    return <div className="flex h-full items-center justify-center text-sm t-dim">Loading settings...</div>;
   }
 
   return (
     <div className="mx-auto max-w-2xl p-6">
-      <h1 className="text-2xl font-semibold text-white">Application Settings</h1>
-      <p className="mt-1 text-sm text-gray-400">Configure Wialon connection parameters.</p>
+      <h1 className="text-2xl font-semibold t-primary">Application Settings</h1>
+      <p className="mt-1 text-sm t-dim">Configure Wialon connection parameters.</p>
 
-      {error && <div className="mt-4 rounded-md bg-red-900/50 p-3 text-sm text-red-300">{error}</div>}
-      {success && <div className="mt-4 rounded-md bg-green-900/50 p-3 text-sm text-green-300">{success}</div>}
+      {error && <div className="mt-4 rounded-md tint-red p-3 text-sm c-red">{error}</div>}
+      {success && <div className="mt-4 rounded-md tint-green p-3 text-sm c-green">{success}</div>}
 
       <form onSubmit={handleSave} className="mt-6 space-y-6">
-        <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
-          <h2 className="text-lg font-medium text-white">Wialon Connection</h2>
+        <div className="rounded-lg border bd bg-panel p-6">
+          <h2 className="text-lg font-medium t-primary">Wialon Connection</h2>
 
           <div className="mt-4 space-y-4">
             <div>
-              <label htmlFor="relay" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="relay" className="block text-sm font-medium t-primary">
                 Relay URL
               </label>
               <input id="relay" type="text" value={relay}
                 onChange={(e) => setRelay(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none"
                 placeholder="https://your-relay.workers.dev" />
-              <p className="mt-1 text-xs text-gray-500">Cloudflare Worker that bypasses CORS</p>
+              <p className="mt-1 text-xs t-dim">Cloudflare Worker that bypasses CORS</p>
             </div>
 
             <div>
-              <label htmlFor="server" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="server" className="block text-sm font-medium t-primary">
                 Wialon Server
               </label>
               <input id="server" type="text" value={server}
                 onChange={(e) => setServer(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none"
                 placeholder="hst-api.wialon.eu" />
             </div>
 
             <div>
-              <label htmlFor="token" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="token" className="block text-sm font-medium t-primary">
                 API Token
               </label>
               <input id="token" type="password" value={token}
                 onChange={(e) => setToken(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none"
+                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none"
                 placeholder="Leave blank to keep existing" />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs t-dim">
                 {settings?.wialon_token_set ? "Token is set. Enter a new one to change." : "No token set."}
               </p>
             </div>

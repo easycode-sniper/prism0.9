@@ -216,6 +216,36 @@ a, button, input, select {
   .aurora { display: none; }
 }
 
+/* ── Semantic text and surface classes ────────────────────────
+   The pages were written against Tailwind's fixed palette —
+   text-white, text-gray-400, bg-gray-800 — which encodes "this app is
+   dark" into ~150 class names. Those read as white-on-white the moment
+   a light theme exists. These resolve through the theme tokens
+   instead, so the same markup works on either ground. */
+
+.t-primary { color: var(--text); }
+.t-dim { color: var(--text-dim); }
+.divide-token > :not([hidden]) ~ :not([hidden]) { border-color: var(--line); }
+
+.placeholder-current::placeholder { color: var(--text-dim); opacity: .75; }
+
+.t-faint { color: color-mix(in srgb, var(--text-dim) 70%, transparent); }
+
+.bd { border-color: var(--line); }
+
+.bg-panel { background: var(--panel-2); }
+.bg-raised { background: var(--panel-3); }
+.bg-raised-hover:hover { background: var(--panel-3); }
+.bg-raised-hover-strong:hover { background: color-mix(in srgb, var(--text-dim) 18%, transparent); }
+
+.tint-red { background: color-mix(in srgb, var(--red) 15%, transparent); }
+.tint-green { background: color-mix(in srgb, var(--green) 15%, transparent); }
+.c-red { color: var(--red); }
+.c-green { color: var(--green); }
+.c-amber { color: var(--amber); }
+.c-indigo { color: var(--indigo); }
+.c-cyan { color: var(--cyan); }
+
 .panel {
   background: var(--panel-2);
   border: 1px solid var(--line);

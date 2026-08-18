@@ -44,7 +44,7 @@ export default function MonitoringPage() {
   if (trucks.length === 0 && !fleetData.lastUpdated && !fleetData.error) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-sm text-gray-500">Waiting for first fleet sync...</div>
+        <div className="text-sm t-dim">Waiting for first fleet sync...</div>
       </div>
     );
   }
@@ -69,8 +69,8 @@ export default function MonitoringPage() {
     <div className="mx-auto max-w-6xl p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-white">{t("monitoring.title")}</h1>
-          <p className="text-xs text-gray-500">Search and filter every truck in the fleet, dispatched or not</p>
+          <h1 className="text-lg font-semibold t-primary">{t("monitoring.title")}</h1>
+          <p className="text-xs t-dim">Search and filter every truck in the fleet, dispatched or not</p>
         </div>
         <span className="font-mono text-sm" style={{ color: "var(--text-dim)" }}>{filteredTrucks.length} / {trucks.length}</span>
       </div>
@@ -81,24 +81,24 @@ export default function MonitoringPage() {
           placeholder="Search driver or truck ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+          className="rounded-md border bd bg-raised px-3 py-1.5 text-sm t-primary placeholder-current focus:border-indigo-500 focus:outline-none"
           style={{ maxWidth: "280px" }}
         />
         {FILTERS.map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`rounded px-2.5 py-1 text-xs capitalize transition ${filter === f ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"}`}
+            className={`rounded px-2.5 py-1 text-xs capitalize transition ${filter === f ? "bg-indigo-600 text-white" : "bg-raised t-dim bg-raised-hover-strong"}`}
           >
             {f}
           </button>
         ))}
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-lg border border-gray-800">
+      <div className="mt-4 overflow-x-auto rounded-lg border bd">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-800 bg-gray-900 text-left text-xs uppercase text-gray-500">
+            <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
               <th className="px-4 py-2">Truck</th>
               <th className="px-4 py-2">Driver</th>
               <th className="px-4 py-2">Status</th>
@@ -108,7 +108,7 @@ export default function MonitoringPage() {
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-800/50">
+          <tbody className="divide-y divide-token">
             {filteredTrucks.map((tr) => (
               <MonitoringRow
                 key={tr.truck_id}
@@ -121,7 +121,7 @@ export default function MonitoringPage() {
           </tbody>
         </table>
         {filteredTrucks.length === 0 && (
-          <div className="p-8 text-center text-sm text-gray-500">No trucks match.</div>
+          <div className="p-8 text-center text-sm t-dim">No trucks match.</div>
         )}
       </div>
     </div>
@@ -148,8 +148,8 @@ function MonitoringRow({
     : null;
 
   return (
-    <tr className="text-sm hover:bg-gray-800/30">
-      <td className="px-4 py-2 font-mono text-cyan-400">
+    <tr className="text-sm bg-raised-hover">
+      <td className="px-4 py-2 font-mono c-cyan">
         <span className="inline-flex items-center gap-1.5">
           {truck.truck_id}
           {truck.category === "staff" && (
@@ -157,35 +157,35 @@ function MonitoringRow({
           )}
         </span>
       </td>
-      <td className="px-4 py-2 text-white">{truck.driver_name || "—"}</td>
+      <td className="px-4 py-2 t-primary">{truck.driver_name || "—"}</td>
       <td className="px-4 py-2">
         <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium" style={{ color: statusColor }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor, display: "inline-block" }} />
           {statusLabel}
         </span>
       </td>
-      <td className="px-4 py-2 text-gray-300">{truck.speed != null ? `${truck.speed} km/h` : "—"}</td>
-      <td className="px-4 py-2 text-gray-400">
+      <td className="px-4 py-2 t-primary">{truck.speed != null ? `${truck.speed} km/h` : "—"}</td>
+      <td className="px-4 py-2 t-dim">
         {truck.dispatched ? (
-          <span className="text-white">{truck.site_name ?? "—"}</span>
+          <span className="t-primary">{truck.site_name ?? "—"}</span>
         ) : (
-          <span className="text-gray-600">—</span>
+          <span className="t-faint">—</span>
         )}
       </td>
-      <td className="px-4 py-2 text-gray-400">{formatAge(truck.age_minutes)}</td>
+      <td className="px-4 py-2 t-dim">{formatAge(truck.age_minutes)}</td>
       <td className="px-4 py-2 text-right">
         {truck.dispatched && truck.last_on_route == null && truck.dispatch_id && (
           <button
             onClick={onCheckPosition}
             disabled={checking}
-            className="mr-2 text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+            className="mr-2 text-xs c-indigo hover:opacity-80 disabled:opacity-50"
             title={check ? `${check.etaLabel}` : undefined}
           >
             {checking ? "..." : "Check"}
           </button>
         )}
         {locateHref && (
-          <Link href={locateHref} className="text-xs text-indigo-400 hover:text-indigo-300">Locate</Link>
+          <Link href={locateHref} className="text-xs c-indigo hover:opacity-80">Locate</Link>
         )}
       </td>
     </tr>

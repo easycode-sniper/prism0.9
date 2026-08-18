@@ -254,7 +254,7 @@ export default function DispatchPage() {
           ◀
         </button>
         <div>
-          <h1 className="text-xl font-semibold text-white">{t("dispatch.title")}</h1>
+          <h1 className="text-xl font-semibold t-primary">{t("dispatch.title")}</h1>
           <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>{t("dispatch.subtitle")}</p>
         </div>
 
@@ -311,7 +311,7 @@ export default function DispatchPage() {
                       style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
                     >
                       <div>
-                        <div className="text-sm text-white font-medium">{tr.driver_name || "—"}</div>
+                        <div className="text-sm t-primary font-medium">{tr.driver_name || "—"}</div>
                         <div className="flex items-center gap-1 text-xs" style={{ color: "var(--text-dim)" }}>
                           <span style={{ color: statusColor(tr.status) }}>●</span>
                           {tr.status} {tr.speed} km/h
@@ -535,7 +535,7 @@ function ActiveDispatchRow({
       <div className="flex items-center gap-2">
         <span className="truck-id text-sm">{dispatch.truck_id}</span>
         <span style={{ color: "var(--text-dim)" }}>→</span>
-        <span className="text-sm text-white">{siteName}</span>
+        <span className="text-sm t-primary">{siteName}</span>
       </div>
       <div className="mt-1 flex gap-3 text-xs" style={{ color: "var(--text-dim)" }}>
         <span>{formatDateTime(dispatch.dispatched_at)}</span>

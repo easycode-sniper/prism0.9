@@ -78,29 +78,29 @@ export default function HistoryPage() {
   }
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center text-sm text-gray-500">Loading history...</div>;
+    return <div className="flex h-full items-center justify-center text-sm t-dim">Loading history...</div>;
   }
 
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">{t("history.title")}</h1>
-          <p className="mt-1 text-sm text-gray-400">
+          <h1 className="text-2xl font-semibold t-primary">{t("history.title")}</h1>
+          <p className="mt-1 text-sm t-dim">
             {records.length} completed run{records.length === 1 ? "" : "s"}
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={printDailySummary}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-md border bd px-3 py-1.5 text-sm t-primary transition bg-raised-hover"
           >
             <Printer size={14} strokeWidth={2.25} /> Print Daily Summary
           </button>
           {records.length > 0 && (
             <button
               onClick={exportCsv}
-              className="rounded-md border border-gray-700 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-gray-800"
+              className="rounded-md border bd px-3 py-1.5 text-sm t-primary transition bg-raised-hover"
             >
               ⬇ Export CSV
             </button>
@@ -108,15 +108,15 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {error && <div className="mt-4 rounded-md bg-red-900/50 p-3 text-sm text-red-300">{error}</div>}
+      {error && <div className="mt-4 rounded-md tint-red p-3 text-sm c-red">{error}</div>}
 
       {records.length === 0 ? (
-        <p className="mt-8 text-center text-sm text-gray-500">No completed runs yet.</p>
+        <p className="mt-8 text-center text-sm t-dim">No completed runs yet.</p>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-lg border border-gray-800">
+        <div className="mt-6 overflow-x-auto rounded-lg border bd">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 bg-gray-900 text-left text-xs uppercase text-gray-500">
+              <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
                 <th className="px-4 py-3">Truck</th>
                 <th className="px-4 py-3">Destination</th>
                 <th className="px-4 py-3">Client</th>
@@ -127,23 +127,23 @@ export default function HistoryPage() {
                 <th className="px-4 py-3">Alerts</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800/50">
+            <tbody className="divide-y divide-token">
               {records.map((r) => (
-                <tr key={r.id} className="bg-gray-900/50">
-                  <td className="px-4 py-3 font-mono text-cyan-400">{r.truck_id}</td>
-                  <td className="px-4 py-3 text-white">{r.site_name || "—"}</td>
-                  <td className="px-4 py-3 text-gray-400">{r.client || "—"}</td>
-                  <td className="px-4 py-3 text-gray-400">{formatDateTime(r.dispatched_at)}</td>
-                  <td className="px-4 py-3 text-gray-400">{r.stopped_at ? formatDateTime(r.stopped_at) : "—"}</td>
-                  <td className="px-4 py-3 text-gray-400">{r.duration_minutes != null ? `${r.duration_minutes} min` : "—"}</td>
+                <tr key={r.id} className="bg-panel/50">
+                  <td className="px-4 py-3 font-mono c-cyan">{r.truck_id}</td>
+                  <td className="px-4 py-3 t-primary">{r.site_name || "—"}</td>
+                  <td className="px-4 py-3 t-dim">{r.client || "—"}</td>
+                  <td className="px-4 py-3 t-dim">{formatDateTime(r.dispatched_at)}</td>
+                  <td className="px-4 py-3 t-dim">{r.stopped_at ? formatDateTime(r.stopped_at) : "—"}</td>
+                  <td className="px-4 py-3 t-dim">{r.duration_minutes != null ? `${r.duration_minutes} min` : "—"}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={r.status} />
                   </td>
                   <td className="px-4 py-3 text-xs">
-                    {r.ever_off_route && <span className="text-red-400">Off route</span>}
+                    {r.ever_off_route && <span className="c-red">Off route</span>}
                     {r.ever_off_route && r.ever_speeding && " · "}
-                    {r.ever_speeding && <span className="text-amber-400">Speeding</span>}
-                    {!r.ever_off_route && !r.ever_speeding && <span className="text-gray-600">—</span>}
+                    {r.ever_speeding && <span className="c-amber">Speeding</span>}
+                    {!r.ever_off_route && !r.ever_speeding && <span className="t-faint">—</span>}
                   </td>
                 </tr>
               ))}
@@ -219,8 +219,8 @@ export default function HistoryPage() {
 
 function StatusBadge({ status }: { status: HistoryRecord["status"] }) {
   const styles = {
-    completed: "bg-green-900/50 text-green-400",
-    stopped: "bg-red-900/50 text-red-400",
+    completed: "tint-green c-green",
+    stopped: "tint-red c-red",
   };
   return <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${styles[status]}`}>{status}</span>;
 }

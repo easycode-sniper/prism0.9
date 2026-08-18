@@ -40,7 +40,7 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-4xl p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-white">{t("admin.title")}</h1>
+        <h1 className="text-2xl font-semibold t-primary">{t("admin.title")}</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>
           {t("admin.subtitle")}
         </p>
@@ -81,7 +81,7 @@ export default function AdminPage() {
                 <ul className="text-sm space-y-1 max-h-40 overflow-y-auto">
                   {report.matched.map((m, i) => (
                     <li key={i}>
-                      <span className="text-white">{m.zoneName}</span>
+                      <span className="t-primary">{m.zoneName}</span>
                       <span style={{ color: "var(--text-dim)" }}> → {m.siteName}</span>
                     </li>
                   ))}
@@ -111,7 +111,7 @@ export default function AdminPage() {
           </p>
         ) : (
           <ul className="text-sm space-y-1 max-h-64 overflow-y-auto">
-            {siteGeofences.map((g) => <li key={g.id} className="text-white">{g.name}</li>)}
+            {siteGeofences.map((g) => <li key={g.id} className="t-primary">{g.name}</li>)}
           </ul>
         )}
       </div>

@@ -129,21 +129,50 @@ async function getAccessToken(): Promise<string> {
   const privateKey = normalizePrivateKeyPem(rawKey);
 
   const assertion = await signedAssertion(clientEmail, privateKey);
+  console.log("[fuel-sync] JWT signed, exchanging for access token");
 
-  const resp = await fetch(TOKEN_URL, {
+  // Both Google calls get an explicit timeout. Without one, a hung
+  // connection consumes the entire serverless budget and the process is
+  // killed with no error and no log line — indistinguishable from a slow
+  // success. Failing at 15s instead leaves room to report which call
+  // hung and why.
+  const resp = await fetchWithTimeout(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion,
     }),
-  });
+  }, 15_000, "Google token exchange");
 
   const data = await resp.json();
   if (!resp.ok || !data.access_token) {
     throw new Error(`Google token exchange failed: ${data.error_description || data.error || resp.status}`);
   }
+  console.log("[fuel-sync] access token acquired");
   return data.access_token as string;
+}
+
+/** fetch with an AbortController deadline, reporting which call timed
+ *  out rather than surfacing a bare AbortError. */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  ms: number,
+  label: string
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      throw new Error(`${label} timed out after ${ms}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Raw cell values for a range, one array per row, in sheet order.
@@ -155,7 +184,12 @@ export async function fetchSheetRows(spreadsheetId: string, range: string): Prom
 
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
 
-  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const resp = await fetchWithTimeout(
+    url,
+    { headers: { Authorization: `Bearer ${token}` } },
+    25_000,
+    "Google Sheets read"
+  );
   const data = await resp.json();
   if (!resp.ok) {
     throw new Error(`Sheets read failed: ${data.error?.message || resp.status}`);

@@ -63,8 +63,18 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Phase timings, logged as we go rather than only at the end. A
+  // serverless timeout kills the process without running any catch
+  // block, so a function that only logs on success tells you nothing
+  // about where it died — which is exactly the position the first
+  // timeout left this in.
+  const t0 = Date.now();
+  const since = () => `${Date.now() - t0}ms`;
+
   try {
+    console.log(`[fuel-sync] start`);
     const rawRows = await fetchSheetRows(SPREADSHEET_ID, RANGE);
+    console.log(`[fuel-sync] sheet read: ${rawRows.length} rows at ${since()}`);
 
     const transactions: FuelTransaction[] = [];
     let skipped = 0;
@@ -79,19 +89,21 @@ async function handle(request: NextRequest) {
       // depended on for correctness.
       else if (row.some((c) => c && c.trim())) skipped++;
     }
+    console.log(`[fuel-sync] parsed: ${transactions.length} kept, ${skipped} skipped, at ${since()}`);
 
     const supabase = createServiceClient();
     const { data: refreshedCount, error } = await supabase.rpc(
       "refresh_fuel_transactions",
       { p_rows: transactions }
     );
+    console.log(`[fuel-sync] rpc returned at ${since()}`);
 
     if (error) throw new Error(`refresh_fuel_transactions failed: ${error.message}`);
 
-    console.log(`[fuel-sync] synced ${refreshedCount} transactions (${skipped} unparseable rows skipped)`);
-    return NextResponse.json({ ok: true, synced: refreshedCount, skipped });
+    console.log(`[fuel-sync] synced ${refreshedCount} transactions (${skipped} unparseable rows skipped) in ${since()}`);
+    return NextResponse.json({ ok: true, synced: refreshedCount, skipped, ms: Date.now() - t0 });
   } catch (err) {
-    console.error("[fuel-sync] failed:", err);
+    console.error(`[fuel-sync] failed at ${since()}:`, err);
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
   }
 }

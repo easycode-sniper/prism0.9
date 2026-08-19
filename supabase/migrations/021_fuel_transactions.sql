@@ -70,7 +70,18 @@ AS $$
 DECLARE
   v_count INT;
 BEGIN
-  DELETE FROM public.fuel_transactions;
+  -- WHERE true rather than a bare DELETE: Supabase runs pg_safeupdate,
+  -- which refuses an unqualified DELETE as a guard against wiping a
+  -- table by accident. The intent here really is "every row" — this is a
+  -- full refresh — so the predicate is spelled out explicitly.
+  --
+  -- NOTE: the JSON keys in p_rows must be snake_case to match the column
+  -- names declared below. jsonb_to_recordset matches by exact string and
+  -- silently produces NULLs for anything it cannot match, so camelCase
+  -- input fails here as a NOT NULL violation on transaction_no rather
+  -- than as anything that names the real problem. See toDbRow() in
+  -- src/app/api/fuel-sync/route.ts.
+  DELETE FROM public.fuel_transactions WHERE true;
 
   INSERT INTO public.fuel_transactions (
     transaction_no, shift, model, truck_id, category, driver_name,

@@ -58,6 +58,39 @@ function matchesSecret(request: NextRequest): boolean {
 const SPREADSHEET_ID = "1UI6xFOLcCouej53DtUYSg3X9NHw1-mgepKHw6AIIznY";
 const RANGE = "gas consumption!A2:Q";
 
+/**
+ * FuelTransaction is camelCase, as TypeScript should be; the table and
+ * refresh_fuel_transactions' jsonb_to_recordset column list are
+ * snake_case, as Postgres should be. jsonb_to_recordset matches JSON
+ * keys to those declared column names *by exact string*, so handing it
+ * camelCase silently yields a row of NULLs for every column rather than
+ * any kind of error — which then surfaces, confusingly, as a NOT NULL
+ * violation on the primary key. This mapping is the seam between the two
+ * conventions, and it is written out longhand so that adding a column to
+ * one side without the other fails to compile.
+ */
+function toDbRow(t: FuelTransaction) {
+  return {
+    transaction_no: t.transactionNo,
+    shift: t.shift,
+    model: t.model,
+    truck_id: t.truckId,
+    category: t.category,
+    driver_name: t.driverName,
+    occurred_at: t.occurredAt,
+    card_no: t.cardNo,
+    station: t.station,
+    fuel_type: t.fuelType,
+    amount_da: t.amountDa,
+    odometer_km: t.odometerKm,
+    distance_km: t.distanceKm,
+    litres_filled: t.litresFilled,
+    expected_litres: t.expectedLitres,
+    expected_cost_da: t.expectedCostDa,
+    variance_da: t.varianceDa,
+  };
+}
+
 async function handle(request: NextRequest) {
   if (!(await redeemedNonce(request)) && !matchesSecret(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -94,7 +127,7 @@ async function handle(request: NextRequest) {
     const supabase = createServiceClient();
     const { data: refreshedCount, error } = await supabase.rpc(
       "refresh_fuel_transactions",
-      { p_rows: transactions }
+      { p_rows: transactions.map(toDbRow) }
     );
     console.log(`[fuel-sync] rpc returned at ${since()}`);
 

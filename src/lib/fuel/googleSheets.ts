@@ -79,6 +79,23 @@ function normalizePrivateKeyPem(raw: string): string {
     /-{3,}\s*BEGIN\s+(RSA\s+)?PRIVATE\s+KEY\s*-{3,}([\s\S]*?)-{3,}\s*END\s+(RSA\s+)?PRIVATE\s+KEY\s*-{3,}/i
   );
   if (!match) {
+    // No armor at all. The overwhelmingly common cause is selecting the
+    // key's body without its header and footer lines — the two lines are
+    // visually separate from the block of base64 between them, and easy
+    // to miss when dragging a selection. A 2048-bit PKCS#8 key body is
+    // 1624 base64 characters, so a value in that range consisting only
+    // of base64 alphabet is almost certainly exactly that.
+    //
+    // Rather than reject it, re-armor it and let the RSA decoder be the
+    // judge: if it really is a key body this succeeds, and if it is some
+    // other base64 blob the decoder rejects it a few lines later with a
+    // message this function no longer has to guess at.
+    const compact = cleaned.replace(/\s+/g, "");
+    if (/^[A-Za-z0-9+/]+={0,2}$/.test(compact) && compact.length >= 800) {
+      const rewrapped = compact.match(/.{1,64}/g)?.join("\n") ?? compact;
+      return `-----BEGIN PRIVATE KEY-----\n${rewrapped}\n-----END PRIVATE KEY-----\n`;
+    }
+
     // Never log the value itself — these are safe shape descriptors
     // only, but still enough to tell "empty", "truncated", and
     // "completely different content" apart from here.

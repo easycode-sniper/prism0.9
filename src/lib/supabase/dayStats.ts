@@ -21,7 +21,15 @@ import { opsToday } from "@/lib/format";
 //
 //   {"litres_per_100km": 38}                        one rate for everything
 //   {"litres_per_100km": {"truck": 38, "staff": 8}} per category
-const DEFAULT_RATES = { truck: 38, staff: 8 };
+//
+// This is now only the FALLBACK for a day with no synced pump
+// transactions yet — see fuel_transactions below, which is measured, not
+// estimated, and wins whenever it has rows for today. The truck default
+// matches ASSUMED_L_PER_100KM in lib/fuel/parse.ts (45), which is the
+// same assumption the connected sheet's own formulas use, so a day that
+// switches from the estimate to real data mid-scroll doesn't jump for a
+// reason nobody can see.
+const DEFAULT_RATES = { truck: 45, staff: 8 };
 
 type RateConfig = number | { truck?: number; staff?: number } | undefined;
 
@@ -40,10 +48,11 @@ function resolveRates(raw: RateConfig): { truck: number; staff: number } {
 export interface DayStats {
   /** Kilometres driven by the whole fleet today, staff cars included. */
   km: number;
-  /** Litres, derived from km at the configured rates. Estimated, not
-   *  metered — the card has to say so. */
+  /** Litres. Real (summed from today's pump transactions) whenever any
+   *  exist; otherwise derived from km at the configured rates. */
   litres: number;
-  fuelEstimated: true;
+  fuelEstimated: boolean;
+  /** Only meaningful when fuelEstimated is true. */
   rates: { truck: number; staff: number };
   activeDispatches: number;
   parcEntries: number;
@@ -60,7 +69,10 @@ export async function getDayStats(): Promise<{ stats?: DayStats; error?: string 
 
   const today = opsToday();
 
-  const [metrics, dispatches, entries, fuelCfg] = await Promise.all([
+  const dayStart = `${today}T00:00:00+01:00`;
+  const dayEnd = `${today}T23:59:59.999+01:00`;
+
+  const [metrics, dispatches, entries, fuelCfg, fuelToday] = await Promise.all([
     supabase
       .from("fleet_day_metrics")
       .select("km, km_truck, km_staff, vehicles_moved, computed_at")
@@ -73,13 +85,23 @@ export async function getDayStats(): Promise<{ stats?: DayStats; error?: string 
     supabase
       .from("hq_entries")
       .select("id", { count: "exact", head: true })
-      .gte("entered_at", `${today}T00:00:00+01:00`)
-      .lt("entered_at", `${today}T23:59:59.999+01:00`),
+      .gte("entered_at", dayStart)
+      .lt("entered_at", dayEnd),
     supabase
       .from("app_config")
       .select("config_value")
       .eq("config_key", "fuel")
       .maybeSingle(),
+    // Real pump transactions win over the estimate whenever today has
+    // any. litres_filled is null on a first-ever fill's row shape only
+    // in fleet_day_metrics-style derived data — here it is null only
+    // when a transaction genuinely recorded no litres, which the sum
+    // correctly ignores.
+    supabase
+      .from("fuel_transactions")
+      .select("litres_filled")
+      .gte("occurred_at", dayStart)
+      .lt("occurred_at", dayEnd),
   ]);
 
   const rates = resolveRates(
@@ -97,14 +119,21 @@ export async function getDayStats(): Promise<{ stats?: DayStats; error?: string 
   // vehicles overwhelmingly were.
   const kmUncategorised = Math.max(0, km - kmTruck - kmStaff);
 
-  const litres =
-    ((kmTruck + kmUncategorised) * rates.truck + kmStaff * rates.staff) / 100;
+  const meteredLitres = (fuelToday.data ?? []).reduce(
+    (sum, r) => sum + (Number(r.litres_filled) || 0),
+    0
+  );
+  const hasMeteredData = (fuelToday.data?.length ?? 0) > 0;
+
+  const litres = hasMeteredData
+    ? meteredLitres
+    : ((kmTruck + kmUncategorised) * rates.truck + kmStaff * rates.staff) / 100;
 
   return {
     stats: {
       km,
       litres: Math.round(litres),
-      fuelEstimated: true,
+      fuelEstimated: !hasMeteredData,
       rates,
       activeDispatches: dispatches.count ?? 0,
       parcEntries: entries.count ?? 0,

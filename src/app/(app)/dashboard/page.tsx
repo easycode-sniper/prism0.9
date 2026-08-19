@@ -186,9 +186,15 @@ export default function DashboardPage() {
         />
         <KPICard
           value={dayStats ? dayStats.litres.toLocaleString("en-GB") : null}
-          label="Litres est."
+          label={dayStats?.fuelEstimated === false ? "Litres" : "Litres est."}
           color="var(--amber)"
-          hint={dayStats ? `Estimated from distance — not metered. ${dayStats.rates.truck} L/100km trucks, ${dayStats.rates.staff} L/100km staff cars` : undefined}
+          hint={
+            dayStats == null
+              ? undefined
+              : dayStats.fuelEstimated
+                ? `No pump transactions synced yet today — estimated from distance. ${dayStats.rates.truck} L/100km trucks, ${dayStats.rates.staff} L/100km staff cars`
+                : "Summed from today's pump transactions"
+          }
         />
         <KPICard value={dayStats ? dayStats.activeDispatches : null} label="Active dispatch" color="var(--indigo)" />
         <KPICard value={dayStats ? dayStats.parcEntries : null} label="Parc entries" color="var(--green)" />

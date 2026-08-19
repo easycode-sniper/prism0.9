@@ -42,17 +42,56 @@ async function signedAssertion(clientEmail: string, privateKeyPem: string): Prom
   return `${unsigned}.${signature}`;
 }
 
+/**
+ * A private key pasted into a dashboard textarea survives every possible
+ * mangling except the base64 body itself: literal "\n" left un-escaped
+ * from the JSON file, real newlines collapsed to spaces, CRLF, a stray
+ * wrapping quote, trailing whitespace. Node's RSA signer rejects all of
+ * these with the same opaque "DECODER routines::unsupported" and no
+ * indication which — that error is what sent this looking for a fix that
+ * does not depend on knowing exactly how the paste went wrong.
+ *
+ * So rather than pattern-match the mangling, this throws away every
+ * whitespace character between the BEGIN/END markers and rebuilds a
+ * correctly wrapped PEM from the base64 payload — the one part of the
+ * value that has to already be intact, since it is not editable text.
+ */
+function normalizePrivateKeyPem(raw: string): string {
+  const cleaned = raw
+    .trim()
+    .replace(/^['"]|['"]$/g, "")
+    // The literal two-character sequence \n (a JSON file's escape,
+    // pasted as text rather than interpreted) is not whitespace to a
+    // regex — it has to be turned into a real newline before the next
+    // step can strip it, or it survives inside the base64 body as
+    // literal backslash-n characters and corrupts it.
+    .replace(/\\n/g, "\n");
+
+  const match = cleaned.match(
+    /-----BEGIN (RSA )?PRIVATE KEY-----([\s\S]*?)-----END (RSA )?PRIVATE KEY-----/
+  );
+  if (!match) {
+    throw new Error(
+      "GOOGLE_SHEETS_PRIVATE_KEY doesn't contain a recognizable -----BEGIN PRIVATE KEY----- block"
+    );
+  }
+
+  const label = match[1] ?? "";
+  const base64Body = match[2].replace(/\s+/g, "");
+  const wrapped = base64Body.match(/.{1,64}/g)?.join("\n") ?? base64Body;
+
+  return `-----BEGIN ${label}PRIVATE KEY-----\n${wrapped}\n-----END ${label}PRIVATE KEY-----\n`;
+}
+
 async function getAccessToken(): Promise<string> {
   const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL;
-  // Vercel stores the value as entered; a private key pasted with real
-  // newlines survives, but if it round-tripped through anything that
-  // escapes them (\n as two characters) this restores the real thing —
-  // the RSA signer rejects a key with literal backslash-n in it.
-  const privateKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const rawKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY;
 
-  if (!clientEmail || !privateKey) {
+  if (!clientEmail || !rawKey) {
     throw new Error("GOOGLE_SHEETS_CLIENT_EMAIL / GOOGLE_SHEETS_PRIVATE_KEY not set");
   }
+
+  const privateKey = normalizePrivateKeyPem(rawKey);
 
   const assertion = await signedAssertion(clientEmail, privateKey);
 

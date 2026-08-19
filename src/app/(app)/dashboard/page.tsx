@@ -6,6 +6,7 @@ import { Doughnut } from "react-chartjs-2";
 import { Truck } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { getDriverRatings, DriverRating } from "@/lib/supabase/history";
+import { getDayStats, type DayStats } from "@/lib/supabase/dayStats";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
@@ -54,6 +55,7 @@ export default function DashboardPage() {
   const [connectionStatus, setConnectionStatus] = useState<string>("—");
   const [ratings, setRatings] = useState<DriverRating[]>([]);
   const [ratingsError, setRatingsError] = useState<string | null>(null);
+  const [dayStats, setDayStats] = useState<DayStats | null>(null);
 
   useEffect(() => {
     if (fleetData.error) {
@@ -62,6 +64,23 @@ export default function DashboardPage() {
       setConnectionStatus(`● Wialon configured`);
     }
   }, [fleetData]);
+
+  // Distance is recomputed by pg_cron every five minutes, so polling this
+  // faster than that would only re-read the same row. Refreshed on the
+  // same cadence rather than tied to the fleet poll.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const { stats } = await getDayStats();
+      if (!cancelled && stats) setDayStats(stats);
+    }
+    load();
+    const id = setInterval(load, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     getDriverRatings().then(({ data, error }) => {
@@ -159,10 +178,20 @@ export default function DashboardPage() {
         <KPICard value={moving} label="Moving" color="var(--green)" />
         <KPICard value={idle} label="Idle" color="var(--cyan)" />
         <KPICard value={offline} label="Offline" color="var(--purple)" />
-        <KPICard placeholder />
-        <KPICard placeholder />
-        <KPICard placeholder />
-        <KPICard placeholder />
+        <KPICard
+          value={dayStats ? Math.round(dayStats.km).toLocaleString("en-GB") : null}
+          label="km today"
+          color="var(--cyan)"
+          hint={dayStats?.computedAt ? `${dayStats.vehiclesMoved} vehicles moved · updated ${formatTime(dayStats.computedAt)}` : undefined}
+        />
+        <KPICard
+          value={dayStats ? dayStats.litres.toLocaleString("en-GB") : null}
+          label="Litres est."
+          color="var(--amber)"
+          hint={dayStats ? `Estimated at ${dayStats.litresPer100km} L/100km — not metered` : undefined}
+        />
+        <KPICard value={dayStats ? dayStats.activeDispatches : null} label="Active dispatch" color="var(--indigo)" />
+        <KPICard value={dayStats ? dayStats.parcEntries : null} label="Parc entries" color="var(--green)" />
       </div>
 
       {/* Charts */}
@@ -264,13 +293,18 @@ export default function DashboardPage() {
 }
 
 // `placeholder` renders a reserved slot: the card is real, the metric
-// behind it isn't wired up yet. Typography comes from .kpi-value /
+// behind it isn't wired up yet. A null `value` is the same shape for a
+// different reason — the figure is still loading — and renders the same
+// dash rather than a misleading 0. Typography comes from .kpi-value /
 // .kpi-label in globals.css so there's one place to resize a card.
-function KPICard({ value, label, color, placeholder }: {
-  value?: number;
+function KPICard({ value, label, color, placeholder, hint }: {
+  value?: number | string | null;
   label?: string;
   color?: string;
   placeholder?: boolean;
+  /** Tooltip for a figure that needs a caveat — how it was derived, or
+   *  how stale it is. */
+  hint?: string;
 }) {
   if (placeholder) {
     return (
@@ -281,9 +315,13 @@ function KPICard({ value, label, color, placeholder }: {
     );
   }
 
+  const pending = value == null;
+
   return (
-    <div className="kpi-card">
-      <div className="kpi-value" style={{ color }}>{value}</div>
+    <div className={`kpi-card${pending ? " kpi-card--empty" : ""}`} title={hint}>
+      <div className="kpi-value" style={pending ? undefined : { color }}>
+        {pending ? "—" : value}
+      </div>
       <div className="kpi-label">{label}</div>
     </div>
   );

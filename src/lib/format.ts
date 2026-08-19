@@ -154,3 +154,20 @@ export function opsNowLocalValue(offsetDays = 0, endOfDay = false): string {
   }).format(base);
   return `${d}T${endOfDay ? "23:59" : "00:00"}`;
 }
+
+/**
+ * Today's date in the operations timezone as YYYY-MM-DD.
+ *
+ * Deliberately not `new Date().toISOString().slice(0,10)`: that is UTC, so
+ * for the hour either side of midnight in Algiers (UTC+1) it names the
+ * wrong day and the dashboard's "today" figures silently reset an hour
+ * early. en-CA formats as YYYY-MM-DD, which is what the DATE column wants.
+ */
+export function opsToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: OPS_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}

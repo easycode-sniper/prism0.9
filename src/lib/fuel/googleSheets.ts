@@ -65,18 +65,36 @@ function normalizePrivateKeyPem(raw: string): string {
     // regex — it has to be turned into a real newline before the next
     // step can strip it, or it survives inside the base64 body as
     // literal backslash-n characters and corrupts it.
-    .replace(/\\n/g, "\n");
+    .replace(/\\n/g, "\n")
+    // A paste that went through a word processor or a mobile keyboard's
+    // autocorrect can turn a plain hyphen into an en/em dash or a
+    // non-breaking hyphen — invisible at a glance, fatal to an exact
+    // "-----" match. Flattened back to ASCII before the marker is
+    // searched for.
+    .replace(/[‐-―−]/g, "-");
 
+  // 3+ dashes rather than exactly 5: a paste that trimmed or duplicated
+  // characters at the boundary still matches.
   const match = cleaned.match(
-    /-----BEGIN (RSA )?PRIVATE KEY-----([\s\S]*?)-----END (RSA )?PRIVATE KEY-----/
+    /-{3,}\s*BEGIN\s+(RSA\s+)?PRIVATE\s+KEY\s*-{3,}([\s\S]*?)-{3,}\s*END\s+(RSA\s+)?PRIVATE\s+KEY\s*-{3,}/i
   );
   if (!match) {
+    // Never log the value itself — these are safe shape descriptors
+    // only, but still enough to tell "empty", "truncated", and
+    // "completely different content" apart from here.
+    const hasBeginWord = /BEGIN/i.test(cleaned);
+    const hasKeyWord = /PRIVATE\s*KEY/i.test(cleaned);
+    const dashRun = cleaned.match(/-{2,}/)?.[0]?.length ?? 0;
     throw new Error(
-      "GOOGLE_SHEETS_PRIVATE_KEY doesn't contain a recognizable -----BEGIN PRIVATE KEY----- block"
+      `GOOGLE_SHEETS_PRIVATE_KEY doesn't contain a recognizable BEGIN/END PRIVATE KEY block ` +
+        `(length=${cleaned.length}, has "BEGIN"=${hasBeginWord}, has "PRIVATE KEY"=${hasKeyWord}, longest dash run=${dashRun})`
     );
   }
 
-  const label = match[1] ?? "";
+  // Rebuilt as a fixed literal rather than reusing whatever whitespace
+  // the loose match captured for the optional "RSA" — the label has to
+  // come out as exactly one of the two strings OpenSSL recognizes.
+  const label = match[1] ? "RSA " : "";
   const base64Body = match[2].replace(/\s+/g, "");
   const wrapped = base64Body.match(/.{1,64}/g)?.join("\n") ?? base64Body;
 

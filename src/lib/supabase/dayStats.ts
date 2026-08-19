@@ -10,19 +10,41 @@ import { opsToday } from "@/lib/format";
 // which is fine on a five-minute schedule and unacceptable on a page that
 // polls. pg_cron writes it to fleet_day_metrics; this reads one row.
 
-/** Litres per 100 km assumed when app_config has no 'fuel' entry. A
- *  loaded semi on this route runs roughly 35–45; the handful of staff
- *  cars pull the fleet average down slightly. Tune the stored value
- *  against a Wialon fuel report rather than editing this constant. */
-const DEFAULT_LITRES_PER_100KM = 38;
+// Fuel is not metered on this fleet. Wialon derives it from a per-unit
+// consumption rate the office configured, and this derives it the same
+// way — same arithmetic, same rates — so the two figures reconcile rather
+// than merely resembling each other.
+//
+// Rates live in app_config under 'fuel' so they can be corrected without
+// a deploy, and are per category because a semi and a staff car differ by
+// a factor of four or five. Both shapes are accepted:
+//
+//   {"litres_per_100km": 38}                        one rate for everything
+//   {"litres_per_100km": {"truck": 38, "staff": 8}} per category
+const DEFAULT_RATES = { truck: 38, staff: 8 };
+
+type RateConfig = number | { truck?: number; staff?: number } | undefined;
+
+function resolveRates(raw: RateConfig): { truck: number; staff: number } {
+  const ok = (n: unknown): n is number => typeof n === "number" && n > 0;
+  if (ok(raw)) return { truck: raw, staff: raw };
+  if (raw && typeof raw === "object") {
+    return {
+      truck: ok(raw.truck) ? raw.truck : DEFAULT_RATES.truck,
+      staff: ok(raw.staff) ? raw.staff : DEFAULT_RATES.staff,
+    };
+  }
+  return DEFAULT_RATES;
+}
 
 export interface DayStats {
   /** Kilometres driven by the whole fleet today, staff cars included. */
   km: number;
-  /** Litres, derived from km. Estimated, not metered — see fuelEstimated. */
+  /** Litres, derived from km at the configured rates. Estimated, not
+   *  metered — the card has to say so. */
   litres: number;
   fuelEstimated: true;
-  litresPer100km: number;
+  rates: { truck: number; staff: number };
   activeDispatches: number;
   parcEntries: number;
   vehiclesMoved: number;
@@ -41,7 +63,7 @@ export async function getDayStats(): Promise<{ stats?: DayStats; error?: string 
   const [metrics, dispatches, entries, fuelCfg] = await Promise.all([
     supabase
       .from("fleet_day_metrics")
-      .select("km, vehicles_moved, computed_at")
+      .select("km, km_truck, km_staff, vehicles_moved, computed_at")
       .eq("ops_day", today)
       .maybeSingle(),
     supabase
@@ -60,20 +82,30 @@ export async function getDayStats(): Promise<{ stats?: DayStats; error?: string 
       .maybeSingle(),
   ]);
 
-  const rateRaw = (fuelCfg.data?.config_value as { litres_per_100km?: number } | undefined)
-    ?.litres_per_100km;
-  const rate = typeof rateRaw === "number" && rateRaw > 0 ? rateRaw : DEFAULT_LITRES_PER_100KM;
+  const rates = resolveRates(
+    (fuelCfg.data?.config_value as { litres_per_100km?: RateConfig } | undefined)?.litres_per_100km
+  );
 
   // No row yet means the schedule has not run since midnight, which is a
   // real zero for the first few minutes of a day rather than an error.
   const km = Number(metrics.data?.km ?? 0);
+  const kmTruck = Number(metrics.data?.km_truck ?? 0);
+  const kmStaff = Number(metrics.data?.km_staff ?? 0);
+
+  // Distance from a snapshot written before categories existed is in `km`
+  // but neither column; charge it at the truck rate, which is what those
+  // vehicles overwhelmingly were.
+  const kmUncategorised = Math.max(0, km - kmTruck - kmStaff);
+
+  const litres =
+    ((kmTruck + kmUncategorised) * rates.truck + kmStaff * rates.staff) / 100;
 
   return {
     stats: {
       km,
-      litres: Math.round((km * rate) / 100),
+      litres: Math.round(litres),
       fuelEstimated: true,
-      litresPer100km: rate,
+      rates,
       activeDispatches: dispatches.count ?? 0,
       parcEntries: entries.count ?? 0,
       vehiclesMoved: metrics.data?.vehicles_moved ?? 0,

@@ -188,7 +188,7 @@ export default function DashboardPage() {
           value={dayStats ? dayStats.litres.toLocaleString("en-GB") : null}
           label="Litres est."
           color="var(--amber)"
-          hint={dayStats ? `Estimated at ${dayStats.litresPer100km} L/100km — not metered` : undefined}
+          hint={dayStats ? `Estimated from distance — not metered. ${dayStats.rates.truck} L/100km trucks, ${dayStats.rates.staff} L/100km staff cars` : undefined}
         />
         <KPICard value={dayStats ? dayStats.activeDispatches : null} label="Active dispatch" color="var(--indigo)" />
         <KPICard value={dayStats ? dayStats.parcEntries : null} label="Parc entries" color="var(--green)" />

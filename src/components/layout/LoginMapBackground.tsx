@@ -11,17 +11,13 @@ export function LoginMapBackground() {
       className="absolute inset-0 overflow-hidden"
       style={{ background: "var(--bg)" }}
     >
-      {/* Ambient glow blobs */}
-      <div className="login-glow login-glow-a" />
-      <div className="login-glow login-glow-b" />
-
       <svg
         className="absolute inset-0 h-full w-full"
         viewBox="0 0 1200 800"
         preserveAspectRatio="xMidYMid slice"
       >
         {/* Static road network */}
-        <g stroke="var(--login-road)" strokeWidth="1.5" fill="none" opacity="0.55">
+        <g stroke="var(--login-road)" strokeWidth="1.5" fill="none" opacity="0.5">
           <path d="M-20 120 L340 120 L520 260 L900 260 L1120 120" />
           <path d="M-20 340 L260 340 L420 480 L780 480 L960 620 L1220 620" />
           <path d="M120 -20 L120 220 L280 340" />
@@ -38,17 +34,17 @@ export function LoginMapBackground() {
           <path
             className="login-route login-route-1"
             d="M-20 120 L340 120 L520 260 L900 260 L1120 120"
-            stroke="var(--indigo)"
+            
           />
           <path
             className="login-route login-route-2"
             d="M460 -20 L460 180 L620 300 L620 560 L460 700 L460 820"
-            stroke="var(--cyan)"
+            
           />
           <path
             className="login-route login-route-3"
             d="M-20 340 L260 340 L420 480 L780 480 L960 620 L1220 620"
-            stroke="var(--indigo)"
+            
           />
         </g>
 
@@ -68,7 +64,7 @@ export function LoginMapBackground() {
             cx={cx}
             cy={cy}
             r="4"
-            fill="var(--cyan)"
+            
           />
         ))}
       </svg>

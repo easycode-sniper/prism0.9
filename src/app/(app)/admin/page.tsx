@@ -72,7 +72,7 @@ export default function AdminPage() {
         {report && (
           <div className="mt-4 space-y-3">
             <div className="text-sm" style={{ color: "var(--text-dim)" }}>
-              Matched <strong style={{ color: "#159c83" }}>{report.matched.length}</strong> zone(s),
+              Matched <strong style={{ color: "var(--green)" }}>{report.matched.length}</strong> zone(s),
               {" "}<strong style={{ color: "var(--red)" }}>{report.unmatched.length}</strong> unmatched.
             </div>
             {report.matched.length > 0 && (

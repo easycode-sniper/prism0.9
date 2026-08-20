@@ -95,11 +95,23 @@ export default function DashboardPage() {
   const idle = trucks.filter((t) => t.status === "idle").length;
   const offline = trucks.filter((t) => t.status === "offline").length;
 
+  // Chart.js renders to canvas and cannot resolve var(--token), so the
+  // taxonomy is repeated here as literals. Keep in step with globals.css.
+  const CHART = {
+    green: "#0ae448",
+    amber: "#ff8709",
+    red: "#ff4d3d",
+    cyan: "#00bae2",
+    pink: "#fec5fb",
+    dim: "#7c7c6f",
+    empty: "#42433d",
+  };
+
   const statusChart = {
     labels: ["Moving", "Idle/Stopped", "Offline/No Signal"],
     datasets: [{
       data: [moving, idle, offline],
-      backgroundColor: ["#22c55e", "#f59e0b", "#ef4444"],
+      backgroundColor: [CHART.green, CHART.amber, CHART.dim],
       borderWidth: 0,
     }],
   };
@@ -114,7 +126,7 @@ export default function DashboardPage() {
     labels: ["At Factory", "At Base (PARC OMD)", "At Customer Site", "In Transit"],
     datasets: [{
       data: [occupancy.factory, occupancy.base, occupancy.customer_site, occupancy.in_transit],
-      backgroundColor: ["#3b82f6", "#8b5cf6", "#22c55e", "#06b6d4"],
+      backgroundColor: [CHART.pink, CHART.cyan, CHART.green, CHART.amber],
       borderWidth: 0,
     }],
   };
@@ -132,7 +144,7 @@ export default function DashboardPage() {
     labels: ["At Gas Station", "Not at Gas Station"],
     datasets: [{
       data: [fuelingTrucks.length, trucksWithPosition.length - fuelingTrucks.length],
-      backgroundColor: ["#f59e0b", "#334155"],
+      backgroundColor: [CHART.amber, CHART.empty],
       borderWidth: 0,
     }],
   };
@@ -144,7 +156,7 @@ export default function DashboardPage() {
     labels: ["Off Route", "Speeding", "Site Arrival", "Factory Arrival", "HQ Arrival"],
     datasets: [{
       data: [alertCounts.off_route, alertCounts.speeding, alertCounts.site_arrival, alertCounts.factory_arrival, alertCounts.hq_arrival],
-      backgroundColor: ["#ef4444", "#f97316", "#22c55e", "#3b82f6", "var(--cyan)"],
+      backgroundColor: [CHART.red, CHART.amber, CHART.green, CHART.pink, CHART.cyan],
       borderWidth: 0,
     }],
   };
@@ -153,7 +165,7 @@ export default function DashboardPage() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'bottom' as const, labels: { color: '#ccc', font: { size: 11 } } },
+      legend: { position: 'bottom' as const, labels: { color: '#fffce1', font: { size: 11 } } },
     },
   };
 
@@ -177,7 +189,7 @@ export default function DashboardPage() {
         <KPICard value={total} label="Total fleet" color="var(--indigo)" />
         <KPICard value={moving} label="Moving" color="var(--green)" />
         <KPICard value={idle} label="Idle" color="var(--cyan)" />
-        <KPICard value={offline} label="Offline" color="var(--purple)" />
+        <KPICard value={offline} label="Offline" color="var(--text-dim)" />
         <KPICard
           value={dayStats ? Math.round(dayStats.km).toLocaleString("en-GB") : null}
           label="km today"

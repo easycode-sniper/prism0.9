@@ -259,7 +259,7 @@ export default function DispatchPage() {
         </div>
 
         {error && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.35)", color: "var(--red)" }}>{error}</div>}
-        {success && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(21,156,131,0.08)", border: "1px solid rgba(21,156,131,0.18)", color: "#159c83" }}>{success}</div>}
+        {success && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(10,228,72,0.08)", border: "1px solid rgba(10,228,72,0.22)", color: "var(--green)" }}>{success}</div>}
 
         <div className="panel p-3 space-y-2">
           <button
@@ -268,7 +268,7 @@ export default function DispatchPage() {
             className="w-full py-2 rounded-md text-sm font-semibold"
             style={{
               background: liveFleetOn ? "rgba(21,156,131,0.12)" : "var(--panel-2)",
-              border: `1px solid ${liveFleetOn ? "#159c83" : "var(--line)"}`,
+              border: `1px solid ${liveFleetOn ? "var(--green)" : "var(--line)"}`,
               color: liveFleetOn ? "var(--green)" : "var(--text-dim)",
             }}
           >

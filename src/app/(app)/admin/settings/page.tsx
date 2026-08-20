@@ -104,7 +104,7 @@ export default function AdminSettingsPage() {
         </div>
 
         <button type="submit" disabled={saving}
-          className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50">
+          className="btn-primary" style={{ width: "auto" }}>
           {saving ? "Saving..." : "Save Settings"}
         </button>
       </form>

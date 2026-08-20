@@ -876,6 +876,310 @@ hr {
   .login-route, .login-ping { animation: none; }
 }
 
+/* ── Dispatch panel ───────────────────────────────────────────
+   The panel was a single scrolling column holding three stacked
+   sections: a fleet browser, a create-dispatch form, and a list of
+   active runs. Two of those listed the same 101 trucks from the same
+   source with separate searches, and the third was not a step of
+   creating anything — it was monitoring, permanently parked under a
+   form.
+
+   It is now one column with two modes and a fixed action bar. The body
+   scrolls; the summary and the button never do, so what is about to
+   happen is always readable without scrolling back. */
+
+.dispatch-panel {
+  display: flex;
+  flex-direction: column;
+  width: 384px;
+  flex: none;
+  height: 100%;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.dispatch-panel__head {
+  flex: none;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dispatch-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Always in view, so the count and the destination stay readable while
+   the list above is scrolled. */
+.dispatch-panel__action {
+  flex: none;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.dispatch-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  min-height: 18px;
+}
+
+.dispatch-summary__part {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dispatch-summary__value {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dispatch-summary__value--set { color: var(--green); }
+
+/* ── Section ──────────────────────────────────────────────────
+   A labelled block inside the panel. The count sits with the label
+   rather than in a separate row. */
+.psection__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.psection__title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.psection__count {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+}
+
+.psection__count--on { color: var(--green); }
+
+/* ── Fleet row ────────────────────────────────────────────────
+   One row now does both jobs the two old lists did: the label selects
+   the truck for dispatch, the trailing button centres it on the map.
+   They are siblings rather than nested, because a button inside a
+   label swallows the label's own click. */
+.fleet-row {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  transition:
+    background-color var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fleet-row:hover { background: rgba(255, 252, 225, 0.05); }
+}
+
+.fleet-row.is-selected {
+  background: rgba(255, 252, 225, 0.10);
+  border-color: rgba(255, 252, 225, 0.38);
+}
+
+.fleet-row__pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 4px 7px 9px;
+  cursor: pointer;
+}
+
+.fleet-row__input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+
+.fleet-row__box {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--line);
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  color: var(--bg);
+  transition:
+    background-color var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out);
+}
+
+.fleet-row__box svg {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity var(--dur-hover) var(--ease-out), transform var(--dur-hover) var(--ease-out);
+}
+
+.fleet-row.is-selected .fleet-row__box { background: var(--accent); border-color: var(--accent); }
+.fleet-row.is-selected .fleet-row__box svg { opacity: 1; transform: scale(1); }
+.fleet-row__input:focus-visible + .fleet-row__box {
+  box-shadow: 0 0 0 2px var(--panel-2), 0 0 0 4px var(--accent);
+}
+
+.fleet-row__body { min-width: 0; flex: 1; }
+
+.fleet-row__name {
+  display: block;
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fleet-row__name--empty { color: var(--text-dim); font-weight: 500; font-style: italic; }
+
+.fleet-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 1px;
+  font-size: 0.69rem;
+  color: var(--text-dim);
+}
+
+.fleet-row__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+
+.fleet-row__id { font-family: var(--font-mono); font-size: 0.69rem; color: var(--cyan); white-space: nowrap; }
+
+.fleet-row__locate {
+  flex: none;
+  width: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-left: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fleet-row__locate:hover:not(:disabled) { color: var(--accent); background: rgba(255, 252, 225, 0.07); }
+}
+
+.fleet-row__locate:disabled { opacity: 0.25; cursor: default; }
+
+.fleet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  padding: 4px;
+}
+
+/* ── Active run card ──────────────────────────────────────────
+   Was a stack of panels each carrying a timestamp, a dispatcher name,
+   two buttons and a <details> holding two coordinate inputs and a
+   third button. The manual-coordinate path is a fallback for a stale
+   telemetry feed, not a per-row control, so it hides behind one icon. */
+.run-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  padding: 9px 11px;
+}
+
+.run-card__top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.run-card__arrow { color: var(--text-faint); flex: none; }
+
+.run-card__site {
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-card__meta {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+.run-card__actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.run-card__manual {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.run-card__manual input {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+}
+
+.panel-empty {
+  padding: 26px 14px;
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+}
+
 /* ── Field ────────────────────────────────────────────────────
    The same six inline style properties were pasted onto every input
    and select in the dispatch panel. One class instead, so a change to

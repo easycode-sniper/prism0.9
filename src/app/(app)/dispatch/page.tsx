@@ -12,7 +12,7 @@ import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import type { SiteRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
-import { Radar, Check, X, AlertTriangle, ChevronLeft } from "lucide-react";
+import { Radar, Check, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, ArrowRight, MapPin, Square } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
 // A truck within this distance of a station is treated as "at the pump".
@@ -43,6 +43,9 @@ export default function DispatchPage() {
   const focusPoint = truckFocus ?? urlFocusPoint;
   const { fleetData, dispatches, geofences, gasStations, sites, refreshDispatches } = useFleet();
 
+  // One search and one filter now drive the single truck list. The panel
+  // previously had two of each, over the same 101 trucks.
+  const [panelMode, setPanelMode] = useState<"dispatch" | "active">("dispatch");
   const [truckSearch, setTruckSearch] = useState("");
   const [selectedTrucks, setSelectedTrucks] = useState<string[]>([]);
 
@@ -51,9 +54,7 @@ export default function DispatchPage() {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const [liveFleetOn, setLiveFleetOn] = useState(true);
   const [fleetFilter, setFleetFilter] = useState<"all" | "dispatched" | "idle" | "offline">("all");
-  const [fleetSearch, setFleetSearch] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
@@ -78,29 +79,22 @@ export default function DispatchPage() {
     );
   }
 
-  const filteredFleet = useMemo(() => {
+  // The browser list and the picker were the same feed filtered twice.
+  // One list does both jobs: the row selects, the trailing button locates.
+  const visibleTrucks = useMemo(() => {
     let list = fleetTrucks;
     if (fleetFilter === "dispatched") list = list.filter((tr) => tr.dispatched);
     else if (fleetFilter === "idle") list = list.filter((tr) => tr.status === "idle");
     else if (fleetFilter === "offline") list = list.filter((tr) => tr.status === "offline");
 
-    const q = fleetSearch.trim().toLowerCase();
+    const q = truckSearch.trim().toLowerCase();
     if (q) {
       list = list.filter(
         (tr) => tr.truck_id.toLowerCase().includes(q) || (tr.driver_name && tr.driver_name.toLowerCase().includes(q))
       );
     }
     return list;
-  }, [fleetTrucks, fleetFilter, fleetSearch]);
-
-  // Step 1's picker and the Live Fleet panel above it are the same
-  // live Wialon feed now, not a separate manually-maintained registry
-  // — no more truck showing up in one list but not the other.
-  const filteredTrucks = useMemo(() => {
-    const q = truckSearch.trim().toLowerCase();
-    if (!q) return fleetTrucks;
-    return fleetTrucks.filter((tr) => tr.truck_id.toLowerCase().includes(q));
-  }, [fleetTrucks, truckSearch]);
+  }, [fleetTrucks, fleetFilter, truckSearch]);
 
   // Full list by default (not search-triggered-only) — the destination
   // listbox should show every site immediately, narrowing as you type.
@@ -140,6 +134,7 @@ export default function DispatchPage() {
     setSuccess(`Dispatched ${selectedTrucks.length} truck${selectedTrucks.length > 1 ? "s" : ""} → ${siteName}`);
 
     setSelectedTrucks([]); setTruckSearch(""); clearSite();
+    setPanelMode("active");
     setLoading(false);
     await refreshDispatches();
   }
@@ -222,9 +217,10 @@ export default function DispatchPage() {
           onClick={() => setSidebarCollapsed(false)}
           title="Show dispatch panel"
           className="flex-shrink-0 flex items-start justify-center pt-4"
+          aria-label="Show dispatch panel"
           style={{ width: "28px", borderRight: "1px solid var(--line)", background: "var(--panel)", color: "var(--text-dim)" }}
         >
-          ▶
+          <ChevronRight size={14} strokeWidth={2.5} />
         </button>
         <div className="flex-1 min-w-0">
           <MapView
@@ -242,272 +238,266 @@ export default function DispatchPage() {
 
   return (
     <div className="flex h-full">
-      {/* Sidebar */}
-      <div className="w-96 flex-shrink-0 overflow-y-auto p-4 space-y-4 relative" style={{ borderRight: "1px solid var(--line)" }}>
-        <button
-          type="button"
-          onClick={() => setSidebarCollapsed(true)}
-          title="Hide dispatch panel"
-          aria-label="Hide dispatch panel"
-          className="icon-btn absolute top-3 right-3"
-        >
-          <ChevronLeft size={14} strokeWidth={2.5} />
-        </button>
-        <div>
-          <h1 className="text-xl font-semibold t-primary">{t("dispatch.title")}</h1>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>{t("dispatch.subtitle")}</p>
-        </div>
-
-        {error && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(255,77,61,0.08)", border: "1px solid rgba(255,77,61,0.35)", color: "var(--red)" }}>{error}</div>}
-        {success && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(10,228,72,0.08)", border: "1px solid rgba(10,228,72,0.22)", color: "var(--green)" }}>{success}</div>}
-
-        <div className="panel p-3 space-y-2">
-          <button
-            type="button"
-            onClick={() => setLiveFleetOn((v) => !v)}
-            className={`btn-secondary w-full${liveFleetOn ? " active" : ""}`}
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-              <Radar size={14} strokeWidth={2} />
-              Live Fleet {liveFleetOn ? "ON" : "OFF"}
-            </span>
-          </button>
-
-          {liveFleetOn && (
-            <>
-              <div className="seg seg--sm" role="group" aria-label="Filter fleet">
-                {(["dispatched", "idle", "offline", "all"] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setFleetFilter(f)}
-                    aria-pressed={fleetFilter === f}
-                    className={`seg-item${fleetFilter === f ? " is-active" : ""}`}
-                  >
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="text"
-                value={fleetSearch}
-                onChange={(e) => setFleetSearch(e.target.value)}
-                placeholder="Search driver or truck ID..."
-                className="field"
-              />
-              <div className="max-h-56 overflow-y-auto space-y-1">
-                {filteredFleet.length === 0 ? (
-                  <p className="text-xs p-2" style={{ color: "var(--text-dim)" }}>No matching trucks.</p>
-                ) : (
-                  filteredFleet.map((tr) => (
-                    <button
-                      type="button"
-                      key={tr.truck_id}
-                      title="Show on map"
-                      disabled={tr.lat == null || tr.lng == null}
-                      onClick={() => tr.lat != null && tr.lng != null && setTruckFocus([tr.lat, tr.lng])}
-                      className="w-full flex items-center justify-between rounded-md p-2 text-left disabled:opacity-40"
-                      style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
-                    >
-                      <div>
-                        <div className="text-sm t-primary font-medium">{tr.driver_name || "—"}</div>
-                        <div className="flex items-center gap-1 text-xs" style={{ color: "var(--text-dim)" }}>
-                          <span style={{ color: statusColor(tr.status) }}>●</span>
-                          {tr.status} {tr.speed} km/h
-                        </div>
-                      </div>
-                      <span className="flex items-center gap-1.5">
-                        {tr.category === "staff" && (
-                          <span className="vehicle-tag" title="Staff car — excluded from notifications">staff</span>
-                        )}
-                        <span className="truck-id text-xs">{tr.truck_id}</span>
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        <form onSubmit={handleCreateDispatch} className="panel p-4 space-y-4">
-          {/* Step 1 */}
-          <div>
-            <div className="section-label mb-2">
-              <span className="step-badge">1</span>
-              Select Truck(s)
+      {/* Sidebar — one column, two modes, a fixed action bar. */}
+      <form onSubmit={handleCreateDispatch} className="dispatch-panel">
+        <header className="dispatch-panel__head">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold t-primary">{t("dispatch.title")}</h1>
+              <p className="mt-0.5 text-xs" style={{ color: "var(--text-dim)" }}>{t("dispatch.subtitle")}</p>
             </div>
-            {selectedTrucks.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {selectedTrucks.map((id) => (
-                  <span key={id} className="truck-chip">
-                    <span className="truck-id">{id}</span>
-                    <button
-                      type="button"
-                      onClick={() => toggleTruck(id)}
-                      aria-label={`Remove ${id}`}
-                      className="truck-chip__remove"
-                    >
-                      <X size={11} strokeWidth={2.5} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <input
-              type="text"
-              value={truckSearch}
-              onChange={(e) => setTruckSearch(e.target.value)}
-              placeholder="Type truck ID to filter..."
-              className="field mb-2"
-            />
-            <div className="truck-picker">
-              <div className="truck-picker__scroll">
-                {filteredTrucks.length === 0 ? (
-                  <p className="text-xs px-2 py-3 text-center" style={{ color: "var(--text-dim)" }}>No matching trucks.</p>
-                ) : (
-                  filteredTrucks.map((tr) => {
-                    const selected = selectedTrucks.includes(tr.truck_id);
-                    return (
-                      <label
-                        key={tr.truck_id}
-                        className={`truck-option${selected ? " is-selected" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="truck-option__input"
-                          checked={selected}
-                          onChange={() => toggleTruck(tr.truck_id)}
-                        />
-                        <span className="truck-option__box" aria-hidden="true">
-                          <Check size={12} strokeWidth={3} />
-                        </span>
-                        <span
-                          className="truck-option__dot"
-                          style={{ background: statusColor(tr.status) }}
-                          aria-hidden="true"
-                        />
-                        <span
-                          className={`truck-option__name${tr.driver_name ? "" : " truck-option__name--empty"}`}
-                          title={tr.driver_name ?? undefined}
-                        >
-                          {tr.driver_name || "Unnamed driver"}
-                        </span>
-                        <span className="truck-id truck-option__id">{tr.truck_id}</span>
-                      </label>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Step 2 */}
-          <div>
-            <div className="section-label mb-2">
-              <span className="step-badge">2</span>
-              Route
-            </div>
-            <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Starting factory</label>
-            {/* One fixed origin, so this is a value to read, not a control
-                to operate — a disabled select just invites a dead click. */}
-            <p className="field-static mb-3">{FACTORY_NAME}</p>
-
-            <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Destination — client or site name</label>
-            <input
-              type="text"
-              value={siteSearch}
-              onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); }}
-              placeholder="Type client name or town..."
-              className="field mb-2"
-            />
-            <div className="site-picker__count">
-              <span>{siteListOptions.length} site{siteListOptions.length === 1 ? "" : "s"}</span>
-              {selectedSite && <span style={{ color: "var(--green)" }}>1 selected</span>}
-            </div>
-            <div className="site-picker mb-2">
-              <div className="site-picker__scroll" role="radiogroup" aria-label="Destination site">
-                {siteListOptions.length === 0 ? (
-                  <p className="site-picker__empty">
-                    No site matches that search.
-                  </p>
-                ) : (
-                  siteListOptions.map((s) => {
-                    const isSelected = selectedSite?.id === s.id;
-                    return (
-                      <label
-                        key={s.id}
-                        className={`site-option${isSelected ? " is-selected" : ""}`}
-                      >
-                        <input
-                          type="radio"
-                          name="destination-site"
-                          className="site-option__input"
-                          checked={isSelected}
-                          onChange={() => selectSite(s)}
-                        />
-                        <span className="site-option__radio" aria-hidden />
-                        <span className="site-option__body">
-                          <span className="site-option__name" title={s.name}>{s.name}</span>
-                          {s.client && (
-                            <span className="site-option__client" title={s.client}>{s.client}</span>
-                          )}
-                          {s.lat == null && (
-                            <span className="site-option__warn">
-                              <AlertTriangle size={10} strokeWidth={2.5} />
-                              No coordinates
-                            </span>
-                          )}
-                        </span>
-                      </label>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-            <div
-              className="rounded-md px-3 py-2 text-xs mb-1"
-              style={{
-                background: selectedSite ? "rgba(10,228,72,0.08)" : "rgba(255,252,225,0.08)",
-                border: `1px solid ${selectedSite ? "rgba(10,228,72,0.3)" : "rgba(255,252,225,0.25)"}`,
-                color: selectedSite ? "var(--green)" : "var(--accent)",
-              }}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(true)}
+              title="Hide dispatch panel"
+              aria-label="Hide dispatch panel"
+              className="icon-btn"
             >
-              {selectedSite ? `Destination set: ${selectedSite.name}. Ready to dispatch.` : "Choose a destination to prepare the route."}
-            </div>
+              <ChevronLeft size={14} strokeWidth={2.5} />
+            </button>
           </div>
 
-          <button type="submit" disabled={loading} className="btn-primary w-full">
-            {loading ? "Creating..." : selectedTrucks.length > 1 ? `▶ Start Tracking Run (${selectedTrucks.length} trucks)` : "▶ Start Tracking Run"}
-          </button>
-        </form>
-
-        {/* Step 3 */}
-        <div className="panel p-4">
-          <div className="section-label mb-3">
-            <span className="step-badge">3</span>
-            Verify Position ({dispatches.length} active)
+          {/* Creating a run and watching one are different jobs; the panel
+              does one at a time instead of stacking both forever. */}
+          <div className="seg seg--sm mt-3" style={{ display: "flex" }}>
+            <button
+              type="button"
+              onClick={() => setPanelMode("dispatch")}
+              aria-pressed={panelMode === "dispatch"}
+              className={`seg-item${panelMode === "dispatch" ? " is-active" : ""}`}
+              style={{ flex: 1, justifyContent: "center" }}
+            >
+              New run
+            </button>
+            <button
+              type="button"
+              onClick={() => setPanelMode("active")}
+              aria-pressed={panelMode === "active"}
+              className={`seg-item${panelMode === "active" ? " is-active" : ""}`}
+              style={{ flex: 1, justifyContent: "center" }}
+            >
+              Active {dispatches.length > 0 && `(${dispatches.length})`}
+            </button>
           </div>
+        </header>
 
-          {dispatches.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--text-dim)" }}>No active dispatches. Create one above.</p>
-          ) : (
-            <div className="space-y-3">
-              {dispatches.map((d) => (
-                <ActiveDispatchRow
-                  key={d.id}
-                  dispatch={d}
-                  check={checkResults.get(d.id)}
-                  checking={checking === d.truck_id || checking === d.id}
-                  onCheckPosition={() => handleCheckPosition(d.id, d.truck_id)}
-                  onManualCheck={(lat, lng) => handleManualCheck(d.id, lat, lng)}
-                  onStop={() => handleStop(d.id)}
+        <div className="dispatch-panel__body">
+          {error && (
+            <div className="rounded-md p-2.5 text-xs" style={{ background: "rgba(255,77,61,0.08)", border: "1px solid rgba(255,77,61,0.35)", color: "var(--red)" }}>{error}</div>
+          )}
+          {success && (
+            <div className="rounded-md p-2.5 text-xs" style={{ background: "rgba(10,228,72,0.08)", border: "1px solid rgba(10,228,72,0.22)", color: "var(--green)" }}>{success}</div>
+          )}
+
+          {panelMode === "dispatch" ? (
+            <>
+              <section>
+                <div className="psection__head">
+                  <span className="psection__title">Trucks</span>
+                  <span className={`psection__count${selectedTrucks.length ? " psection__count--on" : ""}`}>
+                    {selectedTrucks.length ? `${selectedTrucks.length} selected` : `${visibleTrucks.length} shown`}
+                  </span>
+                </div>
+
+                <div className="seg seg--sm mb-2" style={{ display: "flex" }}>
+                  {(["all", "idle", "dispatched", "offline"] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFleetFilter(f)}
+                      aria-pressed={fleetFilter === f}
+                      className={`seg-item${fleetFilter === f ? " is-active" : ""}`}
+                      style={{ flex: 1, justifyContent: "center" }}
+                    >
+                      {f.charAt(0).toUpperCase() + f.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="text"
+                  value={truckSearch}
+                  onChange={(e) => setTruckSearch(e.target.value)}
+                  placeholder="Search driver or truck ID..."
+                  className="field mb-2"
                 />
-              ))}
-            </div>
+
+                <div className="fleet-list">
+                  {visibleTrucks.length === 0 ? (
+                    <p className="panel-empty" style={{ border: "none" }}>No truck matches that filter.</p>
+                  ) : (
+                    visibleTrucks.map((tr) => {
+                      const selected = selectedTrucks.includes(tr.truck_id);
+                      const locatable = tr.lat != null && tr.lng != null;
+                      return (
+                        <div key={tr.truck_id} className={`fleet-row${selected ? " is-selected" : ""}`}>
+                          <label className="fleet-row__pick">
+                            <input
+                              type="checkbox"
+                              className="fleet-row__input"
+                              checked={selected}
+                              onChange={() => toggleTruck(tr.truck_id)}
+                            />
+                            <span className="fleet-row__box" aria-hidden="true">
+                              <Check size={11} strokeWidth={3} />
+                            </span>
+                            <span className="fleet-row__body">
+                              <span className={`fleet-row__name${tr.driver_name ? "" : " fleet-row__name--empty"}`}>
+                                {tr.driver_name || "Unnamed driver"}
+                              </span>
+                              <span className="fleet-row__meta">
+                                <span className="fleet-row__dot" style={{ background: statusColor(tr.status) }} />
+                                {tr.status}
+                                {tr.status === "moving" && tr.speed != null ? ` · ${Math.round(tr.speed)} km/h` : ""}
+                                {tr.dispatched ? " · on run" : ""}
+                              </span>
+                            </span>
+                            <span className="fleet-row__id">{tr.truck_id}</span>
+                          </label>
+                          <button
+                            type="button"
+                            className="fleet-row__locate"
+                            disabled={!locatable}
+                            title={locatable ? "Centre on map" : "No position"}
+                            aria-label={`Centre ${tr.truck_id} on map`}
+                            onClick={() => locatable && setTruckFocus([tr.lat!, tr.lng!])}
+                          >
+                            <Crosshair size={13} strokeWidth={2} />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+
+              <section>
+                <div className="psection__head">
+                  {/* Every run leaves from the same factory, so the origin is
+                      context on the label rather than a control that cannot
+                      be changed. */}
+                  <span className="psection__title">
+                    Destination
+                    <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: "var(--text-faint)" }}>
+                      {" "}· from {FACTORY_NAME}
+                    </span>
+                  </span>
+                  <span className={`psection__count${selectedSite ? " psection__count--on" : ""}`}>
+                    {selectedSite ? "1 selected" : `${siteListOptions.length} sites`}
+                  </span>
+                </div>
+
+                <input
+                  type="text"
+                  value={siteSearch}
+                  onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); }}
+                  placeholder="Search client or town..."
+                  className="field mb-2"
+                />
+
+                <div className="site-picker">
+                  <div className="site-picker__scroll" role="radiogroup" aria-label="Destination site">
+                    {siteListOptions.length === 0 ? (
+                      <p className="site-picker__empty">No site matches that search.</p>
+                    ) : (
+                      siteListOptions.map((site) => {
+                        const isSelected = selectedSite?.id === site.id;
+                        return (
+                          <label key={site.id} className={`site-option${isSelected ? " is-selected" : ""}`}>
+                            <input
+                              type="radio"
+                              name="destination-site"
+                              className="site-option__input"
+                              checked={isSelected}
+                              onChange={() => selectSite(site)}
+                            />
+                            <span className="site-option__radio" aria-hidden />
+                            <span className="site-option__body">
+                              <span className="site-option__name" title={site.name}>{site.name}</span>
+                              {site.client && (
+                                <span className="site-option__client" title={site.client}>{site.client}</span>
+                              )}
+                              {site.lat == null && (
+                                <span className="site-option__warn">
+                                  <AlertTriangle size={10} strokeWidth={2.5} />
+                                  No coordinates
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </section>
+            </>
+          ) : (
+            <section>
+              <div className="psection__head">
+                <span className="psection__title">Active runs</span>
+                <span className="psection__count">{dispatches.length}</span>
+              </div>
+              {dispatches.length === 0 ? (
+                <p className="panel-empty">
+                  Nothing on the road.<br />Start a run from the New run tab.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {dispatches.map((d) => (
+                    <ActiveRunCard
+                      key={d.id}
+                      dispatch={d}
+                      check={checkResults.get(d.id)}
+                      checking={checking === d.truck_id || checking === d.id}
+                      onCheckPosition={() => handleCheckPosition(d.id, d.truck_id)}
+                      onManualCheck={(lat, lng) => handleManualCheck(d.id, lat, lng)}
+                      onStop={() => handleStop(d.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
           )}
         </div>
-      </div>
+
+        {/* The one thing that never scrolls: what is about to happen,
+            and the button that does it. */}
+        {panelMode === "dispatch" && (
+          <div className="dispatch-panel__action">
+            <div className="dispatch-summary">
+              <span className="dispatch-summary__part">
+                <span className={`dispatch-summary__value${selectedTrucks.length ? " dispatch-summary__value--set" : ""}`}>
+                  {selectedTrucks.length || "No"}
+                </span>
+                truck{selectedTrucks.length === 1 ? "" : "s"}
+              </span>
+              <ArrowRight size={12} strokeWidth={2} style={{ color: "var(--text-faint)", flex: "none" }} />
+              <span className="dispatch-summary__part" style={{ minWidth: 0 }}>
+                <span
+                  className={`dispatch-summary__value${selectedSite ? " dispatch-summary__value--set" : ""}`}
+                  title={selectedSite?.name}
+                >
+                  {selectedSite ? selectedSite.name : "No destination"}
+                </span>
+              </span>
+            </div>
+            <button
+              type="submit"
+              disabled={loading || selectedTrucks.length === 0 || !selectedSite}
+              className="btn-brand w-full"
+            >
+              {loading
+                ? "Dispatching…"
+                : selectedTrucks.length === 0
+                  ? "Select trucks to dispatch"
+                  : !selectedSite
+                    ? "Choose a destination"
+                    : `Dispatch ${selectedTrucks.length} truck${selectedTrucks.length === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        )}
+      </form>
 
       {/* Map */}
       <div className="flex-1 min-w-0">
@@ -524,7 +514,7 @@ export default function DispatchPage() {
   );
 }
 
-function ActiveDispatchRow({
+function ActiveRunCard({
   dispatch,
   check,
   checking,
@@ -539,10 +529,13 @@ function ActiveDispatchRow({
   onManualCheck: (lat: number, lng: number) => void;
   onStop: () => void;
 }) {
+  // The manual-coordinate path is a fallback for when the telemetry feed
+  // goes stale, not something a dispatcher reaches for on every run — so
+  // it stays closed behind one icon instead of a <details> on every card.
+  const [manualOpen, setManualOpen] = useState(false);
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
-  const siteName = dispatch.site?.name ?? "Unknown";
-  const dispName = dispatch.dispatcher?.full_name ?? "Unknown";
+  const siteName = dispatch.site?.name ?? "Unknown destination";
 
   function submitManual() {
     const lat = parseFloat(manualLat);
@@ -551,60 +544,74 @@ function ActiveDispatchRow({
   }
 
   return (
-    <div className="panel-2 p-3 rounded-md">
-      <div className="flex items-center gap-2">
-        <span className="truck-id text-sm">{dispatch.truck_id}</span>
-        <span style={{ color: "var(--text-dim)" }}>→</span>
-        <span className="text-sm t-primary">{siteName}</span>
-      </div>
-      <div className="mt-1 flex gap-3 text-xs" style={{ color: "var(--text-dim)" }}>
-        <span>{formatDateTime(dispatch.dispatched_at)}</span>
-        <span>By: {dispName}</span>
+    <div className="run-card">
+      <div className="run-card__top">
+        <span className="fleet-row__id">{dispatch.truck_id}</span>
+        <ArrowRight size={11} strokeWidth={2} className="run-card__arrow" />
+        <span className="run-card__site" title={siteName}>{siteName}</span>
       </div>
 
-      {check && (
-        <div className="mt-2 flex gap-2 text-xs items-center flex-wrap">
-          <span className={`status-pill ${check.onRoute ? "on-route" : check.onRoute === false ? "off-route" : "pending"}`}>
-            {check.onRoute ? "On route" : check.onRoute === false ? `Off route (${(check.deviationMeters! / 1000).toFixed(1)}km)` : "Pending"}
-          </span>
-          {check.etaSeconds != null && (
-            <span style={{ color: "var(--text-dim)" }}>ETA: {check.etaLabel}{check.etaBasis === "fallback-speed" ? " (est.)" : ""}</span>
-          )}
-          <span style={{ color: "var(--text-dim)" }}>{check.speed} km/h</span>
-        </div>
-      )}
+      <div className="run-card__meta">
+        {check ? (
+          <>
+            <span className={`status-pill ${check.onRoute ? "on-route" : check.onRoute === false ? "off-route" : "pending"}`}>
+              {check.onRoute
+                ? "On route"
+                : check.onRoute === false
+                  ? `Off route · ${(check.deviationMeters! / 1000).toFixed(1)} km`
+                  : "Pending"}
+            </span>
+            {check.etaSeconds != null && <span>ETA {check.etaLabel}{check.etaBasis === "fallback-speed" ? " (est.)" : ""}</span>}
+            {check.speed != null && <span>{check.speed} km/h</span>}
+          </>
+        ) : (
+          <span>Since {formatDateTime(dispatch.dispatched_at)}</span>
+        )}
+      </div>
 
-      <div className="flex gap-2 mt-2">
-        <button onClick={onCheckPosition} disabled={checking} className="btn-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-          {checking ? "..." : (<><Radar size={13} strokeWidth={2} /> Fetch Live Position</>)}
+      <div className="run-card__actions">
+        <button type="button" onClick={onCheckPosition} disabled={checking} className="btn-sm">
+          <Radar size={12} strokeWidth={2} />
+          {checking ? "Checking…" : "Check position"}
         </button>
-        <button onClick={onStop} className="btn-sm danger">Stop</button>
+        <button type="button" onClick={onStop} className="btn-sm danger">
+          <Square size={10} strokeWidth={3} />
+          Stop
+        </button>
+        <button
+          type="button"
+          onClick={() => setManualOpen((v) => !v)}
+          className="icon-btn"
+          style={{ marginLeft: "auto" }}
+          aria-expanded={manualOpen}
+          title="Enter coordinates manually"
+          aria-label="Enter coordinates manually"
+        >
+          <MapPin size={12} strokeWidth={2} />
+        </button>
       </div>
 
-      <details className="mt-2">
-        <summary className="cursor-pointer text-xs" style={{ color: "var(--text-dim)" }}>Paste coordinates manually instead</summary>
-        <div className="flex gap-2 mt-2">
+      {manualOpen && (
+        <div className="run-card__manual">
           <input
             type="text"
+            inputMode="decimal"
             placeholder="Latitude"
             value={manualLat}
             onChange={(e) => setManualLat(e.target.value)}
-            className="w-24 text-xs"
-            style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "4px 6px", color: "var(--text)" }}
           />
           <input
             type="text"
+            inputMode="decimal"
             placeholder="Longitude"
             value={manualLng}
             onChange={(e) => setManualLng(e.target.value)}
-            className="w-24 text-xs"
-            style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "4px 6px", color: "var(--text)" }}
           />
-          <button type="button" onClick={submitManual} disabled={checking} className="btn-sm" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>
-            Check with pasted coordinates
+          <button type="button" onClick={submitManual} disabled={checking} className="btn-sm" style={{ flex: "none" }}>
+            Check
           </button>
         </div>
-      </details>
+      )}
     </div>
   );
 }

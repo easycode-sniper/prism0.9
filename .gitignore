@@ -25,3 +25,13 @@ Thumbs.db
 # Logs
 *.log
 tsconfig.tsbuildinfo
+
+# Agent skills installed via `npx skills add` (emilkowalski/skills et al).
+# skills-lock.json IS committed — it pins each skill to a source and a
+# content hash, so `npx skills@latest add` reproduces this exact set.
+# The installed copies are build output, like node_modules; .claude/skills
+# is only relative symlinks into .agents, which would dangle for anyone
+# who checked them out. Scoped to .claude/skills so project settings in
+# .claude/ stay committable.
+.agents/
+.claude/skills/

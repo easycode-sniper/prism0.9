@@ -12,7 +12,7 @@ import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import type { SiteRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
-import { Radar, Check, X } from "lucide-react";
+import { Radar, Check, X, AlertTriangle, ChevronLeft } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
 // A truck within this distance of a station is treated as "at the pump".
@@ -248,10 +248,10 @@ export default function DispatchPage() {
           type="button"
           onClick={() => setSidebarCollapsed(true)}
           title="Hide dispatch panel"
-          className="absolute top-3 right-3 rounded-md flex items-center justify-center"
-          style={{ width: "22px", height: "22px", background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)", fontSize: ".7rem" }}
+          aria-label="Hide dispatch panel"
+          className="icon-btn absolute top-3 right-3"
         >
-          ◀
+          <ChevronLeft size={14} strokeWidth={2.5} />
         </button>
         <div>
           <h1 className="text-xl font-semibold t-primary">{t("dispatch.title")}</h1>
@@ -265,12 +265,7 @@ export default function DispatchPage() {
           <button
             type="button"
             onClick={() => setLiveFleetOn((v) => !v)}
-            className="w-full py-2 rounded-md text-sm font-semibold"
-            style={{
-              background: liveFleetOn ? "rgba(10,228,72,0.12)" : "var(--panel-2)",
-              border: `1px solid ${liveFleetOn ? "var(--green)" : "var(--line)"}`,
-              color: liveFleetOn ? "var(--green)" : "var(--text-dim)",
-            }}
+            className={`btn-secondary w-full${liveFleetOn ? " active" : ""}`}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
               <Radar size={14} strokeWidth={2} />
@@ -280,12 +275,17 @@ export default function DispatchPage() {
 
           {liveFleetOn && (
             <>
-              <div className="flex gap-3 text-xs" style={{ color: "var(--text-dim)" }}>
+              <div className="seg seg--sm" role="group" aria-label="Filter fleet">
                 {(["dispatched", "idle", "offline", "all"] as const).map((f) => (
-                  <label key={f} className="flex items-center gap-1 cursor-pointer">
-                    <input type="radio" name="fleet-filter" checked={fleetFilter === f} onChange={() => setFleetFilter(f)} />
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFleetFilter(f)}
+                    aria-pressed={fleetFilter === f}
+                    className={`seg-item${fleetFilter === f ? " is-active" : ""}`}
+                  >
                     {f.charAt(0).toUpperCase() + f.slice(1)}
-                  </label>
+                  </button>
                 ))}
               </div>
               <input
@@ -293,8 +293,7 @@ export default function DispatchPage() {
                 value={fleetSearch}
                 onChange={(e) => setFleetSearch(e.target.value)}
                 placeholder="Search driver or truck ID..."
-                className="search-input w-full"
-                style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+                className="field"
               />
               <div className="max-h-56 overflow-y-auto space-y-1">
                 {filteredFleet.length === 0 ? (
@@ -335,7 +334,7 @@ export default function DispatchPage() {
           {/* Step 1 */}
           <div>
             <div className="section-label mb-2">
-              <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--accent)" }}>1</span>
+              <span className="step-badge">1</span>
               Select Truck(s)
             </div>
             {selectedTrucks.length > 0 && (
@@ -360,8 +359,7 @@ export default function DispatchPage() {
               value={truckSearch}
               onChange={(e) => setTruckSearch(e.target.value)}
               placeholder="Type truck ID to filter..."
-              className="search-input w-full mb-2"
-              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+              className="field mb-2"
             />
             <div className="truck-picker">
               <div className="truck-picker__scroll">
@@ -407,17 +405,13 @@ export default function DispatchPage() {
           {/* Step 2 */}
           <div>
             <div className="section-label mb-2">
-              <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--accent)" }}>2</span>
+              <span className="step-badge">2</span>
               Route
             </div>
             <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Starting factory</label>
-            <select
-              disabled
-              className="w-full mb-3"
-              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
-            >
-              <option>{FACTORY_NAME}</option>
-            </select>
+            {/* One fixed origin, so this is a value to read, not a control
+                to operate — a disabled select just invites a dead click. */}
+            <p className="field-static mb-3">{FACTORY_NAME}</p>
 
             <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Destination — client or site name</label>
             <input
@@ -425,26 +419,52 @@ export default function DispatchPage() {
               value={siteSearch}
               onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); }}
               placeholder="Type client name or town..."
-              className="search-input w-full mb-2"
-              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+              className="field mb-2"
             />
-            <select
-              size={6}
-              value={selectedSite?.id ?? ""}
-              onChange={(e) => {
-                const s = sites.find((site) => site.id === e.target.value);
-                if (s) selectSite(s);
-              }}
-              className="w-full mb-2"
-              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", color: "var(--text)", fontSize: ".82rem" }}
-            >
-              <option value="" disabled>-- Select Destination Site --</option>
-              {siteListOptions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}{s.client ? ` — ${s.client}` : ""}{s.lat == null ? " (no coords)" : ""}
-                </option>
-              ))}
-            </select>
+            <div className="site-picker__count">
+              <span>{siteListOptions.length} site{siteListOptions.length === 1 ? "" : "s"}</span>
+              {selectedSite && <span style={{ color: "var(--green)" }}>1 selected</span>}
+            </div>
+            <div className="site-picker mb-2">
+              <div className="site-picker__scroll" role="radiogroup" aria-label="Destination site">
+                {siteListOptions.length === 0 ? (
+                  <p className="site-picker__empty">
+                    No site matches that search.
+                  </p>
+                ) : (
+                  siteListOptions.map((s) => {
+                    const isSelected = selectedSite?.id === s.id;
+                    return (
+                      <label
+                        key={s.id}
+                        className={`site-option${isSelected ? " is-selected" : ""}`}
+                      >
+                        <input
+                          type="radio"
+                          name="destination-site"
+                          className="site-option__input"
+                          checked={isSelected}
+                          onChange={() => selectSite(s)}
+                        />
+                        <span className="site-option__radio" aria-hidden />
+                        <span className="site-option__body">
+                          <span className="site-option__name" title={s.name}>{s.name}</span>
+                          {s.client && (
+                            <span className="site-option__client" title={s.client}>{s.client}</span>
+                          )}
+                          {s.lat == null && (
+                            <span className="site-option__warn">
+                              <AlertTriangle size={10} strokeWidth={2.5} />
+                              No coordinates
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
             <div
               className="rounded-md px-3 py-2 text-xs mb-1"
               style={{
@@ -465,7 +485,7 @@ export default function DispatchPage() {
         {/* Step 3 */}
         <div className="panel p-4">
           <div className="section-label mb-3">
-            <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--accent)" }}>3</span>
+            <span className="step-badge">3</span>
             Verify Position ({dispatches.length} active)
           </div>
 

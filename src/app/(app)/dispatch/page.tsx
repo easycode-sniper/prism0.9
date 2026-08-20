@@ -273,7 +273,7 @@ export default function DispatchPage() {
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-              <Radar size={14} strokeWidth={2.25} />
+              <Radar size={14} strokeWidth={2} />
               Live Fleet {liveFleetOn ? "ON" : "OFF"}
             </span>
           </button>
@@ -294,7 +294,7 @@ export default function DispatchPage() {
                 onChange={(e) => setFleetSearch(e.target.value)}
                 placeholder="Search driver or truck ID..."
                 className="search-input w-full"
-                style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+                style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
               />
               <div className="max-h-56 overflow-y-auto space-y-1">
                 {filteredFleet.length === 0 ? (
@@ -361,7 +361,7 @@ export default function DispatchPage() {
               onChange={(e) => setTruckSearch(e.target.value)}
               placeholder="Type truck ID to filter..."
               className="search-input w-full mb-2"
-              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
             />
             <div className="truck-picker">
               <div className="truck-picker__scroll">
@@ -414,7 +414,7 @@ export default function DispatchPage() {
             <select
               disabled
               className="w-full mb-3"
-              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
             >
               <option>{FACTORY_NAME}</option>
             </select>
@@ -426,7 +426,7 @@ export default function DispatchPage() {
               onChange={(e) => { setSiteSearch(e.target.value); setSelectedSite(null); }}
               placeholder="Type client name or town..."
               className="search-input w-full mb-2"
-              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
+              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "6px 10px", color: "var(--text)", fontSize: ".82rem" }}
             />
             <select
               size={6}
@@ -436,7 +436,7 @@ export default function DispatchPage() {
                 if (s) selectSite(s);
               }}
               className="w-full mb-2"
-              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "6px", color: "var(--text)", fontSize: ".82rem" }}
+              style={{ background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", color: "var(--text)", fontSize: ".82rem" }}
             >
               <option value="" disabled>-- Select Destination Site --</option>
               {siteListOptions.map((s) => (
@@ -556,7 +556,7 @@ function ActiveDispatchRow({
 
       <div className="flex gap-2 mt-2">
         <button onClick={onCheckPosition} disabled={checking} className="btn-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-          {checking ? "..." : (<><Radar size={13} strokeWidth={2.25} /> Fetch Live Position</>)}
+          {checking ? "..." : (<><Radar size={13} strokeWidth={2} /> Fetch Live Position</>)}
         </button>
         <button onClick={onStop} className="btn-sm danger">Stop</button>
       </div>
@@ -570,7 +570,7 @@ function ActiveDispatchRow({
             value={manualLat}
             onChange={(e) => setManualLat(e.target.value)}
             className="w-24 text-xs"
-            style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "4px", padding: "4px 6px", color: "var(--text)" }}
+            style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "4px 6px", color: "var(--text)" }}
           />
           <input
             type="text"
@@ -578,7 +578,7 @@ function ActiveDispatchRow({
             value={manualLng}
             onChange={(e) => setManualLng(e.target.value)}
             className="w-24 text-xs"
-            style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "4px", padding: "4px 6px", color: "var(--text)" }}
+            style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: "4px 6px", color: "var(--text)" }}
           />
           <button type="button" onClick={submitManual} disabled={checking} className="btn-sm" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>
             Check with pasted coordinates

@@ -95,7 +95,7 @@ export default function LoginPage() {
                 aria-pressed={showPassword}
                 tabIndex={-1}
               >
-                {showPassword ? <EyeOff size={15} strokeWidth={2.25} /> : <Eye size={15} strokeWidth={2.25} />}
+                {showPassword ? <EyeOff size={15} strokeWidth={2} /> : <Eye size={15} strokeWidth={2} />}
               </button>
             </div>
 

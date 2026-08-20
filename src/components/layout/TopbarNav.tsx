@@ -25,7 +25,7 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
   return (
     <>
       <div className="brand" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        <div className="brand-mark" style={{ width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "10px", background: "var(--panel-3)", border: "1px solid var(--line)" }}>
+        <div className="brand-mark" style={{ width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--r-md)", background: "var(--panel-3)", border: "1px solid var(--line)" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/omd-logo.png" alt="OMD" width={24} height={24} style={{ objectFit: "contain" }} />
         </div>
@@ -35,16 +35,25 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
         </div>
       </div>
 
-      <nav id="tabs" style={{ display: "flex", gap: "4px", background: "var(--well-bg)", padding: "4px", borderRadius: "14px", boxShadow: "var(--well-shadow)" }}>
+      <nav id="tabs" className="seg">
         {NAV_ITEMS.map((item) => (
-          <Link key={item.href} href={item.href} className="tab-btn" style={tabStyle(pathname === item.href)}>
-            <item.icon size={15} strokeWidth={2.25} />
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`seg-item${pathname === item.href ? " is-active" : ""}`}
+            aria-current={pathname === item.href ? "page" : undefined}
+          >
+            <item.icon size={15} strokeWidth={2} />
             {t(item.key)}
           </Link>
         ))}
         {isAdmin && (
-          <Link href="/admin" className="tab-btn" style={tabStyle(pathname.startsWith("/admin"))}>
-            <Settings size={15} strokeWidth={2.25} />
+          <Link
+            href="/admin"
+            className={`seg-item${pathname.startsWith("/admin") ? " is-active" : ""}`}
+            aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+          >
+            <Settings size={15} strokeWidth={2} />
             {t("nav.admin")}
           </Link>
         )}
@@ -70,45 +79,18 @@ export function LanguageSwitcher() {
   ];
 
   return (
-    <div style={{ display: "flex", gap: "2px", background: "var(--well-bg)", boxShadow: "var(--well-shadow)", borderRadius: "10px", padding: "3px" }}>
+    <div className="seg seg--sm">
       {options.map((opt) => (
         <button
           key={opt.code}
+          type="button"
           onClick={() => setLanguage(opt.code)}
-          style={{
-            background: language === opt.code ? "var(--accent)" : "transparent",
-            color: language === opt.code ? "var(--bg)" : "var(--text-dim)",
-            border: "none",
-            borderRadius: "7px",
-            padding: "4px 9px",
-            fontSize: ".72rem",
-            fontWeight: 600,
-            cursor: "pointer",
-            boxShadow: "none",
-          }}
+          className={`seg-item${language === opt.code ? " is-active" : ""}`}
+          aria-pressed={language === opt.code}
         >
           {opt.label}
         </button>
       ))}
     </div>
   );
-}
-
-function tabStyle(active: boolean): React.CSSProperties {
-  return {
-    background: active ? "var(--accent)" : "transparent",
-    border: "none",
-    color: active ? "var(--bg)" : "var(--text-dim)",
-    fontFamily: "var(--font-sans)",
-    fontSize: ".85rem",
-    fontWeight: 600,
-    padding: "8px 16px",
-    borderRadius: "11px",
-    cursor: "pointer",
-    transition: ".15s",
-    textDecoration: "none",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
-  };
 }

@@ -484,23 +484,26 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
 
   return (
     <div className="relative h-full w-full">
+      {/* Floats over live tiles, so it is the documented .glass--float
+          exception: a surface step cannot separate a panel from imagery
+          moving underneath it. */}
       <div
+        className="glass glass--float"
         style={{
           position: "absolute",
           top: 10,
-          left: 10,
+          left: 52,
           zIndex: 1000,
           display: "flex",
-          gap: "4px",
-          background: "var(--panel-2)",
-          border: "1px solid var(--line)",
-          borderRadius: "8px",
+          alignItems: "center",
+          gap: "2px",
+          borderRadius: "var(--r-pill)",
           padding: "4px",
         }}
       >
         <ToggleButton active={baseLayer === "dark"} onClick={() => toggleBaseLayer("dark")} label="Dark" icon={Moon} />
         <ToggleButton active={baseLayer === "satellite"} onClick={() => toggleBaseLayer("satellite")} label="Satellite" icon={SatelliteIcon} />
-        <span style={{ width: 1, background: "var(--line)", margin: "2px 2px" }} />
+        <span aria-hidden style={{ width: 1, alignSelf: "stretch", background: "var(--line)", margin: "0 4px" }} />
         <ToggleButton active={showZones} onClick={toggleZones} label="Zones" icon={MapPin} />
         <ToggleButton active={showNames} onClick={toggleNames} label="Names" icon={Tag} />
         <ToggleButton active={showStations} onClick={toggleStations} label="Stations" icon={Fuel} />
@@ -525,22 +528,11 @@ function ToggleButton({
     <button
       type="button"
       onClick={onClick}
-      style={{
-        background: active ? "var(--accent)" : "transparent",
-        color: active ? "var(--bg)" : "var(--text-dim)",
-        border: "none",
-        borderRadius: "5px",
-        padding: "5px 9px",
-        fontSize: ".72rem",
-        fontWeight: 600,
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "5px",
-      }}
+      aria-pressed={active}
+      className={`seg-item${active ? " is-active" : ""}`}
+      style={{ padding: "5px 10px", fontSize: ".72rem" }}
     >
-      <Icon size={13} strokeWidth={2.25} />
+      <Icon size={13} strokeWidth={2} />
       {label}
     </button>
   );

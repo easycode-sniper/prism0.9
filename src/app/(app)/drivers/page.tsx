@@ -130,7 +130,7 @@ export default function DriversPage() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name, phone or town…"
           className="t-primary placeholder-current"
-          style={{ maxWidth: "300px", background: "var(--well-bg)", boxShadow: "var(--well-shadow)", border: "none", borderRadius: "11px", padding: "8px 13px", fontSize: ".83rem" }}
+          style={{ maxWidth: "300px", background: "var(--well-bg)", boxShadow: "var(--well-shadow)", border: "none", borderRadius: "var(--r-md)", padding: "8px 13px", fontSize: ".83rem" }}
         />
         {([
           ["all", "All"],
@@ -145,7 +145,7 @@ export default function DriversPage() {
               boxShadow: "var(--well-shadow)",
               color: filter === value ? "var(--bg)" : "var(--text-dim)",
               border: "none",
-              borderRadius: "11px",
+              borderRadius: "var(--r-md)",
               padding: "8px 14px",
               fontSize: ".78rem",
               fontWeight: 600,

@@ -92,5 +92,5 @@ function NotificationIcon({ kind }: { kind: NotificationRecord["kind"] }) {
     hq_arrival: { icon: ParkingCircle, color: "var(--cyan)" },
   };
   const { icon: Icon, color } = config[kind];
-  return <Icon size={16} strokeWidth={2.25} color={color} />;
+  return <Icon size={16} strokeWidth={2} color={color} />;
 }

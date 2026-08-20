@@ -95,7 +95,7 @@ export default function HistoryPage() {
             onClick={printDailySummary}
             className="inline-flex items-center gap-2 rounded-md border bd px-3 py-1.5 text-sm t-primary transition bg-raised-hover"
           >
-            <Printer size={14} strokeWidth={2.25} /> Print Daily Summary
+            <Printer size={14} strokeWidth={2} /> Print Daily Summary
           </button>
           {records.length > 0 && (
             <button

@@ -10,6 +10,7 @@ import { getDayStats, type DayStats } from "@/lib/supabase/dayStats";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { CHART_COLORS, doughnutOptions, installChartDefaults } from "@/lib/chartTheme";
 import { formatTime } from "@/lib/format";
 
 // A truck within this distance of a station is treated as "at the pump".
@@ -48,6 +49,7 @@ function classifyTruckLocation(
 }
 
 ChartJS.register(ArcElement, Tooltip, Legend);
+installChartDefaults();
 
 export default function DashboardPage() {
   const { t } = useTranslation();
@@ -97,15 +99,7 @@ export default function DashboardPage() {
 
   // Chart.js renders to canvas and cannot resolve var(--token), so the
   // taxonomy is repeated here as literals. Keep in step with globals.css.
-  const CHART = {
-    green: "#0ae448",
-    amber: "#ff8709",
-    red: "#ff4d3d",
-    cyan: "#00bae2",
-    pink: "#fec5fb",
-    dim: "#7c7c6f",
-    empty: "#42433d",
-  };
+  const CHART = CHART_COLORS;
 
   const statusChart = {
     labels: ["Moving", "Idle/Stopped", "Offline/No Signal"],
@@ -161,13 +155,7 @@ export default function DashboardPage() {
     }],
   };
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'bottom' as const, labels: { color: '#fffce1', font: { size: 11 } } },
-    },
-  };
+  const chartOptions = doughnutOptions;
 
   return (
     <div style={{ padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
@@ -238,7 +226,7 @@ export default function DashboardPage() {
             <ul style={{ marginTop: '8px', fontSize: '.78rem', color: 'var(--text-dim)', listStyle: 'none', padding: 0 }}>
               {fuelingTrucks.map((f) => (
                 <li key={f.truckId} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Truck size={13} strokeWidth={2.25} />
+                  <Truck size={13} strokeWidth={2} />
                   <strong style={{ color: 'var(--amber)' }}>{f.truckId}</strong> — {f.stationName}
                 </li>
               ))}
@@ -292,7 +280,7 @@ export default function DashboardPage() {
                   <td style={{ padding: '8px 6px' }}>
                     <span
                       style={{
-                        padding: '3px 10px', borderRadius: '20px', fontSize: '.78rem', fontWeight: 600,
+                        padding: '3px 10px', borderRadius: 'var(--r-lg)', fontSize: '.78rem', fontWeight: 600,
                         background: d.score >= 90 ? 'rgba(10,228,72,.15)' : d.score >= 70 ? 'rgba(255,252,225,.15)' : 'rgba(255,77,61,.15)',
                         color: d.score >= 90 ? 'var(--green)' : d.score >= 70 ? 'var(--accent)' : 'var(--red)',
                       }}

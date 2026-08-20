@@ -123,7 +123,7 @@ export default function ReportsPage() {
   const inputStyle: React.CSSProperties = {
     background: "var(--panel-2)",
     border: "1px solid var(--line)",
-    borderRadius: "6px",
+    borderRadius: "var(--r-sm)",
     padding: "6px 10px",
     color: "var(--text)",
     fontSize: ".82rem",

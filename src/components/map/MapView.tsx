@@ -165,14 +165,14 @@ function buildSiteIcon(): L.DivIcon {
 function buildClusterIcon(gradient: string) {
   return (cluster: L.MarkerCluster) =>
     L.divIcon({
-      html: `<div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:.85rem;color:#fff;border:2px solid rgba(255,255,255,.85);box-shadow:0 2px 8px rgba(0,0,0,.4);background:${gradient};">${cluster.getChildCount()}</div>`,
+      html: `<div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:.85rem;color:#0e100f;border:2px solid rgba(255,252,225,.85);box-shadow:0 2px 8px rgba(0,0,0,.45);background:${gradient};">${cluster.getChildCount()}</div>`,
       className: "",
       iconSize: [34, 34],
     });
 }
 
 const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fec5fb, #f79bf1)";
-const TRUCK_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fffce1, #7c7c6f)";
+const TRUCK_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fffce1, #95958a)";
 const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #5fd8f0, #00bae2)";
 
 function buildStationIcon(occupied: boolean): L.DivIcon {

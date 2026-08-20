@@ -258,7 +258,7 @@ export default function DispatchPage() {
           <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>{t("dispatch.subtitle")}</p>
         </div>
 
-        {error && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.35)", color: "var(--red)" }}>{error}</div>}
+        {error && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(255,77,61,0.08)", border: "1px solid rgba(255,77,61,0.35)", color: "var(--red)" }}>{error}</div>}
         {success && <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(10,228,72,0.08)", border: "1px solid rgba(10,228,72,0.22)", color: "var(--green)" }}>{success}</div>}
 
         <div className="panel p-3 space-y-2">
@@ -267,7 +267,7 @@ export default function DispatchPage() {
             onClick={() => setLiveFleetOn((v) => !v)}
             className="w-full py-2 rounded-md text-sm font-semibold"
             style={{
-              background: liveFleetOn ? "rgba(21,156,131,0.12)" : "var(--panel-2)",
+              background: liveFleetOn ? "rgba(10,228,72,0.12)" : "var(--panel-2)",
               border: `1px solid ${liveFleetOn ? "var(--green)" : "var(--line)"}`,
               color: liveFleetOn ? "var(--green)" : "var(--text-dim)",
             }}
@@ -448,8 +448,8 @@ export default function DispatchPage() {
             <div
               className="rounded-md px-3 py-2 text-xs mb-1"
               style={{
-                background: selectedSite ? "rgba(21,156,131,0.08)" : "rgba(88,101,242,0.08)",
-                border: `1px solid ${selectedSite ? "rgba(21,156,131,0.3)" : "rgba(88,101,242,0.25)"}`,
+                background: selectedSite ? "rgba(10,228,72,0.08)" : "rgba(255,252,225,0.08)",
+                border: `1px solid ${selectedSite ? "rgba(10,228,72,0.3)" : "rgba(255,252,225,0.25)"}`,
                 color: selectedSite ? "var(--green)" : "var(--accent)",
               }}
             >

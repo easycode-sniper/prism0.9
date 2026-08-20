@@ -172,7 +172,7 @@ export default function ReportsPage() {
       </div>
 
       {error && (
-        <div className="mt-4 rounded-md p-3 text-sm" style={{ background: "rgba(248,113,113,.12)", color: "var(--red)" }}>
+        <div className="mt-4 rounded-md p-3 text-sm" style={{ background: "rgba(255,77,61,.12)", color: "var(--red)" }}>
           {error}
         </div>
       )}

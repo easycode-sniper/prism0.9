@@ -33,8 +33,8 @@
   /* Type. Cream, not white: #ffffff on this canvas is the single most
      common way to lose the warmth the palette is built on. */
   --text: #fffce1;
-  --text-dim: #7c7c6f;
-  --text-faint: #5c5d55;
+  --text-dim: #95958a;
+  --text-faint: #8f8f85;
 
   /* ── Status taxonomy ────────────────────────────────────────
      One hue per vehicle state, never reused for chrome or decoration.
@@ -210,7 +210,10 @@ a, button, input, select {
 
 .placeholder-current::placeholder { color: var(--text-dim); opacity: .75; }
 
-.t-faint { color: color-mix(in srgb, var(--text-dim) 70%, transparent); }
+/* Solid rather than a fade to transparent: mixing toward the canvas put
+   the em-dash placeholders at 3.2:1, and they do carry meaning — they are
+   how a row says it has no destination. */
+.t-faint { color: var(--text-faint); }
 
 .bd { border-color: var(--line); }
 
@@ -974,4 +977,11 @@ html[dir="rtl"] table { text-align: right; }
   border-color: var(--accent);
   color: var(--bg);
   background: var(--accent);
+}
+
+/* Native select popups are drawn by the platform and do not inherit the
+   control's colours, so the options need painting explicitly. */
+select option {
+  background: var(--panel-2);
+  color: var(--text);
 }

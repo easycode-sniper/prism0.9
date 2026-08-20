@@ -65,7 +65,7 @@ export default function AdminPage() {
         <input type="file" accept=".kml" onChange={handleFileChange} disabled={uploading} />
         {uploading && <p className="mt-2 text-sm" style={{ color: "var(--text-dim)" }}>Parsing and matching…</p>}
         {error && (
-          <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "var(--red-subtle, rgba(248,113,113,0.08))", border: "1px solid rgba(248,113,113,0.35)", color: "var(--red)" }}>
+          <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "var(--red-subtle, rgba(255,77,61,0.08))", border: "1px solid rgba(255,77,61,0.35)", color: "var(--red)" }}>
             {error}
           </div>
         )}

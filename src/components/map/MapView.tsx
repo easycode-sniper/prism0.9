@@ -8,7 +8,6 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { Moon, Satellite as SatelliteIcon, MapPin, Tag, Fuel } from "lucide-react";
 import { formatAge } from "@/lib/format";
-import { useTheme } from "@/lib/theme/ThemeProvider";
 
 // Leaflet markers/popups are raw HTML strings, not React — these are
 // inline stroke-style SVGs (lucide's visual language: 24x24, stroke
@@ -91,10 +90,10 @@ const SATELLITE_LABELS_TILES = "https://server.arcgisonline.com/ArcGIS/rest/serv
 // to hold up against both the dark and light basemaps, so they are not
 // theme tokens and should not become them.
 function statusColor(status: TruckMarkerData["status"], offRoute?: boolean): string {
-  if (offRoute) return "#d92d42";
-  if (status === "moving") return "#159c83";
-  if (status === "idle") return "#167d8d";
-  return "#6b7280";
+  if (offRoute) return "#ff4d3d";
+  if (status === "moving") return "#0ae448";
+  if (status === "idle") return "#ff8709";
+  return "#7c7c6f";
 }
 
 // The same status as popup text, which sits on --panel rather than on
@@ -104,7 +103,7 @@ function statusColor(status: TruckMarkerData["status"], offRoute?: boolean): str
 function statusTextColor(status: TruckMarkerData["status"], offRoute?: boolean): string {
   if (offRoute) return "var(--red)";
   if (status === "moving") return "var(--green)";
-  if (status === "idle") return "var(--cyan)";
+  if (status === "idle") return "var(--amber)";
   return "var(--text-dim)";
 }
 
@@ -128,8 +127,8 @@ function buildTruckIcon(
   const color = statusColor(status, offRoute);
   const shape =
     course != null
-      ? `<svg width="22" height="22" viewBox="0 0 24 24" style="transform:rotate(${course}deg); filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));"><path d="M12 1.5 L20 21 L12 16 L4 21 Z" fill="${color}" stroke="#0a0a14" stroke-width="1.75" stroke-linejoin="round"/></svg>`
-      : `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:${offRoute ? 3 : 1}px solid ${offRoute ? "#f87171" : "rgba(255,255,255,.85)"};box-shadow:0 0 6px ${color};"></div>`;
+      ? `<svg width="22" height="22" viewBox="0 0 24 24" style="transform:rotate(${course}deg); filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));"><path d="M12 1.5 L20 21 L12 16 L4 21 Z" fill="${color}" stroke="#0e100f" stroke-width="1.75" stroke-linejoin="round"/></svg>`
+      : `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:${offRoute ? 3 : 1}px solid ${offRoute ? "#ff4d3d" : "rgba(255,252,225,.85)"};box-shadow:0 0 6px ${color};"></div>`;
 
   const label = labelText
     ? `<div style="position:absolute; bottom:26px; left:50%; transform:translateX(-50%); white-space:nowrap; background:#fff; color:#222; font-size:11px; font-weight:600; padding:2px 6px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.5); pointer-events:none;">${labelText}</div>`
@@ -153,7 +152,7 @@ function buildLandmarkIcon(svg: string, color: string): L.DivIcon {
 
 function buildSiteIcon(): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:9px;height:9px;border-radius:50%;background:#6d5bff;border:1px solid rgba(255,255,255,.7);"></div>`,
+    html: `<div style="width:9px;height:9px;border-radius:50%;background:#fec5fb;border:1px solid rgba(255,252,225,.7);"></div>`,
     className: "",
     iconSize: [9, 9],
     iconAnchor: [4, 4],
@@ -172,13 +171,13 @@ function buildClusterIcon(gradient: string) {
     });
 }
 
-const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #ffcf4d, #ffb703)";
-const TRUCK_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #a855f7, #6d5bff)";
-const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fb923c, #dc2626)";
+const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fec5fb, #f79bf1)";
+const TRUCK_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fffce1, #7c7c6f)";
+const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #5fd8f0, #00bae2)";
 
 function buildStationIcon(occupied: boolean): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#f59e0b" : "#334155"};border:2px solid rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;color:#fff;">${SVG_ICONS.fuel}</div>`,
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#ff8709" : "#42433d"};border:2px solid rgba(255,252,225,.8);display:flex;align-items:center;justify-content:center;color:#0e100f;">${SVG_ICONS.fuel}</div>`,
     className: "",
     iconSize: [16, 16],
     iconAnchor: [8, 8],
@@ -292,7 +291,6 @@ function getOrCreateMapCore(): MapCore {
 export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], routeLine = null, focusPoint = null }: MapViewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const { theme } = useTheme();
   const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">(() => getOrCreateMapCore().ui.baseLayer);
   const [showZones, setShowZones] = useState(() => getOrCreateMapCore().ui.showZones);
   const [showNames, setShowNames] = useState(() => getOrCreateMapCore().ui.showNames);
@@ -311,28 +309,26 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     };
   }, []);
 
-  // Base layer switching (basemap vs satellite + labels overlay). The
-  // toggle picks the KIND of map; the theme picks which basemap that is,
-  // so a light UI never sits over a near-black map.
+  // Base layer switching (basemap vs satellite + labels overlay). The app
+  // is dark-only now, so the basemap is always the dark one — the light
+  // tile layer is kept built but unused rather than deleted, because it
+  // costs nothing idle and is the whole of what a light mode would need.
   useEffect(() => {
     const { map, tileLayers } = getOrCreateMapCore();
     core!.ui.baseLayer = baseLayer;
 
-    const basemap = theme === "light" ? tileLayers.light : tileLayers.dark;
-    const otherBasemap = theme === "light" ? tileLayers.dark : tileLayers.light;
-
     if (baseLayer === "dark") {
       map.removeLayer(tileLayers.satellite);
       map.removeLayer(tileLayers.satelliteLabels);
-      map.removeLayer(otherBasemap);
-      if (!map.hasLayer(basemap)) basemap.addTo(map);
+      map.removeLayer(tileLayers.light);
+      if (!map.hasLayer(tileLayers.dark)) tileLayers.dark.addTo(map);
     } else {
       map.removeLayer(tileLayers.dark);
       map.removeLayer(tileLayers.light);
       if (!map.hasLayer(tileLayers.satellite)) tileLayers.satellite.addTo(map);
       if (!map.hasLayer(tileLayers.satelliteLabels)) tileLayers.satelliteLabels.addTo(map);
     }
-  }, [baseLayer, theme]);
+  }, [baseLayer]);
 
   // Zones + site markers visibility
   useEffect(() => {
@@ -389,7 +385,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       const marker = L.marker([s.lat, s.lng], { icon: buildSiteIcon() });
       marker.bindPopup(
         `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text);">
-          <strong style="color: var(--purple);">${s.name}</strong>${s.client ? `<br>${s.client}` : ""}
+          <strong style="color: var(--pink);">${s.name}</strong>${s.client ? `<br>${s.client}` : ""}
         </div>`
       );
       siteLayer.addLayer(marker);
@@ -409,7 +405,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       const marker = L.marker([s.lat, s.lng], { icon: buildStationIcon(!!s.truckHere) });
       marker.bindPopup(
         `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text);">
-          <strong style="color: var(--amber); display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${s.name}</strong>${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${s.truckHere} fueling</div>` : ""}
+          <strong style="color: var(--cyan); display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${s.name}</strong>${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${s.truckHere} fueling</div>` : ""}
         </div>`
       );
       stationLayer.addLayer(marker);
@@ -422,7 +418,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     zonesLayer.clearLayers();
 
     for (const z of zones) {
-      const color = z.kind === "factory" ? "#6d5bff" : "#22d3ee";
+      const color = z.kind === "factory" ? "#fec5fb" : "#00bae2";
       const shape = z.ring
         ? L.polygon(z.ring, { color, weight: 2, fillOpacity: 0.12 })
         : z.centerLat != null && z.centerLng != null && z.radiusMeters != null
@@ -454,7 +450,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       if (!point) continue;
 
       const marker = L.marker(point, {
-        icon: buildLandmarkIcon(isFactory ? SVG_ICONS.factory : SVG_ICONS.parking, isFactory ? "#6d5bff" : "#22d3ee"),
+        icon: buildLandmarkIcon(isFactory ? SVG_ICONS.factory : SVG_ICONS.parking, isFactory ? "#fec5fb" : "#00bae2"),
       });
       marker.bindPopup(`<strong style="color:var(--cyan);">${z.name}</strong>`);
       landmarksLayer.addLayer(marker);
@@ -477,7 +473,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     }
 
     if (routeLine && routeLine.length >= 2) {
-      c.routeLayer = L.polyline(routeLine, { color: "#22d3ee", weight: 4, opacity: 0.85 }).addTo(c.map);
+      c.routeLayer = L.polyline(routeLine, { color: "#00bae2", weight: 4, opacity: 0.85 }).addTo(c.map);
     }
   }, [routeLine]);
 

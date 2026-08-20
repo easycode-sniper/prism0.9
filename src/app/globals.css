@@ -1,137 +1,99 @@
 @import "tailwindcss";
 
-/* ── Theme tokens ──────────────────────────────────────────────
-   Dark is the default and the operational norm. Light exists because
-   the parc office is bright during the day; user_settings.theme has
-   carried a 'light' option since the first migration.
+/* ── Design tokens ────────────────────────────────────────────
+   Dark only. The light theme was retired with this overhaul: this is a
+   night-and-day dispatch tool that lives on a single dark stage, and a
+   second palette was doubling the surface area of every colour decision
+   for a mode the operators had stopped switching into.
 
-   Every colour the app paints resolves through one of these. That is
-   what makes the toggle a token swap rather than a second stylesheet —
-   and it is also why the values below are the only place a colour
-   decision lives. Status colours are re-derived rather than reused for
-   light: #22d3ee on white is roughly 1.9:1 and unreadable, so each has
-   a darker sibling that keeps the same meaning. */
+   The organising rule, borrowed from the reference language: COLOUR IS
+   TAXONOMY, NOT DECORATION. Chrome — buttons, borders, focus, links —
+   is achromatic cream on near-black. Every hue in the palette below is
+   spoken for by a vehicle state, so a coloured pixel on this screen
+   always means something about a truck. That is why there is no indigo
+   primary any more: chrome was competing with data for the same channel.
+
+   Depth is a surface step plus a hairline, never a drop shadow. The one
+   exception is documented on .glass--float, which floats over live map
+   tiles and needs real separation from them. */
 :root {
-  --bg: #0a0a14;
-  --panel: #12121f;
-  --panel-2: #191929;
-  --panel-3: #1f1f34;
-  --line: #26263c;
-  --text: #e7e7f5;
-  --text-dim: #8f8fb0;
-  --indigo: #5865f2;
-  --purple: #a855f7;
-  --amber: #ffb703;
-  --cyan: #22d3ee;
-  --red: #f87171;
-  --green: #4ade80;
+  /* Stage and surface steps */
+  --bg: #0e100f;
+  --panel: #191919;
+  --panel-2: #1f201e;
+  --panel-3: #262724;
+  --surface: #191919;
+  --surface-raised: rgba(255, 252, 225, 0.04);
 
-  /* Liquid glass: glass floats, data sits on something opaque. The rim
-     is a gradient ring rather than a flat border (edge lensing) and a
-     specular arc sits over the corner light would enter from — without
-     it a blurred panel reads as flat grey plastic instead of glass. */
-  --glass-fill: rgba(255, 255, 255, 0.06);
-  --glass-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.62), 0 3px 10px rgba(0, 0, 0, 0.28);
-  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --glass-blur: 22px;
-  --glass-sat: 175%;
-  --glass-bright: 1.05;
-  --glass-radius: 20px;
-  --glass-spec: rgba(255, 255, 255, 0.20);
-  --glass-spec2: rgba(255, 255, 255, 0.08);
-  --glass-rim: linear-gradient(140deg,
-    rgba(255, 255, 255, 0.62) 0%,
-    rgba(255, 255, 255, 0.16) 22%,
-    rgba(255, 255, 255, 0.02) 46%,
-    rgba(255, 255, 255, 0.12) 72%,
-    rgba(255, 255, 255, 0.42) 100%);
+  /* Hairlines. --line is deliberately low-contrast (1.9:1) — it divides,
+     it is never text, and a brighter rule would fight the cream type. */
+  --line: #42433d;
+  --line-strong: #5c5d55;
 
-  /* Recessed well for nav/segmented controls — a shallow trench the
-     active segment floats out of. */
-  --well-bg: rgba(0, 0, 0, 0.22);
-  --well-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.48), inset 0 -1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  /* Type. Cream, not white: #ffffff on this canvas is the single most
+     common way to lose the warmth the palette is built on. */
+  --text: #fffce1;
+  --text-dim: #7c7c6f;
+  --text-faint: #5c5d55;
 
-  /* Opaque sibling of .glass — same silhouette, no blur, for tables. */
-  --surface: #14141f;
-  --surface-raised: rgba(255, 255, 255, 0.04);
+  /* ── Status taxonomy ────────────────────────────────────────
+     One hue per vehicle state, never reused for chrome or decoration.
+     --red has no counterpart in the reference palette, which carries no
+     alert colour; it is derived to sit at the same vividness as the
+     others so an off-route truck reads as urgently as a moving one
+     reads as fine. */
+  --green: #0ae448;   /* moving, on-route, healthy */
+  --green-soft: #abff84;
+  --amber: #ff8709;   /* idle, stale, warning */
+  --cyan: #00bae2;    /* parking, geofence, informational */
+  --red: #ff4d3d;     /* off-route, speeding, alert */
+  --pink: #fec5fb;    /* spare category — unassigned */
 
-  /* The atmosphere the blur samples. Without it backdrop-filter has
-     nothing to refract and glass collapses to a flat translucent box. */
-  --aurora-a: #5865f2;
-  --aurora-b: #22d3ee;
-  --aurora-a-opacity: 0.30;
-  --aurora-b-opacity: 0.16;
+  /* Chrome accent: cream, so the colour channel stays free for data.
+     --brand is the one chromatic escalation the system allows, and only
+     on a single primary action per screen (see .btn-primary). */
+  --accent: #fffce1;
+  --brand: #0ae448;
+  --brand-gradient: linear-gradient(114.41deg, #0ae448 20.74%, #abff84 65.5%);
 
-  /* Sign-in screen. The door has no data on it, so it gets to be
-     atmosphere — but it still resolves through tokens, because the root
-     layout applies the stored theme before first paint and a light-theme
-     operator lands here too. */
-  --signin-field: rgba(255, 255, 255, 0.07);
-  --signin-field-line: rgba(255, 255, 255, 0.10);
-  --login-road: #2a2a42;
-  --login-vignette: radial-gradient(ellipse 600px 500px at 50% 50%, rgba(10,10,20,0.75) 0%, rgba(10,10,20,0.35) 45%, transparent 70%);
+  /* Deprecated alias. Still referenced while the page sweep lands; the
+     value is cream so nothing paints indigo in the meantime. */
+  --indigo: #fffce1;
+
+  /* Panels: flat surface steps, no blur and no shadow. The names survive
+     from the retired liquid-glass system so the 26 call sites keep
+     working; .glass and .panel are the same treatment now. */
+  --glass-fill: #191919;
+  --glass-shadow: none;
+  --glass-inset: none;
+  --glass-blur: 0px;
+  --glass-sat: 100%;
+  --glass-bright: 1;
+  --glass-radius: 8px;
+  --glass-spec: transparent;
+  --glass-spec2: transparent;
+  --glass-rim: transparent;
+
+  /* Recessed well for segmented controls — a surface step down rather
+     than an inset shadow. */
+  --well-bg: #0e100f;
+  --well-shadow: 0 0 0 1px var(--line);
+
+  /* Atmosphere is off: the reference's canvas is flat and unbroken, and
+     the aurora was the main source of the purple cast being removed. */
+  --aurora-a: transparent;
+  --aurora-b: transparent;
+  --aurora-a-opacity: 0;
+  --aurora-b-opacity: 0;
+
+  /* Sign-in */
+  --signin-field: rgba(255, 252, 225, 0.05);
+  --signin-field-line: #42433d;
+  --login-road: #2a2b27;
+  --login-vignette: radial-gradient(ellipse 600px 500px at 50% 50%, rgba(14,16,15,0.78) 0%, rgba(14,16,15,0.40) 45%, transparent 70%);
 
   --map-tiles: dark;
   color-scheme: dark;
-}
-
-:root[data-theme="light"] {
-  --bg: #eef0f7;
-  --panel: #ffffff;
-  --panel-2: #ffffff;
-  --panel-3: #f1f3f9;
-  --line: #d9dded;
-  --text: #14161f;
-  --text-dim: #5b6076;
-  --indigo: #4750e0;
-  --purple: #7c3aed;
-  --amber: #b45309;
-  --cyan: #0d7f96;
-  --red: #dc2626;
-  --green: #15803d;
-
-  /* Light glass is the reverse problem: the panel must be brighter than
-     its backdrop, not dimmer. And a white rim is invisible on a light
-     page, so it inverts — it darkens to a cool blue-grey where the glass
-     turns away from the light and keeps only a thin white catch at the
-     entry corner. Fill stays above the page's own brightness or the
-     panel reads as a hole instead of a raised surface. */
-  --glass-fill: rgba(255, 255, 255, 0.55);
-  --glass-shadow: 0 18px 40px -18px rgba(60, 70, 130, 0.34), 0 2px 6px rgba(60, 70, 130, 0.10);
-  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  --glass-blur: 22px;
-  --glass-sat: 180%;
-  --glass-bright: 1.02;
-  --glass-radius: 20px;
-  --glass-spec: rgba(255, 255, 255, 0.70);
-  --glass-spec2: rgba(120, 130, 190, 0.10);
-  --glass-rim: linear-gradient(140deg,
-    rgba(255, 255, 255, 0.92) 0%,
-    rgba(120, 130, 190, 0.30) 28%,
-    rgba(120, 130, 190, 0.18) 50%,
-    rgba(120, 130, 190, 0.26) 74%,
-    rgba(255, 255, 255, 0.65) 100%);
-
-  --well-bg: rgba(120, 130, 190, 0.14);
-  --well-shadow: inset 0 2px 4px rgba(60, 70, 130, 0.16), 0 0 0 1px rgba(120, 130, 190, 0.18);
-
-  --surface: #ffffff;
-  --surface-raised: rgba(20, 26, 60, 0.035);
-
-  --aurora-a: #5865f2;
-  --aurora-b: #22d3ee;
-  --aurora-a-opacity: 0.20;
-  --aurora-b-opacity: 0.13;
-
-  /* Light inverts both: a translucent-white field is invisible on a pale
-     card, and the dark road mesh reads as ink rather than a network. */
-  --signin-field: rgba(20, 26, 60, 0.05);
-  --signin-field-line: rgba(60, 70, 130, 0.18);
-  --login-road: #c6ccdf;
-  --login-vignette: radial-gradient(ellipse 600px 500px at 50% 50%, rgba(238,240,247,0.80) 0%, rgba(238,240,247,0.40) 45%, transparent 70%);
-
-  --map-tiles: light;
-  color-scheme: light;
 }
 
 @theme inline {
@@ -151,13 +113,37 @@ body {
   overflow: hidden;
 }
 
+/* ── Type ─────────────────────────────────────────────────────
+   The reference's typographic discipline, not its scale. Its sizes are
+   editorial — a 224px display, a 14px floor on body — and this app's
+   tables run at 0.72rem because a dispatcher needs forty trucks on one
+   screen. So the sizes stay as they are and only the tracking and
+   leading come across: negative tracking that tightens as type grows,
+   and headline leading close to 1.
+
+   IBM Plex stays as the family. The reference calls for Mori's humanist
+   warmth and names Inter Tight or Söhne as substitutes; Plex is the same
+   humanist register, is already loaded, and brings a mono sibling this
+   app leans on for telemetry figures. */
+
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.011em;
+  line-height: 1.2;
+}
+
+h1 { letter-spacing: -0.02em; line-height: 1.05; }
+
+body {
+  letter-spacing: -0.01em;
+}
+
 a, button, input, select {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--indigo);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--accent);
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -165,109 +151,54 @@ a, button, input, select {
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
-::selection { background: var(--indigo); color: white; }
+::selection { background: var(--accent); color: var(--bg); }
 
 /* ---------- Prism Design System ---------- */
 
-/* ── Liquid glass, solid underneath ────────────────────────────
-   Glass is for things that float — chrome, headline figures,
-   transient overlays. Dense data sits on .surface, because 0.8rem
-   text over a live blur is where the style stops being a style and
-   starts being a legibility tax. Both share the same silhouette so
-   the page still reads as one system. */
+/* ── Panels ───────────────────────────────────────────────────
+   The liquid-glass system — blur, specular arc, gradient rim, drop
+   shadow — was retired with this overhaul. Depth is now a surface step
+   plus a hairline: a panel is elevated because it is one shade lighter
+   than its ground, never because it floats on a shadow.
 
-.glass, .kpi-card {
+   .glass keeps its name because 26 call sites use it and every one of
+   them wants exactly this treatment. .panel is the name for new markup;
+   both resolve to the same rule. */
+
+.glass, .panel, .kpi-card {
   position: relative;
-  background: var(--glass-fill);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bright));
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: var(--glass-radius);
-  box-shadow: var(--glass-shadow), var(--glass-inset);
 }
 
-/* Specular arc: a broad highlight where the light source is, plus a weak
-   bounce off the opposite corner. overflow is deliberately NOT hidden on
-   .glass itself — that would clip dropdowns and map popups — so this is
-   a pseudo-element inset to the border radius rather than a mask on the
-   box itself. */
-.glass::before, .kpi-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    radial-gradient(120% 80% at 14% -12%, var(--glass-spec), transparent 55%),
-    radial-gradient(90% 60% at 90% 112%, var(--glass-spec2), transparent 62%);
-}
-
-/* Edge lensing: the border is a gradient ring, not a flat colour — bright
-   at the corner light enters, thin through the middle, bright again where
-   it exits, the way a real bevel catches a room. Masked so only the ring
-   itself paints, never the fill underneath it. */
-.glass::after, .kpi-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1.25px;
-  pointer-events: none;
-  background: var(--glass-rim);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-}
-
-/* Both pseudo-elements are absolutely positioned, which puts them in a
-   later paint step than ordinary flow content — without this, the
-   specular highlight would wash out over real text instead of sitting
-   under it. Promotes every direct child into the same stacking context,
-   no markup changes required. */
-.glass > *, .kpi-card > * {
-  position: relative;
-  z-index: 1;
+/* The one place a shadow still earns its keep. A surface step cannot
+   separate a panel from live satellite tiles moving underneath it, so
+   panels over the map keep a blur and a real shadow. */
+.glass--float {
+  background: rgba(25, 25, 25, 0.88);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.72);
 }
 
 .surface {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--glass-radius);
 }
 
-/* Ambient wash behind the glass. Fixed rather than absolute so it
-   stays put while a page scrolls under it. */
-.aurora {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.aurora span {
-  position: absolute;
-  display: block;
-  border-radius: 50%;
-  filter: blur(100px);
-}
-
-/* Backdrop-filter is expensive to animate and some engines skip it
-   entirely; the fallback is a slightly more opaque panel rather than a
-   transparent one, so text never lands on bare background. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass, .kpi-card { background: var(--panel-2); }
-  .glass::before, .glass::after, .kpi-card::before, .kpi-card::after { display: none; }
-}
+/* The ambient wash went with the purple cast — the canvas is flat and
+   unbroken now. The app shell still renders the element, so this keeps
+   it inert rather than forcing a layout change. */
+.aurora { display: none; }
 
 @media (prefers-reduced-transparency: reduce) {
-  .glass, .kpi-card {
-    background: var(--panel-2);
+  .glass--float {
+    background: var(--panel);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  .glass::before, .glass::after, .kpi-card::before, .kpi-card::after { display: none; }
-  .aurora { display: none; }
 }
 
 /* ── Semantic text and surface classes ────────────────────────
@@ -297,7 +228,7 @@ a, button, input, select {
 .c-red { color: var(--red); }
 .c-green { color: var(--green); }
 .c-amber { color: var(--amber); }
-.c-indigo { color: var(--indigo); }
+.c-accent { color: var(--accent); }
 .c-cyan { color: var(--cyan); }
 
 .panel {
@@ -325,7 +256,7 @@ a, button, input, select {
 input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   width: 100%;
   padding: 10px 12px;
-  background: var(--panel-2);
+  background: var(--panel-3);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--text);
@@ -335,49 +266,82 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+/* Focus is cream, not a hue. A coloured focus ring would be the one
+   piece of chrome still competing with the status taxonomy. */
 input:focus, select:focus, textarea:focus {
-  border-color: var(--indigo);
-  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 252, 225, 0.12);
 }
 
 input::placeholder, textarea::placeholder {
   color: var(--text-dim);
-  opacity: 0.7;
+  opacity: 0.8;
 }
+
+/* ── Controls ─────────────────────────────────────────────────
+   Outlined pills, never filled. The reference system allows exactly one
+   chromatic escalation — a gradient stroke on the single most important
+   action of a screen — and .btn-brand is it. Everything else is a cream
+   hairline on transparent, which keeps every hue on this page meaning
+   something about a truck.
+
+   100px radius reads as a pill at any height without needing a value
+   per control size. */
 
 .btn-primary {
   width: 100%;
-  padding: 12px;
-  border: none;
-  border-radius: 8px;
+  padding: 12px 24px;
+  border: 1px solid var(--accent);
+  border-radius: 100px;
+  background: transparent;
+  color: var(--accent);
   font-size: 0.92rem;
   font-weight: 600;
   cursor: pointer;
   font-family: var(--font-sans);
-  background: var(--indigo);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(88, 101, 242, 0.25);
-  transition: filter 0.15s, transform 0.15s;
+  transition: opacity 0.15s, background-color 0.15s;
 }
 
 .btn-primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
+  background: rgba(255, 252, 225, 0.06);
 }
 
 .btn-primary:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
-  transform: none;
-  filter: none;
+  background: transparent;
+}
+
+/* The one chromatic control. Gradient lives on the border via a mask so
+   the fill stays transparent — border-image cannot follow a 100px radius,
+   which is why this is a pseudo-element ring rather than a border. */
+.btn-brand {
+  position: relative;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+}
+
+.btn-brand::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: var(--brand-gradient);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
 
 .btn-secondary {
-  background: var(--panel-2);
+  background: transparent;
   border: 1px solid var(--line);
   color: var(--text);
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: 8px 18px;
+  border-radius: 100px;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -386,36 +350,28 @@ input::placeholder, textarea::placeholder {
 }
 
 .btn-secondary:hover {
-  border-color: var(--amber);
-  color: var(--amber);
+  border-color: var(--accent);
 }
 
 .btn-secondary.active {
-  background: rgba(74, 222, 128, 0.12);
   border-color: var(--green);
   color: var(--green);
 }
 
 .btn-sm {
-  padding: 6px 10px;
+  padding: 6px 14px;
   font-size: 0.76rem;
-  border-radius: 6px;
-  background: var(--panel-3);
+  border-radius: 100px;
+  background: transparent;
   border: 1px solid var(--line);
   color: var(--text-dim);
   cursor: pointer;
   font-family: var(--font-sans);
+  transition: border-color 0.15s, color 0.15s;
 }
 
-.btn-sm:hover {
-  color: var(--text);
-  border-color: var(--indigo);
-}
-
-.btn-sm.danger:hover {
-  color: var(--red);
-  border-color: var(--red);
-}
+.btn-sm:hover { border-color: var(--accent); color: var(--text); }
+.btn-sm.danger:hover { border-color: var(--red); color: var(--red); }
 
 /* Status pills */
 .status-pill {
@@ -435,15 +391,15 @@ input::placeholder, textarea::placeholder {
   background: currentColor;
 }
 
-.status-pill.moving { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+.status-pill.moving { background: rgba(10, 228, 72, 0.15); color: var(--green); }
 .status-pill.idle { background: rgba(34, 211, 238, 0.15); color: var(--cyan); }
 .status-pill.offline { background: rgba(139, 143, 176, 0.15); color: var(--text-dim); }
-.status-pill.on-route { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+.status-pill.on-route { background: rgba(10, 228, 72, 0.15); color: var(--green); }
 .status-pill.off-route { background: rgba(248, 113, 113, 0.15); color: var(--red); }
 .status-pill.pending { background: rgba(255, 183, 3, 0.15); color: var(--amber); }
-.status-pill.completed { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+.status-pill.completed { background: rgba(10, 228, 72, 0.15); color: var(--green); }
 .status-pill.stopped { background: rgba(248, 113, 113, 0.15); color: var(--red); }
-.status-pill.dispatched { background: rgba(88, 101, 242, 0.15); color: var(--indigo); }
+.status-pill.dispatched { background: rgba(0, 186, 226, 0.15); color: var(--cyan); }
 
 /* KPI cards — base surface (fill, blur, rim, specular) comes from the
    shared .glass, .kpi-card rules above; this is just the layout and the
@@ -462,7 +418,7 @@ input::placeholder, textarea::placeholder {
   font-size: 1.3rem;
   font-weight: 700;
   line-height: 1.15;
-  color: var(--indigo);
+  color: var(--accent);
 }
 
 .kpi-card.green .kpi-value { color: var(--green); }
@@ -595,60 +551,47 @@ hr {
 .leaflet-popup-close-button { color: var(--text-dim) !important; }
 .leaflet-container { font-family: var(--font-sans); background: var(--bg); }
 
-/* Login hero background — glowing map + ambient light blobs */
-.login-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.35;
-  animation: login-breathe 8s ease-in-out infinite;
-}
-.login-glow-a {
-  width: 480px;
-  height: 480px;
-  top: 8%;
-  left: 12%;
-  background: var(--indigo);
-}
-.login-glow-b {
-  width: 420px;
-  height: 420px;
-  bottom: 5%;
-  right: 10%;
-  background: var(--cyan);
-  animation-delay: 3s;
-}
-@keyframes login-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.3; }
-  50% { transform: scale(1.15); opacity: 0.45; }
-}
+/* ── Sign-in backdrop ─────────────────────────────────────────
+   The reference canvas is flat and unbroken — richness comes from the
+   foreground, never from a wash behind it. The ambient glow blobs that
+   used to sit here were the loudest thing on the page and were also the
+   last of the purple cast, so they are gone.
+
+   What remains is a road network at the very bottom of the contrast
+   range: enough to say "this is a fleet tool" on approach, not enough to
+   compete with the one card that matters. The live routes are dim cream
+   rather than status hues — nothing decorative is allowed to borrow a
+   colour that means something about a truck elsewhere in the app. */
+
+.login-glow { display: none; }
 
 .login-route {
-  stroke-width: 2.5;
-  stroke-dasharray: 12 18;
-  filter: drop-shadow(0 0 6px currentColor);
-  opacity: 0.8;
-  animation: login-route-flow 6s linear infinite;
+  stroke: var(--text-dim);
+  stroke-width: 1.5;
+  stroke-dasharray: 10 16;
+  opacity: 0.30;
+  animation: login-route-flow 9s linear infinite;
 }
-.login-route-1 { animation-duration: 7s; }
-.login-route-2 { animation-duration: 9s; animation-delay: 1s; }
-.login-route-3 { animation-duration: 8s; animation-delay: 2.5s; }
+.login-route-1 { animation-duration: 11s; }
+.login-route-2 { animation-duration: 14s; animation-delay: 1.5s; }
+.login-route-3 { animation-duration: 12s; animation-delay: 3s; }
 @keyframes login-route-flow {
   to { stroke-dashoffset: -300; }
 }
 
 .login-ping {
-  filter: drop-shadow(0 0 4px var(--cyan));
-  animation: login-ping-pulse 3s ease-out infinite;
+  fill: var(--text-dim);
+  opacity: 0.5;
+  animation: login-ping-pulse 4s ease-out infinite;
 }
 @keyframes login-ping-pulse {
-  0% { r: 3; opacity: 0.9; }
-  70% { r: 10; opacity: 0; }
-  100% { r: 10; opacity: 0; }
+  0%   { r: 2.5; opacity: 0.5; }
+  70%  { r: 8;   opacity: 0; }
+  100% { r: 8;   opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .login-glow, .login-route, .login-ping { animation: none; opacity: 1; }
+  .login-route, .login-ping { animation: none; }
 }
 
 /* ── Truck picker (Dispatch, step 1) ──────────────────────────
@@ -701,8 +644,8 @@ hr {
 .truck-option:hover { background: rgba(255, 255, 255, 0.04); }
 
 .truck-option.is-selected {
-  background: rgba(88, 101, 242, 0.12);
-  border-color: rgba(88, 101, 242, 0.45);
+  background: rgba(255, 252, 225, 0.10);
+  border-color: rgba(255, 252, 225, 0.38);
 }
 
 /* Kept in the DOM (not display:none) so it stays focusable and
@@ -735,8 +678,8 @@ hr {
 }
 
 .truck-option.is-selected .truck-option__box {
-  background: var(--indigo);
-  border-color: var(--indigo);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .truck-option.is-selected .truck-option__box svg {
@@ -745,7 +688,7 @@ hr {
 }
 
 .truck-option__input:focus-visible + .truck-option__box {
-  box-shadow: 0 0 0 2px var(--panel-2), 0 0 0 4px var(--indigo);
+  box-shadow: 0 0 0 2px var(--panel-2), 0 0 0 4px var(--accent);
 }
 
 .truck-option__dot {
@@ -783,8 +726,8 @@ hr {
   padding: 3px 4px 3px 9px;
   border-radius: 999px;
   font-size: 0.72rem;
-  background: rgba(88, 101, 242, 0.14);
-  border: 1px solid rgba(88, 101, 242, 0.45);
+  background: rgba(255, 252, 225, 0.10);
+  border: 1px solid rgba(255, 252, 225, 0.38);
 }
 
 .truck-chip__remove {
@@ -882,11 +825,10 @@ html[dir="rtl"] table { text-align: right; }
   height: 48px;
   margin-bottom: 18px;
   border-radius: 50%;
-  /* Indigo in both themes, not a translucent well: the OMD mark is white
-     with a transparent ground, so on the light theme's near-white card it
-     disappeared entirely. It needs its own backing, independent of theme. */
-  background: var(--indigo);
-  box-shadow: 0 6px 18px -6px rgba(88, 101, 242, 0.55);
+  /* The OMD mark is white on a transparent ground, so it needs a dark
+     backing of its own — on the cream accent it would vanish outright. */
+  background: var(--panel-3);
+  border: 1px solid var(--line);
 }
 
 .signin-mark img { object-fit: contain; }
@@ -939,8 +881,8 @@ html[dir="rtl"] table { text-align: right; }
 }
 
 .signin-card input.signin-field:focus {
-  border-color: var(--indigo);
-  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 252, 225, 0.12);
 }
 
 .signin-password { position: relative; }
@@ -981,23 +923,40 @@ html[dir="rtl"] table { text-align: right; }
 /* Indigo rather than the source design's translucent white: white-on-glass
    disappears against a light card, and the one action on this screen should
    look like the primary one. */
+/* Sign-in is the one action on this screen, so it takes the system's
+   single chromatic escalation: a gradient stroke on a transparent pill.
+   Fill stays empty — nothing in this design is a solid-colour button. */
 .signin-submit {
+  position: relative;
   width: 100%;
   padding: 13px;
   border: none;
-  border-radius: 999px;
-  background: var(--indigo);
-  color: #fff;
+  border-radius: 100px;
+  background: transparent;
+  color: var(--accent);
   font-family: var(--font-sans);
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 6px 20px -6px rgba(88, 101, 242, 0.55);
-  transition: filter 0.15s, transform 0.15s;
+  transition: background-color 0.15s;
 }
 
-.signin-submit:hover { filter: brightness(1.08); transform: translateY(-1px); }
-.signin-fields:disabled .signin-submit { cursor: not-allowed; transform: none; filter: none; }
+.signin-submit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: var(--brand-gradient);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.signin-submit:hover { background: rgba(255, 252, 225, 0.05); }
+.signin-fields:disabled .signin-submit { cursor: not-allowed; opacity: 0.45; }
 
 .signin-foot {
   margin-top: 18px;
@@ -1005,38 +964,18 @@ html[dir="rtl"] table { text-align: right; }
   color: var(--text-dim);
 }
 
-.signin-foot a { color: var(--indigo); font-weight: 600; }
+.signin-foot a { color: var(--accent); font-weight: 600; }
 .signin-foot a:hover { text-decoration: underline; }
-
-.signin-theme {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--signin-field-line);
-  background: var(--signin-field);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.signin-theme:hover { color: var(--text); }
-
-@media (max-width: 420px) {
-  .signin-card { padding: 30px 22px 22px; }
-}
 
 /* The toggle renders both icons and CSS reveals one, keyed off the theme
    attribute the bootstrap script sets. Choosing in React instead would
    mean reading the DOM during render — server and client would disagree,
    and the resulting hydration mismatch resets data-theme to the SSR value. */
-.signin-theme-moon { display: none; }
-:root[data-theme="light"] .signin-theme-sun { display: none; }
-:root[data-theme="light"] .signin-theme-moon { display: block; }
+:root[data-theme="light"] :root[data-theme="light"] 
+/* Selected state for the small pill filters. Cream, not a hue — a filter
+   chip is chrome, and the colour channel belongs to the trucks. */
+.btn-sm.is-on {
+  border-color: var(--accent);
+  color: var(--bg);
+  background: var(--accent);
+}

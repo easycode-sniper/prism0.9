@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Moon, Sun } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { signIn } from "@/lib/supabase/actions";
 import { LoginMapBackground } from "@/components/layout/LoginMapBackground";
-import { THEME_STORAGE_KEY, type Theme } from "@/lib/theme/ThemeProvider";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -16,30 +15,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  // Login sits outside the app shell, so there is no ThemeProvider above
-  // it — that provider resolves theme from the signed-in user's settings,
-  // which by definition don't exist yet. The root layout's bootstrap script
-  // has already put the stored theme on <html> before first paint, so this
-  // only has to keep writing back to the same two places it reads from.
-  //
-  // Deliberately no React state: the current theme lives on <html>, where
-  // the bootstrap put it. Seeding state from the DOM instead would read it
-  // during render, so the server (no `document`, always dark) and the
-  // client (light) would emit different icons — a hydration mismatch that
-  // makes React re-render the tree and reset data-theme back to the SSR
-  // value, undoing the bootstrap on every load. Which icon shows is a
-  // styling question, so CSS answers it off the attribute.
-  function toggleTheme() {
-    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-    const next: Theme = current === "dark" ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", next);
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, next);
-    } catch {
-      // Private-browsing storage denial shouldn't cost the operator the toggle.
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,15 +48,6 @@ export default function LoginPage() {
     <div className="signin-page">
       <LoginMapBackground />
 
-      <button
-        type="button"
-        onClick={toggleTheme}
-        className="signin-theme"
-        aria-label="Switch between light and dark theme"
-      >
-        <Sun className="signin-theme-sun" size={16} strokeWidth={2.25} />
-        <Moon className="signin-theme-moon" size={16} strokeWidth={2.25} />
-      </button>
 
       <main className="glass signin-card">
         <span className="signin-mark">

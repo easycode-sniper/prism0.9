@@ -73,7 +73,7 @@ export default function NotificationsPage() {
                 <span className="mt-1 text-xs t-faint">{formatDateTime(n.created_at)}</span>
               </div>
               {!n.read && (
-                <div className="mt-1 h-2 w-2 rounded-full bg-indigo-500" />
+                <div className="mt-1 h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} />
               )}
             </div>
           ))}
@@ -86,9 +86,9 @@ export default function NotificationsPage() {
 function NotificationIcon({ kind }: { kind: NotificationRecord["kind"] }) {
   const config: Record<NotificationRecord["kind"], { icon: typeof TriangleAlert; color: string }> = {
     off_route: { icon: TriangleAlert, color: "var(--red)" },
-    speeding: { icon: Gauge, color: "#fb923c" },
+    speeding: { icon: Gauge, color: "var(--amber)" },
     site_arrival: { icon: Flag, color: "var(--green)" },
-    factory_arrival: { icon: Factory, color: "var(--purple)" },
+    factory_arrival: { icon: Factory, color: "var(--pink)" },
     hq_arrival: { icon: ParkingCircle, color: "var(--cyan)" },
   };
   const { icon: Icon, color } = config[kind];

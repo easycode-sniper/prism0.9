@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Users, Fuel, Bell, Settings, Sun, Moon } from "lucide-react";
-import { useTheme } from "@/lib/theme/ThemeProvider";
+import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Users, Fuel, Bell, Settings} from "lucide-react";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { useFleet } from "@/components/providers/FleetProvider";
 import type { Language } from "@/lib/i18n/translations";
@@ -61,48 +60,6 @@ export function FleetActiveCount() {
   );
 }
 
-// Sits directly beside the language switcher and borrows its shape — a
-// segmented control in the same pill — so the two read as one cluster of
-// "how this app is set up for me" rather than two unrelated widgets.
-export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const options: { value: "dark" | "light"; label: string; Icon: typeof Sun }[] = [
-    { value: "dark", label: "Dark", Icon: Moon },
-    { value: "light", label: "Light", Icon: Sun },
-  ];
-
-  return (
-    <div
-      role="group"
-      aria-label="Theme"
-      style={{ display: "flex", gap: "2px", background: "var(--well-bg)", boxShadow: "var(--well-shadow)", borderRadius: "10px", padding: "3px" }}
-    >
-      {options.map(({ value, label, Icon }) => (
-        <button
-          key={value}
-          onClick={() => setTheme(value)}
-          title={`${label} theme`}
-          aria-label={`${label} theme`}
-          aria-pressed={theme === value}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: theme === value ? "linear-gradient(160deg, color-mix(in srgb, var(--indigo) 55%, white), var(--indigo))" : "transparent",
-            color: theme === value ? "#fff" : "var(--text-dim)",
-            border: "none",
-            borderRadius: "7px",
-            padding: "5px 9px",
-            cursor: "pointer",
-            boxShadow: theme === value ? "0 3px 8px color-mix(in srgb, var(--indigo) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35)" : "none",
-          }}
-        >
-          <Icon size={13} strokeWidth={2.4} />
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export function LanguageSwitcher() {
   const { language, setLanguage } = useTranslation();

@@ -88,7 +88,7 @@ export default function MonitoringPage() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`rounded px-2.5 py-1 text-xs capitalize transition ${filter === f ? "bg-indigo-600 text-white" : "bg-raised t-dim bg-raised-hover-strong"}`}
+            className={`btn-sm capitalize ${filter === f ? "is-on" : ""}`}
           >
             {f}
           </button>
@@ -178,14 +178,14 @@ function MonitoringRow({
           <button
             onClick={onCheckPosition}
             disabled={checking}
-            className="mr-2 text-xs c-indigo hover:opacity-80 disabled:opacity-50"
+            className="mr-2 text-xs c-accent hover:opacity-80 disabled:opacity-50"
             title={check ? `${check.etaLabel}` : undefined}
           >
             {checking ? "..." : "Check"}
           </button>
         )}
         {locateHref && (
-          <Link href={locateHref} className="text-xs c-indigo hover:opacity-80">Locate</Link>
+          <Link href={locateHref} className="text-xs c-accent hover:opacity-80">Locate</Link>
         )}
       </td>
     </tr>

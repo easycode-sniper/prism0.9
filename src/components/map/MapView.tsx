@@ -87,11 +87,25 @@ interface MapViewProps {
 const SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const SATELLITE_LABELS_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 
+// Marker fill, painted over map tiles. Saturated on purpose — these have
+// to hold up against both the dark and light basemaps, so they are not
+// theme tokens and should not become them.
 function statusColor(status: TruckMarkerData["status"], offRoute?: boolean): string {
   if (offRoute) return "#d92d42";
   if (status === "moving") return "#159c83";
   if (status === "idle") return "#167d8d";
   return "#6b7280";
+}
+
+// The same status as popup text, which sits on --panel rather than on
+// tiles. Reusing the marker fill here put "moving" at 3.4:1 on the light
+// theme's white panel; the status tokens already carry a darker sibling
+// for exactly this, so the popup reads off those instead.
+function statusTextColor(status: TruckMarkerData["status"], offRoute?: boolean): string {
+  if (offRoute) return "var(--red)";
+  if (status === "moving") return "var(--green)";
+  if (status === "idle") return "var(--cyan)";
+  return "var(--text-dim)";
 }
 
 // Directional arrow rotated to the truck's actual compass heading when
@@ -349,16 +363,16 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
 
       const eta = formatEta(m.etaSeconds);
       marker.bindPopup(
-        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5; min-width: 160px;">
-          <strong style="font-size: 13px; color: #22d3ee;">${m.label}</strong>
-          ${m.driverName ? `<div style="color: #9a9ab0; margin-top: 2px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.user} ${m.driverName}</div>` : ""}
+        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text); min-width: 160px;">
+          <strong style="font-size: 13px; color: var(--cyan);">${m.label}</strong>
+          ${m.driverName ? `<div style="color: var(--text-dim); margin-top: 2px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.user} ${m.driverName}</div>` : ""}
           <div style="margin-top: 6px; display: flex; justify-content: space-between;">
-            <span style="color: ${statusColor(m.status, m.offRoute)}; text-transform: capitalize; font-weight: 600;">● ${m.status}</span>
+            <span style="color: ${statusTextColor(m.status, m.offRoute)}; text-transform: capitalize; font-weight: 600;">● ${m.status}</span>
             ${m.speed != null ? `<span>${Math.round(m.speed)} km/h</span>` : ""}
           </div>
-          ${m.offRoute ? `<div style="color: #f87171; margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.alert} Off route</div>` : ""}
-          ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #26263c; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.target} <span>${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</span></div>` : ""}
-          ${m.ageMinutes != null ? `<div style="color: #6b6b80; margin-top: 6px; font-size: 11px;">Updated ${formatAge(m.ageMinutes)}</div>` : ""}
+          ${m.offRoute ? `<div style="color: var(--red); margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.alert} Off route</div>` : ""}
+          ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 5px;">${SVG_ICONS.target} <span>${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</span></div>` : ""}
+          ${m.ageMinutes != null ? `<div style="color: var(--text-dim); margin-top: 6px; font-size: 11px;">Updated ${formatAge(m.ageMinutes)}</div>` : ""}
         </div>`
       );
 
@@ -374,8 +388,8 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     for (const s of siteMarkers) {
       const marker = L.marker([s.lat, s.lng], { icon: buildSiteIcon() });
       marker.bindPopup(
-        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5;">
-          <strong style="color: #a7a0ff;">${s.name}</strong>${s.client ? `<br>${s.client}` : ""}
+        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text);">
+          <strong style="color: var(--purple);">${s.name}</strong>${s.client ? `<br>${s.client}` : ""}
         </div>`
       );
       siteLayer.addLayer(marker);
@@ -394,8 +408,8 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     for (const s of stationMarkers) {
       const marker = L.marker([s.lat, s.lng], { icon: buildStationIcon(!!s.truckHere) });
       marker.bindPopup(
-        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: #e7e7f5;">
-          <strong style="color: #f59e0b; display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${s.name}</strong>${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${s.truckHere} fueling</div>` : ""}
+        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text);">
+          <strong style="color: var(--amber); display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${s.name}</strong>${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${s.truckHere} fueling</div>` : ""}
         </div>`
       );
       stationLayer.addLayer(marker);
@@ -415,7 +429,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           ? L.circle([z.centerLat, z.centerLng], { radius: z.radiusMeters, color, weight: 2, fillOpacity: 0.12 })
           : null;
       if (!shape) continue;
-      shape.bindPopup(`<strong style="color:#22d3ee;">${z.name}</strong>`);
+      shape.bindPopup(`<strong style="color:var(--cyan);">${z.name}</strong>`);
       zonesLayer.addLayer(shape);
     }
   }, [zones]);
@@ -442,7 +456,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       const marker = L.marker(point, {
         icon: buildLandmarkIcon(isFactory ? SVG_ICONS.factory : SVG_ICONS.parking, isFactory ? "#6d5bff" : "#22d3ee"),
       });
-      marker.bindPopup(`<strong style="color:#22d3ee;">${z.name}</strong>`);
+      marker.bindPopup(`<strong style="color:var(--cyan);">${z.name}</strong>`);
       landmarksLayer.addLayer(marker);
     }
   }, [zones]);

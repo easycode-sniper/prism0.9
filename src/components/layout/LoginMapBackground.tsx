@@ -21,7 +21,7 @@ export function LoginMapBackground() {
         preserveAspectRatio="xMidYMid slice"
       >
         {/* Static road network */}
-        <g stroke="#2a2a42" strokeWidth="1.5" fill="none" opacity="0.55">
+        <g stroke="var(--login-road)" strokeWidth="1.5" fill="none" opacity="0.55">
           <path d="M-20 120 L340 120 L520 260 L900 260 L1120 120" />
           <path d="M-20 340 L260 340 L420 480 L780 480 L960 620 L1220 620" />
           <path d="M120 -20 L120 220 L280 340" />
@@ -77,8 +77,10 @@ export function LoginMapBackground() {
       <div
         className="absolute inset-0"
         style={{
-          background:
-            "radial-gradient(ellipse 600px 500px at 50% 50%, rgba(10,10,20,0.75) 0%, rgba(10,10,20,0.35) 45%, transparent 70%)",
+          // Tokenised: this used to be a hardcoded dark wash, which on the
+          // light theme dimmed a pale page toward grey instead of lifting
+          // the card off it.
+          background: "var(--login-vignette)",
         }}
       />
     </div>

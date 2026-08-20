@@ -62,6 +62,15 @@
   --aurora-a-opacity: 0.30;
   --aurora-b-opacity: 0.16;
 
+  /* Sign-in screen. The door has no data on it, so it gets to be
+     atmosphere — but it still resolves through tokens, because the root
+     layout applies the stored theme before first paint and a light-theme
+     operator lands here too. */
+  --signin-field: rgba(255, 255, 255, 0.07);
+  --signin-field-line: rgba(255, 255, 255, 0.10);
+  --login-road: #2a2a42;
+  --login-vignette: radial-gradient(ellipse 600px 500px at 50% 50%, rgba(10,10,20,0.75) 0%, rgba(10,10,20,0.35) 45%, transparent 70%);
+
   --map-tiles: dark;
   color-scheme: dark;
 }
@@ -113,6 +122,13 @@
   --aurora-b: #22d3ee;
   --aurora-a-opacity: 0.20;
   --aurora-b-opacity: 0.13;
+
+  /* Light inverts both: a translucent-white field is invisible on a pale
+     card, and the dark road mesh reads as ink rather than a network. */
+  --signin-field: rgba(20, 26, 60, 0.05);
+  --signin-field-line: rgba(60, 70, 130, 0.18);
+  --login-road: #c6ccdf;
+  --login-vignette: radial-gradient(ellipse 600px 500px at 50% 50%, rgba(238,240,247,0.80) 0%, rgba(238,240,247,0.40) 45%, transparent 70%);
 
   --map-tiles: light;
   color-scheme: light;
@@ -631,22 +647,8 @@ hr {
   100% { r: 10; opacity: 0; }
 }
 
-.login-truck {
-  left: -10%;
-  animation: login-truck-drive 4.5s ease-in-out infinite;
-}
-@keyframes login-truck-drive {
-  0%   { left: -10%; opacity: 0; }
-  8%   { opacity: 1; }
-  62%  { left: 82%; opacity: 1; }
-  72%  { left: 78%; opacity: 1; }
-  82%  { left: 82%; opacity: 1; }
-  92%  { opacity: 1; }
-  100% { left: 82%; opacity: 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .login-glow, .login-route, .login-ping, .login-truck { animation: none; left: 78%; opacity: 1; }
+  .login-glow, .login-route, .login-ping { animation: none; opacity: 1; }
 }
 
 /* ── Truck picker (Dispatch, step 1) ──────────────────────────
@@ -836,3 +838,205 @@ html[dir="rtl"] table { text-align: right; }
   #print-area, #print-area * { visibility: visible; }
   #print-area { display: block; position: absolute; top: 0; left: 0; width: 100%; color: #000; background: #fff; padding: 24px; }
 }
+
+/* ── Sign-in ──────────────────────────────────────────────────
+   One centred glass card over the route-map backdrop. The card is the
+   same .glass the topbar and KPI tiles use, so the door and the room
+   behind it are visibly one system — it only overrides the radius, to
+   sit a little softer than an operational panel.
+
+   Every value here resolves through a token. That is not ceremony: the
+   root layout puts the stored theme on <html> before React runs, so a
+   light-theme operator lands on this screen in light, and the hardcoded
+   whites this replaced left them reading white text on a white card. */
+
+.signin-page {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.signin-card {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 400px;
+  padding: 36px 32px 26px;
+  border-radius: 26px;
+  text-align: center;
+}
+
+.signin-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  /* Indigo in both themes, not a translucent well: the OMD mark is white
+     with a transparent ground, so on the light theme's near-white card it
+     disappeared entirely. It needs its own backing, independent of theme. */
+  background: var(--indigo);
+  box-shadow: 0 6px 18px -6px rgba(88, 101, 242, 0.55);
+}
+
+.signin-mark img { object-fit: contain; }
+
+.signin-title {
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.signin-sub {
+  margin-top: 4px;
+  margin-bottom: 26px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.signin-form { width: 100%; }
+
+/* fieldset is the disabled-while-submitting switch — it takes every
+   control out at once, including the reveal toggle, which a `disabled`
+   prop on the submit button alone would leave live. */
+.signin-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.signin-fields:disabled { opacity: 0.6; }
+
+/* Outguns the global `input:not([type=checkbox]):not([type=radio])` rule,
+   which is specificity (0,2,1) — a single class would silently lose to it
+   and the fields would keep the app's square 8px panel styling. */
+.signin-card input.signin-field {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 14px;
+  background: var(--signin-field);
+  border: 1px solid var(--signin-field-line);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.signin-card input.signin-field:focus {
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.15);
+}
+
+.signin-password { position: relative; }
+.signin-card .signin-password input.signin-field { padding-right: 44px; }
+
+.signin-reveal {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.signin-reveal:hover { color: var(--text); background: var(--surface-raised); }
+
+.signin-error {
+  text-align: left;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--red);
+}
+
+.signin-rule {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 5px 0 3px;
+}
+
+/* Indigo rather than the source design's translucent white: white-on-glass
+   disappears against a light card, and the one action on this screen should
+   look like the primary one. */
+.signin-submit {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 999px;
+  background: var(--indigo);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 20px -6px rgba(88, 101, 242, 0.55);
+  transition: filter 0.15s, transform 0.15s;
+}
+
+.signin-submit:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.signin-fields:disabled .signin-submit { cursor: not-allowed; transform: none; filter: none; }
+
+.signin-foot {
+  margin-top: 18px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.signin-foot a { color: var(--indigo); font-weight: 600; }
+.signin-foot a:hover { text-decoration: underline; }
+
+.signin-theme {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--signin-field-line);
+  background: var(--signin-field);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.signin-theme:hover { color: var(--text); }
+
+@media (max-width: 420px) {
+  .signin-card { padding: 30px 22px 22px; }
+}
+
+/* The toggle renders both icons and CSS reveals one, keyed off the theme
+   attribute the bootstrap script sets. Choosing in React instead would
+   mean reading the DOM during render — server and client would disagree,
+   and the resulting hydration mismatch resets data-theme to the SSR value. */
+.signin-theme-moon { display: none; }
+:root[data-theme="light"] .signin-theme-sun { display: none; }
+:root[data-theme="light"] .signin-theme-moon { display: block; }

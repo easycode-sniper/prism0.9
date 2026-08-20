@@ -284,7 +284,7 @@ export default function DispatchPage() {
 
   if (sidebarCollapsed) {
     return (
-      <div className="flex h-full">
+      <div className="dispatch-layout">
         <button
           type="button"
           onClick={() => setSidebarCollapsed(false)}
@@ -295,7 +295,7 @@ export default function DispatchPage() {
         >
           <ChevronRight size={14} strokeWidth={2.5} />
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="dispatch-layout__map">
           <MapView
             truckMarkers={allTruckMarkers}
             siteMarkers={siteMarkers}
@@ -310,7 +310,7 @@ export default function DispatchPage() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="dispatch-layout">
       {/* Sidebar — one column, two modes, a fixed action bar. */}
       <form onSubmit={handleCreateDispatch} className="dispatch-panel">
         <header className="dispatch-panel__head">
@@ -373,7 +373,7 @@ export default function DispatchPage() {
 
           {panelMode === "dispatch" ? (
             <>
-              <section>
+              <section className="psection psection--grow">
                 <div className="psection__head">
                   <span className="psection__title">Trucks</span>
                   <span className={`psection__count${selectedTrucks.length ? " psection__count--on" : ""}`}>
@@ -453,7 +453,7 @@ export default function DispatchPage() {
                 </div>
               </section>
 
-              <section>
+              <section className="psection psection--grow">
                 <div className="psection__head">
                   {/* Every run leaves from the same factory, so the origin is
                       context on the label rather than a control that cannot
@@ -585,7 +585,7 @@ export default function DispatchPage() {
       </form>
 
       {/* Map */}
-      <div className="flex-1 min-w-0">
+      <div className="dispatch-layout__map">
         <MapView
           truckMarkers={allTruckMarkers}
           siteMarkers={siteMarkers}

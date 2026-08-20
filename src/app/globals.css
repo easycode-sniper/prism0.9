@@ -888,6 +888,40 @@ hr {
    scrolls; the summary and the button never do, so what is about to
    happen is always readable without scrolling back. */
 
+/* ── Dispatch layout ──────────────────────────────────────────
+   Side by side on a desk, stacked on a phone. A 384px panel beside a
+   map does not fit a 390px viewport: both ended up too narrow to use,
+   with the map clipped off the right edge. */
+.dispatch-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.dispatch-layout__map {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 760px) {
+  .dispatch-layout { flex-direction: column; }
+
+  .dispatch-panel {
+    width: 100%;
+    height: auto;
+    flex: 1 1 58%;
+    min-height: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* The map keeps a real share of the screen rather than a sliver: it is
+     how you confirm the truck you just picked is where you think it is. */
+  .dispatch-layout__map { flex: 1 1 42%; min-height: 200px; }
+
+}
+
 .dispatch-panel {
   display: flex;
   flex-direction: column;
@@ -905,6 +939,10 @@ hr {
   border-bottom: 1px solid var(--line);
 }
 
+/* The body itself does not scroll on desktop: the panel is a fixed
+   height, the two sections divide it, and each list scrolls inside its
+   own box. That is what keeps the action bar reachable and the section
+   labels in place no matter how far down the list you are. */
 .dispatch-panel__body {
   flex: 1;
   min-height: 0;
@@ -915,6 +953,22 @@ hr {
   flex-direction: column;
   gap: 16px;
 }
+
+/* The two pickers divide whatever height is left after the header, the
+   labels and the action bar. Capping them at a fixed pixel height left
+   the panel padded out with dead space on a tall screen — the gap sat
+   between the last site and the dispatch button, which on a phone was
+   most of the panel. They grow instead, so the space becomes rows.
+
+   min-height keeps them usable when the viewport is short; past that
+   the body scrolls, which is why it stays overflow-y: auto. */
+.psection {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.psection--grow { flex: 1 1 0; min-height: 268px; }
 
 /* Always in view, so the count and the destination stay readable while
    the list above is scrolled. */
@@ -1094,7 +1148,8 @@ hr {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  max-height: 320px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
@@ -1293,6 +1348,10 @@ select:not([multiple]):not([size]) {
 
 .site-picker {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   border: 1px solid var(--line);
   background: var(--panel-2);
   border-radius: var(--r-md);
@@ -1311,7 +1370,8 @@ select:not([multiple]):not([size]) {
 }
 
 .site-picker__scroll {
-  max-height: 230px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 4px 4px 20px;

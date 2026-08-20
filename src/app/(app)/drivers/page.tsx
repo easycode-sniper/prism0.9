@@ -141,9 +141,9 @@ export default function DriversPage() {
             key={value}
             onClick={() => setFilter(value)}
             style={{
-              background: filter === value ? "linear-gradient(160deg, color-mix(in srgb, var(--indigo) 55%, white), var(--indigo))" : "var(--well-bg)",
-              boxShadow: filter === value ? "0 3px 8px color-mix(in srgb, var(--indigo) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35)" : "var(--well-shadow)",
-              color: filter === value ? "#fff" : "var(--text-dim)",
+              background: filter === value ? "var(--accent)" : "var(--well-bg)",
+              boxShadow: "var(--well-shadow)",
+              color: filter === value ? "var(--bg)" : "var(--text-dim)",
               border: "none",
               borderRadius: "11px",
               padding: "8px 14px",

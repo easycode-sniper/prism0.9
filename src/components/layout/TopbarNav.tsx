@@ -25,7 +25,7 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
   return (
     <>
       <div className="brand" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        <div className="brand-mark" style={{ width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "10px", background: "var(--indigo)" }}>
+        <div className="brand-mark" style={{ width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "10px", background: "var(--panel-3)", border: "1px solid var(--line)" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/omd-logo.png" alt="OMD" width={24} height={24} style={{ objectFit: "contain" }} />
         </div>
@@ -76,15 +76,15 @@ export function LanguageSwitcher() {
           key={opt.code}
           onClick={() => setLanguage(opt.code)}
           style={{
-            background: language === opt.code ? "linear-gradient(160deg, color-mix(in srgb, var(--indigo) 55%, white), var(--indigo))" : "transparent",
-            color: language === opt.code ? "#fff" : "var(--text-dim)",
+            background: language === opt.code ? "var(--accent)" : "transparent",
+            color: language === opt.code ? "var(--bg)" : "var(--text-dim)",
             border: "none",
             borderRadius: "7px",
             padding: "4px 9px",
             fontSize: ".72rem",
             fontWeight: 600,
             cursor: "pointer",
-            boxShadow: language === opt.code ? "0 3px 8px color-mix(in srgb, var(--indigo) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35)" : "none",
+            boxShadow: "none",
           }}
         >
           {opt.label}
@@ -96,9 +96,9 @@ export function LanguageSwitcher() {
 
 function tabStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? "linear-gradient(160deg, color-mix(in srgb, var(--indigo) 55%, white), var(--indigo))" : "transparent",
+    background: active ? "var(--accent)" : "transparent",
     border: "none",
-    color: active ? "#fff" : "var(--text-dim)",
+    color: active ? "var(--bg)" : "var(--text-dim)",
     fontFamily: "var(--font-sans)",
     fontSize: ".85rem",
     fontWeight: 600,
@@ -107,9 +107,6 @@ function tabStyle(active: boolean): React.CSSProperties {
     cursor: "pointer",
     transition: ".15s",
     textDecoration: "none",
-    boxShadow: active
-      ? "0 4px 12px color-mix(in srgb, var(--indigo) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.35)"
-      : "none",
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",

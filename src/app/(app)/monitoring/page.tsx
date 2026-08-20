@@ -81,7 +81,7 @@ export default function MonitoringPage() {
           placeholder="Search driver or truck ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-md border bd bg-raised px-3 py-1.5 text-sm t-primary placeholder-current focus:border-indigo-500 focus:outline-none"
+          className="rounded-md border bd bg-raised px-3 py-1.5 text-sm t-primary placeholder-current focus:border-[var(--accent)] focus:outline-none"
           style={{ maxWidth: "280px" }}
         />
         {FILTERS.map((f) => (

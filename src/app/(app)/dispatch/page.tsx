@@ -335,7 +335,7 @@ export default function DispatchPage() {
           {/* Step 1 */}
           <div>
             <div className="section-label mb-2">
-              <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--indigo)" }}>1</span>
+              <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--accent)" }}>1</span>
               Select Truck(s)
             </div>
             {selectedTrucks.length > 0 && (
@@ -407,7 +407,7 @@ export default function DispatchPage() {
           {/* Step 2 */}
           <div>
             <div className="section-label mb-2">
-              <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--indigo)" }}>2</span>
+              <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--accent)" }}>2</span>
               Route
             </div>
             <label className="block text-xs mb-1" style={{ color: "var(--text-dim)" }}>Starting factory</label>
@@ -450,7 +450,7 @@ export default function DispatchPage() {
               style={{
                 background: selectedSite ? "rgba(21,156,131,0.08)" : "rgba(88,101,242,0.08)",
                 border: `1px solid ${selectedSite ? "rgba(21,156,131,0.3)" : "rgba(88,101,242,0.25)"}`,
-                color: selectedSite ? "var(--green)" : "var(--indigo)",
+                color: selectedSite ? "var(--green)" : "var(--accent)",
               }}
             >
               {selectedSite ? `Destination set: ${selectedSite.name}. Ready to dispatch.` : "Choose a destination to prepare the route."}
@@ -465,7 +465,7 @@ export default function DispatchPage() {
         {/* Step 3 */}
         <div className="panel p-4">
           <div className="section-label mb-3">
-            <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--indigo)" }}>3</span>
+            <span className="flex h-[18px] w-[18px] items-center justify-center rounded text-xs" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--accent)" }}>3</span>
             Verify Position ({dispatches.length} active)
           </div>
 
@@ -555,7 +555,7 @@ function ActiveDispatchRow({
       )}
 
       <div className="flex gap-2 mt-2">
-        <button onClick={onCheckPosition} disabled={checking} className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+        <button onClick={onCheckPosition} disabled={checking} className="btn-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
           {checking ? "..." : (<><Radar size={13} strokeWidth={2.25} /> Fetch Live Position</>)}
         </button>
         <button onClick={onStop} className="btn-sm danger">Stop</button>

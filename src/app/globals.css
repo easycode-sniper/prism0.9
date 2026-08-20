@@ -56,10 +56,6 @@
   --brand: #0ae448;
   --brand-gradient: linear-gradient(114.41deg, #0ae448 20.74%, #abff84 65.5%);
 
-  /* Deprecated alias. Still referenced while the page sweep lands; the
-     value is cream so nothing paints indigo in the meantime. */
-  --indigo: #fffce1;
-
   /* Panels: flat surface steps, no blur and no shadow. The names survive
      from the retired liquid-glass system so the 26 call sites keep
      working; .glass and .panel are the same treatment now. */

@@ -92,21 +92,21 @@ export default function AdminUsersPage() {
             <label htmlFor="invite-email" className="block text-sm font-medium t-primary">Email</label>
             <input id="invite-email" type="email" required value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none"
+              className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-[var(--accent)] focus:outline-none"
               placeholder="user@company.com" />
           </div>
           <div>
             <label htmlFor="invite-name" className="block text-sm font-medium t-primary">Full Name</label>
             <input id="invite-name" type="text" required value={inviteName}
               onChange={(e) => setInviteName(e.target.value)}
-              className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none"
+              className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-[var(--accent)] focus:outline-none"
               placeholder="John Doe" />
           </div>
           <div>
             <label htmlFor="invite-role" className="block text-sm font-medium t-primary">Role</label>
             <select id="invite-role" value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as "operator" | "admin")}
-              className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none">
+              className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-[var(--accent)] focus:outline-none">
               <option value="operator">Operator</option>
               <option value="admin">Admin</option>
             </select>

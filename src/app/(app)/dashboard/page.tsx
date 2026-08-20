@@ -186,7 +186,7 @@ export default function DashboardPage() {
           on a narrow screen instead of squeezing eight unreadable cards
           onto one line. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: '10px', marginBottom: '20px' }}>
-        <KPICard value={total} label="Total fleet" color="var(--indigo)" />
+        <KPICard value={total} label="Total fleet" color="var(--accent)" />
         <KPICard value={moving} label="Moving" color="var(--green)" />
         <KPICard value={idle} label="Idle" color="var(--cyan)" />
         <KPICard value={offline} label="Offline" color="var(--text-dim)" />
@@ -208,7 +208,7 @@ export default function DashboardPage() {
                 : "Summed from today's pump transactions"
           }
         />
-        <KPICard value={dayStats ? dayStats.activeDispatches : null} label="Active dispatch" color="var(--indigo)" />
+        <KPICard value={dayStats ? dayStats.activeDispatches : null} label="Active dispatch" color="var(--accent)" />
         <KPICard value={dayStats ? dayStats.parcEntries : null} label="Parc entries" color="var(--green)" />
       </div>
 
@@ -294,7 +294,7 @@ export default function DashboardPage() {
                       style={{
                         padding: '3px 10px', borderRadius: '20px', fontSize: '.78rem', fontWeight: 600,
                         background: d.score >= 90 ? 'rgba(74,222,128,.15)' : d.score >= 70 ? 'rgba(88,101,242,.15)' : 'rgba(248,113,113,.15)',
-                        color: d.score >= 90 ? 'var(--green)' : d.score >= 70 ? 'var(--indigo)' : 'var(--red)',
+                        color: d.score >= 90 ? 'var(--green)' : d.score >= 70 ? 'var(--accent)' : 'var(--red)',
                       }}
                     >
                       {d.score}%

@@ -160,7 +160,7 @@ function buildSiteIcon(): L.DivIcon {
 }
 
 // Matches the legacy app's cluster-bubble classes: site clusters gold,
-// truck clusters purple/indigo. Stations are new — given their own
+// truck clusters a violet gradient. Stations are new — given their own
 // distinct color (red-orange) so all three layers stay tellable apart.
 function buildClusterIcon(gradient: string) {
   return (cluster: L.MarkerCluster) =>
@@ -526,8 +526,8 @@ function ToggleButton({
       type="button"
       onClick={onClick}
       style={{
-        background: active ? "var(--indigo)" : "transparent",
-        color: active ? "#fff" : "var(--text-dim)",
+        background: active ? "var(--accent)" : "transparent",
+        color: active ? "var(--bg)" : "var(--text-dim)",
         border: "none",
         borderRadius: "5px",
         padding: "5px 9px",

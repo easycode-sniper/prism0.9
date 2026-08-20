@@ -58,7 +58,7 @@ export default function NotificationsPage() {
               className={`flex items-start gap-3 rounded-lg border p-4 transition ${
                 n.read
                   ? "bd bg-panel/30"
-                  : "border-indigo-900/50 bg-panel/70 cursor-pointer bg-raised-hover"
+                  : "bd bg-panel cursor-pointer bg-raised-hover"
               }`}
             >
               <div className="mt-0.5">

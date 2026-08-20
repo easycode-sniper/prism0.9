@@ -73,7 +73,7 @@ export default function AdminSettingsPage() {
               </label>
               <input id="relay" type="text" value={relay}
                 onChange={(e) => setRelay(e.target.value)}
-                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none"
+                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-[var(--accent)] focus:outline-none"
                 placeholder="https://your-relay.workers.dev" />
               <p className="mt-1 text-xs t-dim">Cloudflare Worker that bypasses CORS</p>
             </div>
@@ -84,7 +84,7 @@ export default function AdminSettingsPage() {
               </label>
               <input id="server" type="text" value={server}
                 onChange={(e) => setServer(e.target.value)}
-                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none"
+                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-[var(--accent)] focus:outline-none"
                 placeholder="hst-api.wialon.eu" />
             </div>
 
@@ -94,7 +94,7 @@ export default function AdminSettingsPage() {
               </label>
               <input id="token" type="password" value={token}
                 onChange={(e) => setToken(e.target.value)}
-                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-indigo-500 focus:outline-none"
+                className="mt-1 block w-full rounded-md border bd bg-raised px-3 py-2 t-primary focus:border-[var(--accent)] focus:outline-none"
                 placeholder="Leave blank to keep existing" />
               <p className="mt-1 text-xs t-dim">
                 {settings?.wialon_token_set ? "Token is set. Enter a new one to change." : "No token set."}

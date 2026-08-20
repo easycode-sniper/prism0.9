@@ -163,7 +163,7 @@ export default function ReportsPage() {
               onClick={execute}
               disabled={loading}
               className="btn-sm"
-              style={{ background: "var(--indigo)", borderColor: "var(--indigo)", color: "#fff" }}
+              style={{ background: "var(--accent)", borderColor: "var(--accent)", color: "var(--bg)" }}
             >
               {loading ? "Running…" : "Execute"}
             </button>

@@ -47,10 +47,10 @@ export default function AdminPage() {
       </div>
 
       <div className="flex gap-3">
-        <Link href="/admin/users" className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+        <Link href="/admin/users" className="btn-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
           <Users size={14} strokeWidth={2.25} /> User Management
         </Link>
-        <Link href="/admin/settings" className="btn-sm" style={{ borderColor: "var(--indigo)", color: "var(--indigo)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+        <Link href="/admin/settings" className="btn-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
           <Settings size={14} strokeWidth={2.25} /> Wialon Settings
         </Link>
       </div>

@@ -185,7 +185,7 @@ export default function HistoryPage() {
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
             <thead>
-              <tr style={{ borderBottom: "1px solid #000", textAlign: "left" }}>
+              <tr style={{ borderBottom: "1px solid var(--line-strong)", textAlign: "left" }}>
                 <th style={{ padding: "4px" }}>Truck</th>
                 <th style={{ padding: "4px" }}>Driver</th>
                 <th style={{ padding: "4px" }}>Destination</th>
@@ -197,7 +197,7 @@ export default function HistoryPage() {
             </thead>
             <tbody>
               {todaysRecords.map((r) => (
-                <tr key={r.id} style={{ borderBottom: "1px solid #ccc" }}>
+                <tr key={r.id} style={{ borderBottom: "1px solid var(--line)" }}>
                   <td style={{ padding: "4px" }}>{r.truck_id}</td>
                   <td style={{ padding: "4px" }}>{r.driver_name || "—"}</td>
                   <td style={{ padding: "4px" }}>{r.site_name || "—"}</td>

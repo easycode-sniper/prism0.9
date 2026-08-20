@@ -388,13 +388,13 @@ input::placeholder, textarea::placeholder {
 }
 
 .status-pill.moving { background: rgba(10, 228, 72, 0.15); color: var(--green); }
-.status-pill.idle { background: rgba(34, 211, 238, 0.15); color: var(--cyan); }
-.status-pill.offline { background: rgba(139, 143, 176, 0.15); color: var(--text-dim); }
+.status-pill.idle { background: rgba(255, 135, 9, 0.15); color: var(--amber); }
+.status-pill.offline { background: rgba(124, 124, 111, 0.18); color: var(--text-dim); }
 .status-pill.on-route { background: rgba(10, 228, 72, 0.15); color: var(--green); }
-.status-pill.off-route { background: rgba(248, 113, 113, 0.15); color: var(--red); }
-.status-pill.pending { background: rgba(255, 183, 3, 0.15); color: var(--amber); }
+.status-pill.off-route { background: rgba(255, 77, 61, 0.15); color: var(--red); }
+.status-pill.pending { background: rgba(255, 135, 9, 0.15); color: var(--amber); }
 .status-pill.completed { background: rgba(10, 228, 72, 0.15); color: var(--green); }
-.status-pill.stopped { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+.status-pill.stopped { background: rgba(255, 135, 9, 0.15); color: var(--amber); }
 .status-pill.dispatched { background: rgba(0, 186, 226, 0.15); color: var(--cyan); }
 
 /* KPI cards — base surface (fill, blur, rim, specular) comes from the
@@ -493,25 +493,25 @@ tbody tr:hover { background: var(--surface-raised); }
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.85);
+  border: 2px solid rgba(255, 252, 225, 0.85);
   pointer-events: auto;
 }
 
-.glow-marker.moving { background: #159c83; box-shadow: 0 0 10px #159c83, 0 0 20px rgba(21, 156, 131, 0.6); animation: pulse-green 1.8s infinite ease-in-out; }
-.glow-marker.idle { background: #167d8d; box-shadow: 0 0 10px #167d8d, 0 0 20px rgba(22, 125, 141, 0.6); }
-.glow-marker.offline { background: #6b7280; box-shadow: 0 0 10px #6b7280, 0 0 20px rgba(107, 114, 128, 0.6); }
-.glow-marker.off-route { background: #d92d42; box-shadow: 0 0 10px #d92d42, 0 0 20px rgba(217, 45, 66, 0.6); animation: pulse-red 1.2s infinite ease-in-out; }
+.glow-marker.moving { background: #0ae448; box-shadow: 0 0 10px #0ae448, 0 0 20px rgba(10, 228, 72, 0.6); animation: pulse-green 1.8s infinite ease-in-out; }
+.glow-marker.idle { background: #ff8709; box-shadow: 0 0 10px #ff8709, 0 0 20px rgba(255, 135, 9, 0.6); }
+.glow-marker.offline { background: #7c7c6f; box-shadow: 0 0 10px #7c7c6f, 0 0 20px rgba(124, 124, 111, 0.6); }
+.glow-marker.off-route { background: #ff4d3d; box-shadow: 0 0 10px #ff4d3d, 0 0 20px rgba(255, 77, 61, 0.6); animation: pulse-red 1.2s infinite ease-in-out; }
 
 @keyframes pulse-green {
-  0% { box-shadow: 0 0 8px #159c83, 0 0 14px rgba(21, 156, 131, 0.5); }
-  50% { box-shadow: 0 0 14px #159c83, 0 0 26px rgba(21, 156, 131, 0.7); }
-  100% { box-shadow: 0 0 8px #159c83, 0 0 14px rgba(21, 156, 131, 0.5); }
+  0% { box-shadow: 0 0 8px #0ae448, 0 0 14px rgba(10, 228, 72, 0.5); }
+  50% { box-shadow: 0 0 14px #0ae448, 0 0 26px rgba(10, 228, 72, 0.7); }
+  100% { box-shadow: 0 0 8px #0ae448, 0 0 14px rgba(10, 228, 72, 0.5); }
 }
 
 @keyframes pulse-red {
-  0% { box-shadow: 0 0 8px #d92d42, 0 0 14px rgba(217, 45, 66, 0.5); }
-  50% { box-shadow: 0 0 16px #d92d42, 0 0 30px rgba(217, 45, 66, 0.8); }
-  100% { box-shadow: 0 0 8px #d92d42, 0 0 14px rgba(217, 45, 66, 0.5); }
+  0% { box-shadow: 0 0 8px #ff4d3d, 0 0 14px rgba(255, 77, 61, 0.5); }
+  50% { box-shadow: 0 0 16px #ff4d3d, 0 0 30px rgba(255, 77, 61, 0.8); }
+  100% { box-shadow: 0 0 8px #ff4d3d, 0 0 14px rgba(255, 77, 61, 0.5); }
 }
 
 /* Section label */
@@ -637,7 +637,7 @@ hr {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.truck-option:hover { background: rgba(255, 255, 255, 0.04); }
+.truck-option:hover { background: rgba(255, 252, 225, 0.05); }
 
 .truck-option.is-selected {
   background: rgba(255, 252, 225, 0.10);
@@ -738,7 +738,7 @@ hr {
 }
 
 .truck-chip__remove:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 252, 225, 0.10);
   color: var(--text);
 }
 

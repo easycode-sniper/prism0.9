@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { createBatchDispatch, stopDispatch } from "@/lib/supabase/actions";
@@ -13,7 +13,7 @@ import type { SiteRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { Radar, Check, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, ArrowRight, MapPin, Square } from "lucide-react";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatAge } from "@/lib/format";
 
 // A truck within this distance of a station is treated as "at the pump".
 const STATION_PROXIMITY_METERS = 150;
@@ -24,6 +24,53 @@ function statusColor(status: string): string {
   if (status === "moving") return "var(--green)";
   if (status === "idle") return "var(--cyan)";
   return "var(--text-dim)";
+}
+
+/**
+ * Route compliance for a run, as the app already knows it.
+ *
+ * pg_cron runs the position check every minute and writes the result back
+ * onto the dispatch row, so `last_on_route`, `last_deviation_meters` and
+ * `last_eta_seconds` are current without anyone pressing anything. The
+ * panel used to ignore all three and show route status only after a manual
+ * per-truck check, which meant the one question this app exists to answer
+ * was sitting in the data and not on the screen.
+ *
+ * A manual check result, when present, is fresher than the last tick and
+ * takes precedence.
+ */
+function runCompliance(d: DispatchRecord, manual?: PositionCheckResult) {
+  if (manual) {
+    return {
+      onRoute: manual.onRoute,
+      deviationMeters: manual.deviationMeters ?? null,
+      etaLabel: manual.etaLabel ?? null,
+      speed: manual.speed ?? null,
+      checkedAt: new Date().toISOString(),
+      manual: true,
+    };
+  }
+  return {
+    onRoute: d.last_on_route,
+    deviationMeters: d.last_deviation_meters,
+    etaLabel: d.last_eta_seconds != null ? formatEtaSeconds(d.last_eta_seconds) : null,
+    speed: null as number | null,
+    checkedAt: d.last_checked_at,
+    manual: false,
+  };
+}
+
+function formatEtaSeconds(total: number): string {
+  const mins = Math.max(0, Math.round(total / 60));
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
+}
+
+/** The tick is a one-minute cycle, so nothing fresh should be older than
+ *  a few of them. Past that the feed itself is the problem, not the truck. */
+function minutesSince(iso: string | null): number | null {
+  if (!iso) return null;
+  return (Date.now() - new Date(iso).getTime()) / 60000;
 }
 
 // Leaflet touches `window` at import time, so it can't be part of the
@@ -45,7 +92,11 @@ export default function DispatchPage() {
 
   // One search and one filter now drive the single truck list. The panel
   // previously had two of each, over the same 101 trucks.
-  const [panelMode, setPanelMode] = useState<"dispatch" | "active">("dispatch");
+  // Watching runs is this app's primary job — creating one is what you do
+  // to start it. So the panel opens on whichever is actually relevant:
+  // the runs if any are on the road, the form if the yard is empty.
+  const [panelMode, setPanelMode] = useState<"dispatch" | "active">("active");
+  const [modePinned, setModePinned] = useState(false);
   const [truckSearch, setTruckSearch] = useState("");
   const [selectedTrucks, setSelectedTrucks] = useState<string[]>([]);
 
@@ -72,6 +123,28 @@ export default function DispatchPage() {
     () => joinFleetWithDispatches(fleetData.trucks, dispatches),
     [fleetData.trucks, dispatches]
   );
+
+  // Off-route count drives the tab badge, so a truck leaving its route is
+  // visible from the form without switching to look for it.
+  const offRouteCount = useMemo(
+    () => dispatches.filter((d) => d.last_on_route === false).length,
+    [dispatches]
+  );
+
+  // Runs that need attention sort to the top; the rest keep dispatch order.
+  const sortedDispatches = useMemo(
+    () => [...dispatches].sort((a, b) => {
+      const rank = (d: DispatchRecord) => (d.last_on_route === false ? 0 : d.last_on_route == null ? 1 : 2);
+      return rank(a) - rank(b);
+    }),
+    [dispatches]
+  );
+
+  // Only auto-follow until the dispatcher picks a side themselves.
+  useEffect(() => {
+    if (modePinned) return;
+    setPanelMode(dispatches.length > 0 ? "active" : "dispatch");
+  }, [dispatches.length, modePinned]);
 
   function toggleTruck(truckId: string) {
     setSelectedTrucks((prev) =>
@@ -262,7 +335,7 @@ export default function DispatchPage() {
           <div className="seg seg--sm mt-3" style={{ display: "flex" }}>
             <button
               type="button"
-              onClick={() => setPanelMode("dispatch")}
+              onClick={() => { setPanelMode("dispatch"); setModePinned(true); }}
               aria-pressed={panelMode === "dispatch"}
               className={`seg-item${panelMode === "dispatch" ? " is-active" : ""}`}
               style={{ flex: 1, justifyContent: "center" }}
@@ -271,12 +344,21 @@ export default function DispatchPage() {
             </button>
             <button
               type="button"
-              onClick={() => setPanelMode("active")}
+              onClick={() => { setPanelMode("active"); setModePinned(true); }}
               aria-pressed={panelMode === "active"}
               className={`seg-item${panelMode === "active" ? " is-active" : ""}`}
               style={{ flex: 1, justifyContent: "center" }}
             >
               Active {dispatches.length > 0 && `(${dispatches.length})`}
+              {offRouteCount > 0 && (
+                <span
+                  title={`${offRouteCount} off route`}
+                  style={{
+                    marginLeft: 2, width: 6, height: 6, borderRadius: "50%",
+                    background: "var(--red)", flex: "none",
+                  }}
+                />
+              )}
             </button>
           </div>
         </header>
@@ -436,7 +518,10 @@ export default function DispatchPage() {
             <section>
               <div className="psection__head">
                 <span className="psection__title">Active runs</span>
-                <span className="psection__count">{dispatches.length}</span>
+                <span className={`psection__count${offRouteCount ? "" : " psection__count--on"}`}
+                      style={offRouteCount ? { color: "var(--red)" } : undefined}>
+                  {offRouteCount ? `${offRouteCount} off route` : "all on route"}
+                </span>
               </div>
               {dispatches.length === 0 ? (
                 <p className="panel-empty">
@@ -444,7 +529,7 @@ export default function DispatchPage() {
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {dispatches.map((d) => (
+                  {sortedDispatches.map((d) => (
                     <ActiveRunCard
                       key={d.id}
                       dispatch={d}
@@ -536,6 +621,8 @@ function ActiveRunCard({
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const siteName = dispatch.site?.name ?? "Unknown destination";
+  const c = runCompliance(dispatch, check);
+  const staleMinutes = minutesSince(c.checkedAt);
 
   function submitManual() {
     const lat = parseFloat(manualLat);
@@ -544,7 +631,7 @@ function ActiveRunCard({
   }
 
   return (
-    <div className="run-card">
+    <div className={`run-card${c.onRoute === false ? " run-card--alert" : ""}`}>
       <div className="run-card__top">
         <span className="fleet-row__id">{dispatch.truck_id}</span>
         <ArrowRight size={11} strokeWidth={2} className="run-card__arrow" />
@@ -552,18 +639,27 @@ function ActiveRunCard({
       </div>
 
       <div className="run-card__meta">
-        {check ? (
-          <>
-            <span className={`status-pill ${check.onRoute ? "on-route" : check.onRoute === false ? "off-route" : "pending"}`}>
-              {check.onRoute
-                ? "On route"
-                : check.onRoute === false
-                  ? `Off route · ${(check.deviationMeters! / 1000).toFixed(1)} km`
-                  : "Pending"}
-            </span>
-            {check.etaSeconds != null && <span>ETA {check.etaLabel}{check.etaBasis === "fallback-speed" ? " (est.)" : ""}</span>}
-            {check.speed != null && <span>{check.speed} km/h</span>}
-          </>
+        <span
+          className={`status-pill ${
+            c.onRoute ? "on-route" : c.onRoute === false ? "off-route" : "pending"
+          }`}
+        >
+          {c.onRoute
+            ? "On route"
+            : c.onRoute === false
+              ? `Off route · ${((c.deviationMeters ?? 0) / 1000).toFixed(1)} km`
+              : "Awaiting first check"}
+        </span>
+        {c.etaLabel && <span>ETA {c.etaLabel}</span>}
+        {c.speed != null && <span>{c.speed} km/h</span>}
+        {/* The tick runs every minute, so a check older than a few of them
+            means the feed stopped, not that the truck is fine. */}
+        {staleMinutes != null && staleMinutes > 3 ? (
+          <span style={{ color: "var(--amber)" }}>
+            Last check {formatAge(staleMinutes)}
+          </span>
+        ) : c.checkedAt ? (
+          <span>Checked {formatAge(minutesSince(c.checkedAt))}</span>
         ) : (
           <span>Since {formatDateTime(dispatch.dispatched_at)}</span>
         )}

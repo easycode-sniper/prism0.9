@@ -1115,6 +1115,13 @@ hr {
   padding: 9px 11px;
 }
 
+/* A run that has left its route is the one thing on this panel that
+   should catch the eye before anything else. */
+.run-card--alert {
+  border-color: rgba(255, 77, 61, 0.45);
+  background: rgba(255, 77, 61, 0.06);
+}
+
 .run-card__top {
   display: flex;
   align-items: center;

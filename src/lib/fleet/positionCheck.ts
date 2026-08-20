@@ -275,14 +275,57 @@ const HQ_EDGE_BUFFER_METERS = 50;
 // runs for the whole fleet every poll.
 export async function runHqArrivalCheck(
   supabase: SupabaseClient,
-  trucks: { truck_id: string; lat: number | null; lng: number | null; driverName?: string | null }[],
+  trucks: {
+    truck_id: string;
+    lat: number | null;
+    lng: number | null;
+    driverName?: string | null;
+    age_minutes?: number | null;
+  }[],
   hq: { centerLat: number; centerLng: number; radiusMeters: number }
 ): Promise<void> {
-  const positioned = trucks.filter(
-    (t): t is { truck_id: string; lat: number; lng: number; driverName?: string | null } =>
-      t.lat != null && t.lng != null
+  const withPosition = trucks.filter(
+    (t): t is {
+      truck_id: string;
+      lat: number;
+      lng: number;
+      driverName?: string | null;
+      age_minutes?: number | null;
+    } => t.lat != null && t.lng != null
   );
-  if (positioned.length === 0) return;
+  if (withPosition.length === 0) return;
+
+  // Wialon can hold two units under the SAME name — a replacement
+  // tracker fitted without retiring the old record. Left as-is, one
+  // vehicle produces two entries, both land in `arrived`, and the
+  // single ON CONFLICT statement covering the whole fleet is rejected
+  // (21000, "cannot affect row a second time"), which stops HQ tracking
+  // for EVERY truck, not just the duplicated one. It ran that way for 28
+  // hours before anyone noticed.
+  //
+  // mark_trucks_hq_state now de-duplicates defensively too, but doing it
+  // here as well is not belt-and-braces for its own sake: this is the
+  // layer that can pick WHICH of the two fixes to believe. The freshest
+  // one wins, since a stale duplicate would otherwise be able to place a
+  // truck at HQ that left hours ago.
+  const freshest = new Map<string, (typeof withPosition)[number]>();
+  for (const t of withPosition) {
+    const existing = freshest.get(t.truck_id);
+    if (!existing) {
+      freshest.set(t.truck_id, t);
+      continue;
+    }
+    const age = t.age_minutes ?? Number.POSITIVE_INFINITY;
+    const existingAge = existing.age_minutes ?? Number.POSITIVE_INFINITY;
+    if (age < existingAge) freshest.set(t.truck_id, t);
+  }
+  const positioned = [...freshest.values()];
+
+  if (positioned.length !== withPosition.length) {
+    console.warn(
+      `[hqArrivalCheck] ${withPosition.length - positioned.length} duplicate unit name(s) in Wialon; kept the freshest fix for each`
+    );
+  }
 
   const { data: rows } = await supabase
     .from("fleet_trucks")
@@ -324,10 +367,15 @@ export async function runHqArrivalCheck(
     });
 
     if (error) {
-      // Don't notify if the flag didn't persist — that's exactly the
-      // loop that produced the duplicate storm.
-      console.error("[hqArrivalCheck] HQ state write failed, skipping notifications:", error);
-      return;
+      // Thrown, not logged-and-returned. Notifications must still be
+      // skipped when the flag did not persist — that is the loop which
+      // produced the duplicate storm — but swallowing the error here is
+      // what let a total HQ-tracking outage run for 28 hours reporting
+      // ok:true with no warnings. runFleetTick catches this into its
+      // warnings array, which reaches net._http_response, so the next
+      // failure is visible from the database instead of only in logs
+      // nobody is watching.
+      throw new Error(`HQ state write failed, notifications skipped: ${error.message}`);
     }
 
     const toNotify = ((transitioned ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
@@ -366,6 +414,13 @@ export async function runHqArrivalCheck(
       p_truck_ids: departed,
       p_at_hq: false,
     });
-    if (error) console.error("[hqArrivalCheck] HQ departure write failed:", error);
+    // Also thrown rather than logged: a departure that fails to persist
+    // leaves the truck flagged at_hq forever, and a truck that never
+    // "leaves" can never be seen to arrive again. That is the same
+    // silent, permanent stall as a failed arrival write, just reached
+    // from the other side.
+    if (error) {
+      throw new Error(`HQ departure write failed: ${error.message}`);
+    }
   }
 }

@@ -47,7 +47,12 @@
   --amber: #ffb300;   /* idle, stale, warning */
   --cyan: #00cfff;    /* parking, geofence, informational */
   --red: #ff2d3f;     /* off-route, speeding, alert */
-  --pink: #ff2fd0;    /* destinations — sites and the factory */
+  /* Destinations. Deliberately not the hotter magenta it replaced: that
+     hue carries enough blue to collapse onto the parking cyan under
+     deuteranopia, where both resolve to nearly the same light blue. This
+     one resolves to grey instead, so the two stay apart for the ~6% of
+     men who cannot separate them by hue. */
+  --pink: #dc61b4;    /* destinations — sites and the factory */
 
   /* Chrome accent: cream, so the colour channel stays free for data.
      --brand is the one chromatic escalation the system allows, and only

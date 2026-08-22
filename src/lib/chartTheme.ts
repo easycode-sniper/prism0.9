@@ -11,7 +11,7 @@ export const CHART_COLORS = {
   amber: "#ffb300",  // idle, stale, warning
   red: "#ff2d3f",    // off-route, speeding, alert
   cyan: "#00cfff",   // parking, geofence, informational
-  pink: "#ff2fd0",   // spare category
+  pink: "#dc61b4",   // spare category
   dim: "#95958a",    // --text-dim
   empty: "#42433d",  // --line, for the "no data" arc
 } as const;

@@ -156,7 +156,7 @@ function buildLandmarkIcon(svg: string, color: string, label: string): L.DivIcon
     html: `<div style="position:relative;display:flex;flex-direction:column;align-items:center;">
       <div style="width:34px;height:34px;border-radius:10px;background:${color};box-shadow:0 0 0 2px rgba(14,16,15,.85), 0 3px 10px rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;color:#0e100f;">${svg}</div>
       <div style="width:0;height:0;margin-top:-2px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid ${color};filter:drop-shadow(0 1px 0 rgba(14,16,15,.85));"></div>
-      <div style="margin-top:3px;padding:1px 7px;border-radius:100px;background:rgba(14,16,15,.86);color:${color};font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap;box-shadow:0 0 0 1px rgba(66,67,61,.9);">${label}</div>
+      <div style="margin-top:3px;padding:1px 7px;border-radius:100px;background:#0e100f;color:${color};font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap;box-shadow:0 0 0 1px rgba(66,67,61,.9);">${label}</div>
     </div>`,
     className: "",
     iconSize: [34, 60],

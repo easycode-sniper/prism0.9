@@ -168,7 +168,7 @@ function buildLandmarkIcon(svg: string, color: string, label: string): L.DivIcon
 
 function buildSiteIcon(): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:9px;height:9px;border-radius:50%;background:#dc61b4;border:1px solid rgba(255,252,225,.7);"></div>`,
+    html: `<div style="width:9px;height:9px;border-radius:50%;background:#ff2fd0;border:1px solid rgba(255,252,225,.7);"></div>`,
     className: "",
     iconSize: [9, 9],
     iconAnchor: [4, 4],
@@ -187,7 +187,7 @@ function buildClusterIcon(gradient: string) {
     });
 }
 
-const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #dc61b4, #a83f8c)";
+const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #ff2fd0, #e01ab4)";
 const TRUCK_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fffce1, #95958a)";
 const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #6fe3ff, #00cfff)";
 
@@ -436,7 +436,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     zonesLayer.clearLayers();
 
     for (const z of zones) {
-      const color = z.kind === "factory" ? "#dc61b4" : "#00cfff";
+      const color = z.kind === "factory" ? "#ff2fd0" : "#00cfff";
       const shape = z.ring
         ? L.polygon(z.ring, { color, weight: 2, fillOpacity: 0.12 })
         : z.centerLat != null && z.centerLng != null && z.radiusMeters != null
@@ -477,7 +477,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           isFactory ? SVG_ICONS.plant : SVG_ICONS.depot,
           // Taxonomy holds: the factory is a destination (pink), the yard
           // is parking (cyan).
-          isFactory ? "#dc61b4" : "#00cfff",
+          isFactory ? "#ff2fd0" : "#00cfff",
           isFactory ? "USINE" : "PARC OMD",
         ),
       });

@@ -47,12 +47,17 @@
   --amber: #ffb300;   /* idle, stale, warning */
   --cyan: #00cfff;    /* parking, geofence, informational */
   --red: #ff2d3f;     /* off-route, speeding, alert */
-  /* Destinations. Deliberately not the hotter magenta it replaced: that
-     hue carries enough blue to collapse onto the parking cyan under
-     deuteranopia, where both resolve to nearly the same light blue. This
-     one resolves to grey instead, so the two stay apart for the ~6% of
-     men who cannot separate them by hue. */
-  --pink: #dc61b4;    /* destinations — sites and the factory */
+  /* Destinations. Note for anyone revisiting this: at this hue the colour
+     carries enough blue that under deuteranopia it resolves to roughly
+     #a0a0cc while --cyan resolves to #adadff — two near-identical light
+     blues, so destinations and parking stop being distinguishable for
+     about 6% of men. #dc61b4 fixes that (worst-case pair separation 83
+     rather than 54) at the cost of some punch.
+
+     Kept vivid on purpose: this deploys to one dispatch office and no
+     one there is colour-blind. If that ever stops being true, #dc61b4 is
+     the swap, and it is the only token that has to move. */
+  --pink: #ff2fd0;    /* destinations — sites and the factory */
 
   /* Chrome accent: cream, so the colour channel stays free for data.
      --brand is the one chromatic escalation the system allows, and only

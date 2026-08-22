@@ -14,11 +14,14 @@ import { formatAge } from "@/lib/format";
 // currentColor, round caps) for the icons baked into that HTML.
 const SVG_ICONS = {
   fuel: `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M4 22V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v18"/><path d="M14 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V7l-3-3"/></svg>`,
-  factory: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M4 20V10l6 4v-4l6 4V6l4 3v11"/><path d="M4 20V10"/></svg>`,
-  parking: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 16V8h4a2.5 2.5 0 0 1 0 5H9"/></svg>`,
   user: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>`,
   target: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>`,
   alert: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.9 18a1.5 1.5 0 0 0 1.3 2.2h17.6a1.5 1.5 0 0 0 1.3-2.2L13.7 3.9a1.5 1.5 0 0 0-2.6 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  // The two fixed landmarks get their own glyphs rather than sharing the
+  // generic set: a cement plant with its silo and stack, and a depot with
+  // a gated forecourt. Drawn on the same 24px grid, same 2.2 stroke.
+  plant: `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21h20"/><path d="M17 21V6a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v15"/><path d="M13 21v-7l-4.5 3V14L4 17v4"/><path d="M15 5V2.5"/><path d="M6.5 10.5c0-1.5 1.5-1.5 1.5-3"/></svg>`,
+  depot: `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M4 21V9.5L12 4l8 5.5V21"/><path d="M9 21v-6h6v6"/><path d="M9 11h6"/></svg>`,
   truck: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7V8Z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="17.5" cy="18.5" r="1.5"/></svg>`,
 };
 
@@ -138,15 +141,28 @@ function buildTruckIcon(
   return L.divIcon({ html, className: "", iconSize: [22, 22], iconAnchor: [11, 11] });
 }
 
-// The factory and home base are landmarks, not just another zone —
-// always visible regardless of the Zones toggle or zoom level, with
-// their own icon rather than a plain circle marker.
-function buildLandmarkIcon(svg: string, color: string): L.DivIcon {
+// The factory and the yard are fixed infrastructure, not vehicles, so they
+// get a shape nothing else on this map uses. Every other marker here is a
+// circle — trucks, clusters, sites, stations — which is exactly why the old
+// 30px circle for these read as just another cluster bubble.
+//
+// A squared badge on a stem reads as "a place" instead, the stem points at
+// the real coordinate rather than the marker's middle, and the name rides
+// underneath so a dispatcher never has to click to tell the plant from the
+// yard. There are only two of these on the map, so a permanent label costs
+// nothing in clutter.
+function buildLandmarkIcon(svg: string, color: string, label: string): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:30px;height:30px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.9);box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;">${svg}</div>`,
+    html: `<div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+      <div style="width:34px;height:34px;border-radius:10px;background:${color};box-shadow:0 0 0 2px rgba(14,16,15,.85), 0 3px 10px rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;color:#0e100f;">${svg}</div>
+      <div style="width:0;height:0;margin-top:-2px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid ${color};filter:drop-shadow(0 1px 0 rgba(14,16,15,.85));"></div>
+      <div style="margin-top:3px;padding:1px 7px;border-radius:100px;background:rgba(14,16,15,.86);color:${color};font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;white-space:nowrap;box-shadow:0 0 0 1px rgba(66,67,61,.9);">${label}</div>
+    </div>`,
     className: "",
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [34, 60],
+    // Anchored at the stem tip, not the badge centre, so the pin sits on
+    // the coordinate the way a pin is supposed to.
+    iconAnchor: [17, 41],
   });
 }
 
@@ -271,6 +287,8 @@ function getOrCreateMapCore(): MapCore {
   const zonesLayer = L.layerGroup().addTo(map);
   // Never gated behind the Zones toggle or clustering — these two are
   // landmarks the operator needs oriented against at any zoom level.
+  // Above the cluster layers: a landmark disappearing behind a bubble of
+  // trucks is the one thing that must never happen to it.
   const landmarksLayer = L.layerGroup().addTo(map);
 
   core = {
@@ -425,7 +443,9 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           ? L.circle([z.centerLat, z.centerLng], { radius: z.radiusMeters, color, weight: 2, fillOpacity: 0.12 })
           : null;
       if (!shape) continue;
-      shape.bindPopup(`<strong style="color:var(--cyan);">${z.name}</strong>`);
+      shape.bindPopup(
+        `<strong style="color:${z.kind === "factory" ? "var(--pink)" : "var(--cyan)"};">${z.name}</strong>`
+      );
       zonesLayer.addLayer(shape);
     }
   }, [zones]);
@@ -450,9 +470,20 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       if (!point) continue;
 
       const marker = L.marker(point, {
-        icon: buildLandmarkIcon(isFactory ? SVG_ICONS.factory : SVG_ICONS.parking, isFactory ? "#fec5fb" : "#00bae2"),
+        // Cluster bubbles are added after this layer as trucks stream in;
+        // a z-offset keeps the landmark on top regardless of layer order.
+        zIndexOffset: 1000,
+        icon: buildLandmarkIcon(
+          isFactory ? SVG_ICONS.plant : SVG_ICONS.depot,
+          // Taxonomy holds: the factory is a destination (pink), the yard
+          // is parking (cyan).
+          isFactory ? "#fec5fb" : "#00bae2",
+          isFactory ? "USINE" : "PARC OMD",
+        ),
       });
-      marker.bindPopup(`<strong style="color:var(--cyan);">${z.name}</strong>`);
+      marker.bindPopup(
+        `<strong style="color:${isFactory ? "var(--pink)" : "var(--cyan)"};">${z.name}</strong>`
+      );
       landmarksLayer.addLayer(marker);
     }
   }, [zones]);

@@ -42,19 +42,19 @@
      alert colour; it is derived to sit at the same vividness as the
      others so an off-route truck reads as urgently as a moving one
      reads as fine. */
-  --green: #0ae448;   /* moving, on-route, healthy */
-  --green-soft: #abff84;
-  --amber: #ff8709;   /* idle, stale, warning */
-  --cyan: #00bae2;    /* parking, geofence, informational */
-  --red: #ff4d3d;     /* off-route, speeding, alert */
-  --pink: #fec5fb;    /* spare category — unassigned */
+  --green: #00ff7b;   /* moving, on-route, healthy */
+  --green-soft: #7dffbd;
+  --amber: #ffb300;   /* idle, stale, warning */
+  --cyan: #00cfff;    /* parking, geofence, informational */
+  --red: #ff2d3f;     /* off-route, speeding, alert */
+  --pink: #ff2fd0;    /* destinations — sites and the factory */
 
   /* Chrome accent: cream, so the colour channel stays free for data.
      --brand is the one chromatic escalation the system allows, and only
      on a single primary action per screen (see .btn-primary). */
   --accent: #fffce1;
-  --brand: #0ae448;
-  --brand-gradient: linear-gradient(114.41deg, #0ae448 20.74%, #abff84 65.5%);
+  --brand: #00ff7b;
+  --brand-gradient: linear-gradient(114.41deg, #00ff7b 20.74%, #7dffbd 65.5%);
 
   /* Panels: flat surface steps, no blur and no shadow. The names survive
      from the retired liquid-glass system so the 26 call sites keep
@@ -437,7 +437,7 @@ input::placeholder, textarea::placeholder {
   .btn-primary:hover:not(:disabled) { background: rgba(255, 252, 225, 0.07); }
   .btn-secondary:hover:not(:disabled) { border-color: var(--accent); background: rgba(255, 252, 225, 0.05); }
   .btn-sm:hover:not(:disabled) { border-color: var(--accent); color: var(--text); background: rgba(255, 252, 225, 0.05); }
-  .btn-sm.danger:hover:not(:disabled) { border-color: var(--red); color: var(--red); background: rgba(255, 77, 61, 0.08); }
+  .btn-sm.danger:hover:not(:disabled) { border-color: var(--red); color: var(--red); background: rgba(255, 45, 63, 0.08); }
 }
 
 .btn-primary:disabled, .btn-secondary:disabled, .btn-sm:disabled, .btn-brand:disabled {
@@ -449,7 +449,7 @@ input::placeholder, textarea::placeholder {
 .btn-secondary.active, .btn-sm.active {
   border-color: var(--green);
   color: var(--green);
-  background: rgba(10, 228, 72, 0.08);
+  background: rgba(0, 255, 123, 0.08);
 }
 
 /* The one chromatic control. The gradient rides a masked pseudo-element
@@ -478,7 +478,7 @@ input::placeholder, textarea::placeholder {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .btn-brand:hover:not(:disabled) { background: rgba(10, 228, 72, 0.07); }
+  .btn-brand:hover:not(:disabled) { background: rgba(0, 255, 123, 0.07); }
 }
 
 /* ── Segmented control / tabs ─────────────────────────────────
@@ -601,15 +601,15 @@ input::placeholder, textarea::placeholder {
   background: currentColor;
 }
 
-.status-pill.moving { background: rgba(10, 228, 72, 0.15); color: var(--green); }
-.status-pill.idle { background: rgba(255, 135, 9, 0.15); color: var(--amber); }
-.status-pill.offline { background: rgba(124, 124, 111, 0.18); color: var(--text-dim); }
-.status-pill.on-route { background: rgba(10, 228, 72, 0.15); color: var(--green); }
-.status-pill.off-route { background: rgba(255, 77, 61, 0.15); color: var(--red); }
-.status-pill.pending { background: rgba(255, 135, 9, 0.15); color: var(--amber); }
-.status-pill.completed { background: rgba(10, 228, 72, 0.15); color: var(--green); }
-.status-pill.stopped { background: rgba(255, 135, 9, 0.15); color: var(--amber); }
-.status-pill.dispatched { background: rgba(0, 186, 226, 0.15); color: var(--cyan); }
+.status-pill.moving { background: rgba(0, 255, 123, 0.15); color: var(--green); }
+.status-pill.idle { background: rgba(255, 179, 0, 0.15); color: var(--amber); }
+.status-pill.offline { background: rgba(149, 149, 138, 0.18); color: var(--text-dim); }
+.status-pill.on-route { background: rgba(0, 255, 123, 0.15); color: var(--green); }
+.status-pill.off-route { background: rgba(255, 45, 63, 0.15); color: var(--red); }
+.status-pill.pending { background: rgba(255, 179, 0, 0.15); color: var(--amber); }
+.status-pill.completed { background: rgba(0, 255, 123, 0.15); color: var(--green); }
+.status-pill.stopped { background: rgba(255, 179, 0, 0.15); color: var(--amber); }
+.status-pill.dispatched { background: rgba(0, 207, 255, 0.15); color: var(--cyan); }
 
 /* KPI cards — base surface (fill, blur, rim, specular) comes from the
    shared .glass, .kpi-card rules above; this is just the layout and the
@@ -733,21 +733,21 @@ tbody tr:nth-child(even) td { background: rgba(255, 252, 225, 0.014); }
   pointer-events: auto;
 }
 
-.glow-marker.moving { background: #0ae448; box-shadow: 0 0 10px #0ae448, 0 0 20px rgba(10, 228, 72, 0.6); animation: pulse-green 1.8s infinite ease-in-out; }
-.glow-marker.idle { background: #ff8709; box-shadow: 0 0 10px #ff8709, 0 0 20px rgba(255, 135, 9, 0.6); }
-.glow-marker.offline { background: #7c7c6f; box-shadow: 0 0 10px #7c7c6f, 0 0 20px rgba(124, 124, 111, 0.6); }
-.glow-marker.off-route { background: #ff4d3d; box-shadow: 0 0 10px #ff4d3d, 0 0 20px rgba(255, 77, 61, 0.6); animation: pulse-red 1.2s infinite ease-in-out; }
+.glow-marker.moving { background: #00ff7b; box-shadow: 0 0 10px #00ff7b, 0 0 20px rgba(0, 255, 123, 0.6); animation: pulse-green 1.8s infinite ease-in-out; }
+.glow-marker.idle { background: #ffb300; box-shadow: 0 0 10px #ffb300, 0 0 20px rgba(255, 179, 0, 0.6); }
+.glow-marker.offline { background: #95958a; box-shadow: 0 0 10px #95958a, 0 0 20px rgba(149, 149, 138, 0.6); }
+.glow-marker.off-route { background: #ff2d3f; box-shadow: 0 0 10px #ff2d3f, 0 0 20px rgba(255, 45, 63, 0.6); animation: pulse-red 1.2s infinite ease-in-out; }
 
 @keyframes pulse-green {
-  0% { box-shadow: 0 0 8px #0ae448, 0 0 14px rgba(10, 228, 72, 0.5); }
-  50% { box-shadow: 0 0 14px #0ae448, 0 0 26px rgba(10, 228, 72, 0.7); }
-  100% { box-shadow: 0 0 8px #0ae448, 0 0 14px rgba(10, 228, 72, 0.5); }
+  0% { box-shadow: 0 0 8px #00ff7b, 0 0 14px rgba(0, 255, 123, 0.5); }
+  50% { box-shadow: 0 0 14px #00ff7b, 0 0 26px rgba(0, 255, 123, 0.7); }
+  100% { box-shadow: 0 0 8px #00ff7b, 0 0 14px rgba(0, 255, 123, 0.5); }
 }
 
 @keyframes pulse-red {
-  0% { box-shadow: 0 0 8px #ff4d3d, 0 0 14px rgba(255, 77, 61, 0.5); }
-  50% { box-shadow: 0 0 16px #ff4d3d, 0 0 30px rgba(255, 77, 61, 0.8); }
-  100% { box-shadow: 0 0 8px #ff4d3d, 0 0 14px rgba(255, 77, 61, 0.5); }
+  0% { box-shadow: 0 0 8px #ff2d3f, 0 0 14px rgba(255, 45, 63, 0.5); }
+  50% { box-shadow: 0 0 16px #ff2d3f, 0 0 30px rgba(255, 45, 63, 0.8); }
+  100% { box-shadow: 0 0 8px #ff2d3f, 0 0 14px rgba(255, 45, 63, 0.5); }
 }
 
 /* Section label */
@@ -1173,8 +1173,8 @@ hr {
 /* A run that has left its route is the one thing on this panel that
    should catch the eye before anything else. */
 .run-card--alert {
-  border-color: rgba(255, 77, 61, 0.45);
-  background: rgba(255, 77, 61, 0.06);
+  border-color: rgba(255, 45, 63, 0.45);
+  background: rgba(255, 45, 63, 0.06);
 }
 
 .run-card__top {
@@ -1486,8 +1486,8 @@ select:not([multiple]):not([size]) {
   font-size: 0.65rem;
   font-weight: 600;
   color: var(--amber);
-  background: rgba(255, 135, 9, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(255, 135, 9, 0.28);
+  background: rgba(255, 179, 0, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.28);
 }
 
 .site-picker__empty {

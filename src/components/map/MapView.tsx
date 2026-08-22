@@ -93,10 +93,10 @@ const SATELLITE_LABELS_TILES = "https://server.arcgisonline.com/ArcGIS/rest/serv
 // to hold up against both the dark and light basemaps, so they are not
 // theme tokens and should not become them.
 function statusColor(status: TruckMarkerData["status"], offRoute?: boolean): string {
-  if (offRoute) return "#ff4d3d";
-  if (status === "moving") return "#0ae448";
-  if (status === "idle") return "#ff8709";
-  return "#7c7c6f";
+  if (offRoute) return "#ff2d3f";
+  if (status === "moving") return "#00ff7b";
+  if (status === "idle") return "#ffb300";
+  return "#95958a";
 }
 
 // The same status as popup text, which sits on --panel rather than on
@@ -131,7 +131,7 @@ function buildTruckIcon(
   const shape =
     course != null
       ? `<svg width="22" height="22" viewBox="0 0 24 24" style="transform:rotate(${course}deg); filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));"><path d="M12 1.5 L20 21 L12 16 L4 21 Z" fill="${color}" stroke="#0e100f" stroke-width="1.75" stroke-linejoin="round"/></svg>`
-      : `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:${offRoute ? 3 : 1}px solid ${offRoute ? "#ff4d3d" : "rgba(255,252,225,.85)"};box-shadow:0 0 6px ${color};"></div>`;
+      : `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:${offRoute ? 3 : 1}px solid ${offRoute ? "#ff2d3f" : "rgba(255,252,225,.85)"};box-shadow:0 0 6px ${color};"></div>`;
 
   const label = labelText
     ? `<div style="position:absolute; bottom:26px; left:50%; transform:translateX(-50%); white-space:nowrap; background:#fff; color:#222; font-size:11px; font-weight:600; padding:2px 6px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.5); pointer-events:none;">${labelText}</div>`
@@ -168,7 +168,7 @@ function buildLandmarkIcon(svg: string, color: string, label: string): L.DivIcon
 
 function buildSiteIcon(): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:9px;height:9px;border-radius:50%;background:#fec5fb;border:1px solid rgba(255,252,225,.7);"></div>`,
+    html: `<div style="width:9px;height:9px;border-radius:50%;background:#ff2fd0;border:1px solid rgba(255,252,225,.7);"></div>`,
     className: "",
     iconSize: [9, 9],
     iconAnchor: [4, 4],
@@ -187,13 +187,13 @@ function buildClusterIcon(gradient: string) {
     });
 }
 
-const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fec5fb, #f79bf1)";
+const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #ff2fd0, #e01ab4)";
 const TRUCK_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fffce1, #95958a)";
-const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #5fd8f0, #00bae2)";
+const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #6fe3ff, #00cfff)";
 
 function buildStationIcon(occupied: boolean): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#ff8709" : "#42433d"};border:2px solid rgba(255,252,225,.8);display:flex;align-items:center;justify-content:center;color:#0e100f;">${SVG_ICONS.fuel}</div>`,
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#ffb300" : "#42433d"};border:2px solid rgba(255,252,225,.8);display:flex;align-items:center;justify-content:center;color:#0e100f;">${SVG_ICONS.fuel}</div>`,
     className: "",
     iconSize: [16, 16],
     iconAnchor: [8, 8],
@@ -436,7 +436,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     zonesLayer.clearLayers();
 
     for (const z of zones) {
-      const color = z.kind === "factory" ? "#fec5fb" : "#00bae2";
+      const color = z.kind === "factory" ? "#ff2fd0" : "#00cfff";
       const shape = z.ring
         ? L.polygon(z.ring, { color, weight: 2, fillOpacity: 0.12 })
         : z.centerLat != null && z.centerLng != null && z.radiusMeters != null
@@ -477,7 +477,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           isFactory ? SVG_ICONS.plant : SVG_ICONS.depot,
           // Taxonomy holds: the factory is a destination (pink), the yard
           // is parking (cyan).
-          isFactory ? "#fec5fb" : "#00bae2",
+          isFactory ? "#ff2fd0" : "#00cfff",
           isFactory ? "USINE" : "PARC OMD",
         ),
       });
@@ -504,7 +504,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     }
 
     if (routeLine && routeLine.length >= 2) {
-      c.routeLayer = L.polyline(routeLine, { color: "#00bae2", weight: 4, opacity: 0.85 }).addTo(c.map);
+      c.routeLayer = L.polyline(routeLine, { color: "#00cfff", weight: 4, opacity: 0.85 }).addTo(c.map);
     }
   }, [routeLine]);
 

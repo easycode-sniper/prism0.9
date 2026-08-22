@@ -7,11 +7,11 @@ import { Chart as ChartJS } from "chart.js";
  * moves, this file moves with it, and nothing else has to.
  */
 export const CHART_COLORS = {
-  green: "#0ae448",  // moving, on-route, healthy
-  amber: "#ff8709",  // idle, stale, warning
-  red: "#ff4d3d",    // off-route, speeding, alert
-  cyan: "#00bae2",   // parking, geofence, informational
-  pink: "#fec5fb",   // spare category
+  green: "#00ff7b",  // moving, on-route, healthy
+  amber: "#ffb300",  // idle, stale, warning
+  red: "#ff2d3f",    // off-route, speeding, alert
+  cyan: "#00cfff",   // parking, geofence, informational
+  pink: "#ff2fd0",   // spare category
   dim: "#95958a",    // --text-dim
   empty: "#42433d",  // --line, for the "no data" arc
 } as const;

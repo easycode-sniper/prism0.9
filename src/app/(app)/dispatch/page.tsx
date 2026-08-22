@@ -365,10 +365,10 @@ export default function DispatchPage() {
 
         <div className="dispatch-panel__body">
           {error && (
-            <div className="rounded-md p-2.5 text-xs" style={{ background: "rgba(255,77,61,0.08)", border: "1px solid rgba(255,77,61,0.35)", color: "var(--red)" }}>{error}</div>
+            <div className="rounded-md p-2.5 text-xs" style={{ background: "rgba(255, 45, 63,0.08)", border: "1px solid rgba(255, 45, 63,0.35)", color: "var(--red)" }}>{error}</div>
           )}
           {success && (
-            <div className="rounded-md p-2.5 text-xs" style={{ background: "rgba(10,228,72,0.08)", border: "1px solid rgba(10,228,72,0.22)", color: "var(--green)" }}>{success}</div>
+            <div className="rounded-md p-2.5 text-xs" style={{ background: "rgba(0, 255, 123,0.08)", border: "1px solid rgba(0, 255, 123,0.22)", color: "var(--green)" }}>{success}</div>
           )}
 
           {panelMode === "dispatch" ? (

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Copy, Check, Phone, MapPin, Download } from "lucide-react";
-import { listDrivers, type DriverCard } from "@/lib/supabase/drivers";
+import { Copy, Check, Phone, MapPin, Download, Pencil, X } from "lucide-react";
+import { listDrivers, saveDriverContact, type DriverCard } from "@/lib/supabase/drivers";
 import { normalizeName } from "@/lib/drivers/match";
 import { formatDate } from "@/lib/format";
 
@@ -16,6 +16,19 @@ export default function DriversPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [copiedName, setCopiedName] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Re-reads through Wialon, so an edit shows with the same matching the
+  // rest of the page uses rather than a locally patched card.
+  async function reload() {
+    const res = await listDrivers();
+    if (res.error) { setError(res.error); return; }
+    setDrivers(res.drivers ?? []);
+    setFilteredOut(res.filteredOut ?? 0);
+    setCanEdit(Boolean(res.canEdit));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -26,6 +39,7 @@ export default function DriversPage() {
       else {
         setDrivers(res.drivers ?? []);
         setFilteredOut(res.filteredOut ?? 0);
+        setCanEdit(Boolean(res.canEdit));
       }
     })();
     return () => {
@@ -185,17 +199,41 @@ export default function DriversPage() {
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => copyOne(d)}
-                title="Copy name, phone and address"
-                aria-label={`Copy details for ${d.name}`}
-                className="t-dim"
-                style={{ flex: "none", background: "transparent", border: "none", cursor: "pointer", padding: "2px", lineHeight: 0 }}
-              >
-                {copiedName === d.name ? <Check size={14} className="c-green" /> : <Copy size={14} />}
-              </button>
+              <div style={{ display: "flex", gap: "2px", flex: "none" }}>
+                {canEdit && (
+                  <button
+                    onClick={() => { setSaveError(null); setEditing(editing === d.name ? null : d.name); }}
+                    title={d.inDirectory ? "Edit phone and address" : "Add phone and address"}
+                    aria-label={`Edit details for ${d.name}`}
+                    aria-expanded={editing === d.name}
+                    className="t-dim"
+                    style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px", lineHeight: 0 }}
+                  >
+                    {editing === d.name ? <X size={14} /> : <Pencil size={14} />}
+                  </button>
+                )}
+                <button
+                  onClick={() => copyOne(d)}
+                  title="Copy name, phone and address"
+                  aria-label={`Copy details for ${d.name}`}
+                  className="t-dim"
+                  style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px", lineHeight: 0 }}
+                >
+                  {copiedName === d.name ? <Check size={14} className="c-green" /> : <Copy size={14} />}
+                </button>
+              </div>
             </div>
 
+            {editing === d.name ? (
+              <DriverEditor
+                driver={d}
+                error={saveError}
+                onCancel={() => { setEditing(null); setSaveError(null); }}
+                onSaved={async () => { setEditing(null); setSaveError(null); await reload(); }}
+                onError={setSaveError}
+              />
+            ) : (
+              <>
             <div style={{ display: "flex", alignItems: "center", gap: "7px", fontFamily: "var(--font-mono)", fontSize: ".76rem" }}>
               <Phone size={12} className="t-faint" style={{ flex: "none" }} />
               {d.phone ? (
@@ -213,9 +251,102 @@ export default function DriversPage() {
                 <span className="t-faint">n/a</span>
               )}
             </div>
+              </>
+            )}
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Inline editor for one driver's contact details.
+ *
+ * It never edits the name: who exists comes from Wialon, and letting the
+ * name be retyped here would break the join that put this card on screen
+ * in the first place. What it edits is the directory row hanging off that
+ * name — creating it when the driver has none, which is the case for
+ * everyone currently showing n/a.
+ */
+function DriverEditor({
+  driver,
+  error,
+  onCancel,
+  onSaved,
+  onError,
+}: {
+  driver: DriverCard;
+  error: string | null;
+  onCancel: () => void;
+  onSaved: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const [phone, setPhone] = useState(driver.phoneRaw ?? "");
+  const [address, setAddress] = useState(driver.address ?? "");
+  const [hiredOn, setHiredOn] = useState(driver.hiredOn ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const res = await saveDriverContact({
+      wialonName: driver.name,
+      directoryName: driver.directoryName,
+      phone,
+      address,
+      hiredOn,
+    });
+    setSaving(false);
+    if (res.error) { onError(res.error); return; }
+    await onSaved();
+  }
+
+  return (
+    <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+      <fieldset disabled={saving} style={{ border: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "7px" }}>
+        <label>
+          <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "3px" }}>Phone</span>
+          <input
+            className="field"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="0770 00 00 00"
+            style={{ fontFamily: "var(--font-mono)", fontSize: ".76rem", padding: "6px 9px" }}
+          />
+        </label>
+        <label>
+          <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "3px" }}>Address</span>
+          <input
+            className="field"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Town or full address"
+            style={{ fontSize: ".76rem", padding: "6px 9px" }}
+          />
+        </label>
+        <label>
+          <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "3px" }}>Hired on</span>
+          <input
+            className="field"
+            value={hiredOn}
+            onChange={(e) => setHiredOn(e.target.value)}
+            placeholder="2026-08-23"
+            style={{ fontFamily: "var(--font-mono)", fontSize: ".76rem", padding: "6px 9px" }}
+          />
+        </label>
+
+        {error && (
+          <p style={{ fontSize: ".7rem", color: "var(--red)", lineHeight: 1.35 }}>{error}</p>
+        )}
+
+        <div style={{ display: "flex", gap: "6px" }}>
+          <button type="submit" className="btn-sm" style={{ borderColor: "var(--green)", color: "var(--green)" }}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button type="button" onClick={onCancel} className="btn-sm">Cancel</button>
+        </div>
+      </fieldset>
+    </form>
   );
 }

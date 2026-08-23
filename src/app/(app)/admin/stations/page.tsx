@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { createGasStation, deleteGasStation } from "@/lib/supabase/stations";
 import { useFleet } from "@/components/providers/FleetProvider";
-import { ChevronLeft, Fuel, Trash2, Plus, MapPin } from "lucide-react";
+import { ChevronLeft, Fuel, Trash2, Plus, MapPin, Crosshair } from "lucide-react";
 
 export default function AdminStationsPage() {
   const { gasStations, refreshGasStations } = useFleet();
@@ -63,6 +63,7 @@ export default function AdminStationsPage() {
         <p className="mt-1 text-sm" style={{ color: "var(--text-dim)" }}>
           Stations plot on the map and drive the dashboard&rsquo;s fuel-stop
           analysis, which counts a truck as fuelling within 150 m of one.
+          Click a station to see where it sits.
         </p>
       </div>
 
@@ -158,7 +159,22 @@ export default function AdminStationsPage() {
               <tbody>
                 {visible.map((s) => (
                   <tr key={s.id}>
-                    <td className="t-primary">{s.name}</td>
+                    <td style={{ padding: 0 }}>
+                      {/* Reuses the same focus route Monitoring's Locate uses:
+                          the dispatch map reads ?lat/?lng and setViews there at
+                          zoom 13. Embedding a second map here is not an option —
+                          MapView holds a module-level singleton Leaflet
+                          instance, so mounting it twice would move the map out
+                          of the dispatch page rather than clone it. */}
+                      <Link
+                        href={`/dispatch?lat=${s.lat}&lng=${s.lng}`}
+                        className="station-locate"
+                        title={`Show ${s.name} on the map`}
+                      >
+                        <Crosshair size={12} strokeWidth={2} className="station-locate__icon" />
+                        <span>{s.name}</span>
+                      </Link>
+                    </td>
                     <td style={{ fontFamily: "var(--font-mono)", fontSize: ".78rem", color: "var(--text-dim)" }}>{s.lat.toFixed(6)}</td>
                     <td style={{ fontFamily: "var(--font-mono)", fontSize: ".78rem", color: "var(--text-dim)" }}>{s.lng.toFixed(6)}</td>
                     <td>

@@ -191,12 +191,17 @@ const SITE_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #ff2fd0, #e01a
 const TRUCK_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #fffce1, #95958a)";
 const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #6fe3ff, #00cfff)";
 
+// An unoccupied station used to paint --line, the hairline colour, which
+// made a lone pump on a dark basemap almost impossible to find — and it
+// disagreed with its own cluster bubble, which has always been cyan.
+// Stations are cyan now, the hue the taxonomy already gives them; amber
+// stays as the exception that means a truck is at the pump right now.
 function buildStationIcon(occupied: boolean): L.DivIcon {
   return L.divIcon({
-    html: `<div style="width:16px;height:16px;border-radius:50%;background:${occupied ? "#ffb300" : "#42433d"};border:2px solid rgba(255,252,225,.8);display:flex;align-items:center;justify-content:center;color:#0e100f;">${SVG_ICONS.fuel}</div>`,
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:${occupied ? "#ffb300" : "#00cfff"};border:2px solid rgba(14,16,15,.9);box-shadow:0 0 0 1px rgba(255,252,225,.5);display:flex;align-items:center;justify-content:center;color:#0e100f;">${SVG_ICONS.fuel}</div>`,
     className: "",
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
   });
 }
 

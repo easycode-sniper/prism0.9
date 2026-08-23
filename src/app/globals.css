@@ -1252,6 +1252,40 @@ hr {
   border-radius: var(--r-md);
 }
 
+/* ── Locate link ──────────────────────────────────────────────
+   A station row in the admin list opens the dispatch map centred on it.
+   The crosshair stays dim until hover so a long list does not turn into
+   a column of icons, but the row still advertises that it is clickable
+   by the pointer and the colour shift. */
+.station-locate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 16px;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color var(--dur-hover) var(--ease-out);
+}
+
+.station-locate__icon {
+  flex: none;
+  color: var(--text-faint);
+  transition: color var(--dur-hover) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .station-locate:hover { color: var(--cyan); }
+  .station-locate:hover .station-locate__icon { color: var(--cyan); }
+}
+
+.station-locate:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: var(--r-sm);
+}
+
 /* ── Field ────────────────────────────────────────────────────
    The same six inline style properties were pasted onto every input
    and select in the dispatch panel. One class instead, so a change to

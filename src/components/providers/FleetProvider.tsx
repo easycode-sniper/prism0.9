@@ -28,6 +28,7 @@ interface FleetContextType {
   sites: SiteRecord[];
   notifications: NotificationRecord[];
   refreshGeofences: () => Promise<void>;
+  refreshGasStations: () => Promise<void>;
   refreshDispatches: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
 }
@@ -44,6 +45,7 @@ const FleetContext = createContext<FleetContextType>({
   sites: [],
   notifications: [],
   refreshGeofences: async () => {},
+  refreshGasStations: async () => {},
   refreshDispatches: async () => {},
   refreshNotifications: async () => {},
 });
@@ -82,6 +84,11 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   const loadGeofences = useCallback(async () => {
     const result = await listGeofences();
     if (result.data) setGeofences(result.data);
+  }, []);
+
+  const loadGasStations = useCallback(async () => {
+    const result = await listGasStations();
+    if (result.data) setGasStations(result.data);
   }, []);
 
   const loadNotifications = useCallback(async () => {
@@ -197,15 +204,15 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
     loadDispatches();
     loadGeofences();
     loadNotifications();
-    listGasStations().then(({ data }) => setGasStations(data));
+    loadGasStations();
     listSites().then(({ data }) => { if (data) setSites(data); });
 
     const refInterval = setInterval(() => {
-      listGasStations().then(({ data }) => setGasStations(data));
+      loadGasStations();
       listSites().then(({ data }) => { if (data) setSites(data); });
     }, 5 * 60_000);
     return () => clearInterval(refInterval);
-  }, [loadDispatches, loadGeofences, loadNotifications]);
+  }, [loadDispatches, loadGeofences, loadNotifications, loadGasStations]);
 
   // The tick writes one snapshot row a minute; this turns that write
   // into a push, so the map updates without the browser asking.
@@ -253,6 +260,7 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
         sites,
         notifications,
         refreshGeofences: loadGeofences,
+        refreshGasStations: loadGasStations,
         refreshDispatches: loadDispatches,
         refreshNotifications: loadNotifications,
       }}

@@ -6,7 +6,7 @@ import { uploadKmlZones } from "@/lib/supabase/geofences";
 import type { KmlUploadReport } from "@/lib/supabase/geofences";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
-import { Users, Settings } from "lucide-react";
+import { Users, Settings, Fuel } from "lucide-react";
 
 export default function AdminPage() {
   const { t } = useTranslation();
@@ -52,6 +52,9 @@ export default function AdminPage() {
         </Link>
         <Link href="/admin/settings" className="btn-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
           <Settings size={14} strokeWidth={2} /> Wialon Settings
+        </Link>
+        <Link href="/admin/stations" className="btn-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          <Fuel size={14} strokeWidth={2} /> Gas Stations
         </Link>
       </div>
 

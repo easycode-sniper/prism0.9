@@ -533,9 +533,23 @@ async function runZoneArrivalCheck(
 
       if (target.onArrived) await target.onArrived(toNotify, driverOf);
 
-      await supabase.from("notifications").insert(
-        toNotify.map((truck_id) => target.notification(truck_id))
+      // truck_id is spread in here rather than left to each target's
+      // notification() to remember: the column is NOT NULL, so omitting
+      // it fails the insert outright, and building the row in one place
+      // means a new zone cannot forget it.
+      const { error: notifyError } = await supabase.from("notifications").insert(
+        toNotify.map((truck_id) => ({ truck_id, ...target.notification(truck_id) }))
       );
+      // Checked, not fire-and-forget. An unchecked insert here is what
+      // hid this exact bug: the flag write succeeded, so every truck was
+      // marked as present and would never transition again, while the
+      // notification that was the entire point never landed and nothing
+      // said so.
+      if (notifyError) {
+        throw new Error(
+          `${target.label} arrival notification insert failed (flags already set, so these will not retry): ${notifyError.message}`
+        );
+      }
     }
   }
 

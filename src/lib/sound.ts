@@ -30,9 +30,11 @@ function beep(freq: number, durationMs: number, startAt: number, gainValue = 0.1
   oscillator.stop(t + durationMs / 1000);
 }
 
-export type AlertKind = "off_route" | "speeding" | "site_arrival" | "factory_arrival";
+import type { NotificationKind } from "@/lib/notifications/kinds";
 
-export function playAlertTone(kind: AlertKind) {
+export type AlertKind = NotificationKind;
+
+export function playAlertTone(kind: string) {
   const ctx = getContext();
   if (!ctx) return;
   if (ctx.state === "suspended") ctx.resume();
@@ -49,11 +51,24 @@ export function playAlertTone(kind: AlertKind) {
       beep(740, 150, 0);
       beep(740, 150, 0.2);
       break;
+    case "site_approaching":
+      // Advance warning: a rising pair, distinct from an arrival's fall,
+      // so "get ready" and "it's here" don't sound alike.
+      beep(520, 150, 0);
+      beep(700, 200, 0.16);
+      break;
     case "site_arrival":
     case "factory_arrival":
       // Calm: single soft descending chime
       beep(660, 180, 0);
       beep(440, 220, 0.15);
+      break;
+    case "hq_arrival":
+      // Previously silent: hq_arrival was missing from the union, so the
+      // single most frequent alert in the system played nothing. Lower
+      // and softer than a site arrival — coming home is routine.
+      beep(540, 200, 0);
+      beep(380, 240, 0.16);
       break;
   }
 }

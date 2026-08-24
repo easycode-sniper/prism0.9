@@ -42,6 +42,14 @@ const SPEED_LIMIT_KMH = 90;
 const GEOFENCE_EDGE_BUFFER_METERS = 150;
 const ARRIVAL_DISTANCE_BUFFER_METERS = 300;
 
+// How far out the "arriving shortly" alert fires. Five minutes is what
+// was asked for; it lives here rather than inline so the tick's cadence
+// can be reasoned about against it — the fleet polls every minute, so
+// five minutes is comfortably more than one poll's worth of travel and
+// the alert cannot be skipped over by a truck moving too fast between
+// samples.
+const SITE_APPROACH_SECONDS = 5 * 60;
+
 interface DispatchForCheck {
   id: string;
   truck_id: string;
@@ -53,6 +61,7 @@ interface DispatchForCheck {
   is_speeding: boolean | null;
   site_arrival_notified: boolean | null;
   factory_arrival_notified: boolean | null;
+  site_approach_notified: boolean | null;
 }
 
 interface SiteForCheck {
@@ -158,7 +167,7 @@ export async function runPositionCheck(
   const notificationsToInsert: {
     dispatch_id: string;
     truck_id: string;
-    kind: "off_route" | "speeding" | "site_arrival" | "factory_arrival" | "hq_arrival";
+    kind: "off_route" | "speeding" | "site_arrival" | "site_approaching" | "factory_arrival" | "hq_arrival";
     title: string;
     message: string;
   }[] = [];
@@ -190,13 +199,38 @@ export async function runPositionCheck(
       message: `${dispatch.truck_id} has arrived at ${siteName}.`,
     });
   }
-  if (nowFactoryArrived) {
+  // No factory_arrival notification here any more. Factory arrival is
+  // now detected fleet-wide by runFactoryArrivalCheck, which sees every
+  // truck rather than only dispatched ones — emitting it from both
+  // places would notify a dispatched truck twice for one arrival.
+  // nowFactoryArrived is still computed and still persisted below,
+  // because dispatches.factory_arrival_notified is what the History
+  // page reads for "reached factory" on a given run.
+
+  // Fires once, when the road-route ETA first drops to five minutes or
+  // less, so the client can be ready before the truck is at the gate.
+  //
+  // Gated on etaBasis === "osrm-speed": the fallback ETA is straight-line
+  // distance over an assumed average speed, which near a destination is
+  // wrong in the direction that matters — it reads "5 minutes" while the
+  // truck is still working through the last few junctions. An alert
+  // whose whole value is its timing should not fire on a guess.
+  const wasApproachNotified = dispatch.site_approach_notified === true;
+  const nowApproaching =
+    !wasApproachNotified &&
+    !wasSiteArrived &&
+    !nowSiteArrived &&
+    etaBasis === "osrm-speed" &&
+    etaSeconds != null &&
+    etaSeconds <= SITE_APPROACH_SECONDS;
+
+  if (nowApproaching) {
     notificationsToInsert.push({
       dispatch_id: dispatch.id,
       truck_id: dispatch.truck_id,
-      kind: "factory_arrival",
-      title: "Arrived at factory",
-      message: `${dispatch.truck_id} has arrived at Usine Amouda Ciment.`,
+      kind: "site_approaching",
+      title: "Arriving at client shortly",
+      message: `${dispatch.truck_id} is about ${formatDuration(etaSeconds)} from ${siteName}.`,
     });
   }
 
@@ -229,6 +263,7 @@ export async function runPositionCheck(
       driver_name: result.driverName ?? undefined,
       site_arrival_notified: nowSiteArrived ? true : undefined,
       factory_arrival_notified: nowFactoryArrived ? true : undefined,
+      site_approach_notified: nowApproaching ? true : undefined,
       arrived_at: nowSiteArrived ? result.timestamp.toISOString() : undefined,
     })
     .eq("id", dispatch.id)
@@ -250,7 +285,7 @@ export async function loadDispatchAndSite(
   const { data: dispatch, error: dispatchError } = await supabase
     .from("dispatches")
     .select(
-      "id, truck_id, site_id, route_geometry, route_total_distance_meters, route_total_time_seconds, is_off_route, is_speeding, site_arrival_notified, factory_arrival_notified"
+      "id, truck_id, site_id, route_geometry, route_total_distance_meters, route_total_time_seconds, is_off_route, is_speeding, site_arrival_notified, factory_arrival_notified, site_approach_notified"
     )
     .eq("id", dispatchId)
     .single();
@@ -267,6 +302,42 @@ export async function loadDispatchAndSite(
 }
 const HQ_EDGE_BUFFER_METERS = 50;
 
+export interface ZoneTruck {
+  truck_id: string;
+  lat: number | null;
+  lng: number | null;
+  driverName?: string | null;
+  age_minutes?: number | null;
+}
+
+/**
+ * What separates one fleet-wide zone from another: how to test a point
+ * against it, which per-truck flag records presence, and what to say on
+ * arrival.
+ *
+ * Both the parc and the factory are checked this way — for every cargo
+ * truck, every tick, regardless of dispatch — because a truck reaches
+ * either whether or not anyone opened a dispatch for the trip. That is
+ * the whole point of the factory alert in particular: arriving there to
+ * load is the moment a dispatch gets *created*, so it cannot be
+ * conditional on one already existing.
+ */
+interface ZoneTarget {
+  /** For log lines only. */
+  label: string;
+  isInside(lat: number, lng: number): boolean;
+  /** Column on fleet_trucks holding the last known presence. */
+  flagColumn: "at_hq" | "at_factory";
+  rpcName: "mark_trucks_hq_state" | "mark_trucks_factory_state";
+  /** The RPC's boolean argument name, which differs per zone. */
+  rpcFlagArg: "p_at_hq" | "p_at_factory";
+  notification(truckId: string): { kind: string; title: string; message: string };
+  /** Extra durable record written from the same transition result — the
+   *  parc log, for Rapport Parc. Runs only for trucks that actually
+   *  transitioned. */
+  onArrived?(truckIds: string[], driverOf: Map<string, string | null>): Promise<void>;
+}
+
 // Home-base arrival isn't tied to a dispatch — a truck returns to PARC
 // OMD whether or not it's currently running a delivery — so it can't
 // reuse the dispatches.*_notified flag pattern. fleet_trucks.at_hq is
@@ -275,14 +346,88 @@ const HQ_EDGE_BUFFER_METERS = 50;
 // runs for the whole fleet every poll.
 export async function runHqArrivalCheck(
   supabase: SupabaseClient,
-  trucks: {
-    truck_id: string;
-    lat: number | null;
-    lng: number | null;
-    driverName?: string | null;
-    age_minutes?: number | null;
-  }[],
+  trucks: ZoneTruck[],
   hq: { centerLat: number; centerLng: number; radiusMeters: number }
+): Promise<void> {
+  const radius = hq.radiusMeters + HQ_EDGE_BUFFER_METERS;
+  await runZoneArrivalCheck(supabase, trucks, {
+    label: "hq",
+    isInside: (lat, lng) => haversineMeters(lat, lng, hq.centerLat, hq.centerLng) <= radius,
+    flagColumn: "at_hq",
+    rpcName: "mark_trucks_hq_state",
+    rpcFlagArg: "p_at_hq",
+    notification: (truck_id) => ({
+      kind: "hq_arrival",
+      title: "Arrived at headquarters",
+      message: `${truck_id} has arrived at PARC OMD - Headquarters & Parking.`,
+    }),
+    onArrived: async (truckIds, driverOf) => {
+      // The permanent gate record for Rapport Parc. Written from the
+      // same compare-and-set result as the notification, so the log and
+      // the feed can never disagree about whether an entry happened.
+      // The driver name is stamped from this moment's fleet data rather
+      // than resolved at read time — drivers change, and a log that
+      // rewrites its own history is worse than no log.
+      const enteredAt = new Date().toISOString();
+      const { error } = await supabase.from("hq_entries").insert(
+        truckIds.map((truck_id) => ({
+          truck_id,
+          driver_name: driverOf.get(truck_id) ?? null,
+          entered_at: enteredAt,
+        }))
+      );
+      if (error) console.error("[hqArrivalCheck] parc entry log failed:", error);
+    },
+  });
+}
+
+/**
+ * Factory arrival, on the same fleet-wide footing as the parc.
+ *
+ * The factory geofence is a drawn polygon rather than a circle, so the
+ * test is point-in-polygon with the same edge buffer the dispatch-scoped
+ * check uses — a truck sitting on the boundary shouldn't flicker.
+ */
+export async function runFactoryArrivalCheck(
+  supabase: SupabaseClient,
+  trucks: ZoneTruck[],
+  factory: { name: string; ring: [number, number][] | null; centerLat: number | null; centerLng: number | null; radiusMeters: number | null }
+): Promise<void> {
+  // Polygon when one has been drawn, circle otherwise — the factory is a
+  // polygon today, but a circle is a valid way to define it and the
+  // check shouldn't silently do nothing if someone redraws it that way.
+  const isInside = factory.ring
+    ? (lat: number, lng: number) =>
+        isWithinGeofence([lat, lng], factory.ring!, GEOFENCE_EDGE_BUFFER_METERS)
+    : factory.centerLat != null && factory.centerLng != null
+      ? (lat: number, lng: number) =>
+          haversineMeters(lat, lng, factory.centerLat!, factory.centerLng!) <=
+          (factory.radiusMeters ?? 300) + HQ_EDGE_BUFFER_METERS
+      : null;
+
+  if (!isInside) {
+    console.warn("[factoryArrivalCheck] factory geofence has neither polygon nor centre; skipped");
+    return;
+  }
+
+  await runZoneArrivalCheck(supabase, trucks, {
+    label: "factory",
+    isInside,
+    flagColumn: "at_factory",
+    rpcName: "mark_trucks_factory_state",
+    rpcFlagArg: "p_at_factory",
+    notification: (truck_id) => ({
+      kind: "factory_arrival",
+      title: "Arrived at the factory",
+      message: `${truck_id} has arrived at ${factory.name}.`,
+    }),
+  });
+}
+
+async function runZoneArrivalCheck(
+  supabase: SupabaseClient,
+  trucks: ZoneTruck[],
+  target: ZoneTarget
 ): Promise<void> {
   const withPosition = trucks.filter(
     (t): t is {
@@ -323,30 +468,34 @@ export async function runHqArrivalCheck(
 
   if (positioned.length !== withPosition.length) {
     console.warn(
-      `[hqArrivalCheck] ${withPosition.length - positioned.length} duplicate unit name(s) in Wialon; kept the freshest fix for each`
+      `[${target.label}ArrivalCheck] ${withPosition.length - positioned.length} duplicate unit name(s) in Wialon; kept the freshest fix for each`
     );
   }
 
   const { data: rows } = await supabase
     .from("fleet_trucks")
-    .select("truck_id, at_hq")
+    .select(`truck_id, ${target.flagColumn}`)
     .in("truck_id", positioned.map((t) => t.truck_id));
 
-  const wasAtHq = new Map((rows ?? []).map((r) => [r.truck_id, r.at_hq === true]));
-  const radius = hq.radiusMeters + HQ_EDGE_BUFFER_METERS;
+  const wasInside = new Map(
+    (rows ?? []).map((r) => [
+      r.truck_id as string,
+      (r as Record<string, unknown>)[target.flagColumn] === true,
+    ])
+  );
 
   const arrived: string[] = [];
   const departed: string[] = [];
 
   for (const t of positioned) {
-    const within = haversineMeters(t.lat, t.lng, hq.centerLat, hq.centerLng) <= radius;
-    const was = wasAtHq.get(t.truck_id) ?? false;
+    const within = target.isInside(t.lat, t.lng);
+    const was = wasInside.get(t.truck_id) ?? false;
     if (within && !was) arrived.push(t.truck_id);
     else if (!within && was) departed.push(t.truck_id);
   }
 
-  // The flag is written through mark_trucks_hq_state rather than a
-  // direct upsert, for two reasons.
+  // The flag is written through the RPC rather than a direct upsert, for
+  // two reasons.
   //
   // First, RLS: fleet_trucks only carries an admin FOR ALL write
   // policy, so the old upsert was silently rejected for every
@@ -361,9 +510,9 @@ export async function runHqArrivalCheck(
   // both notify. Now the second one's write finds the flag already
   // set and returns nothing to notify about.
   if (arrived.length > 0) {
-    const { data: transitioned, error } = await supabase.rpc("mark_trucks_hq_state", {
+    const { data: transitioned, error } = await supabase.rpc(target.rpcName, {
       p_truck_ids: arrived,
-      p_at_hq: true,
+      [target.rpcFlagArg]: true,
     });
 
     if (error) {
@@ -375,52 +524,33 @@ export async function runHqArrivalCheck(
       // warnings array, which reaches net._http_response, so the next
       // failure is visible from the database instead of only in logs
       // nobody is watching.
-      throw new Error(`HQ state write failed, notifications skipped: ${error.message}`);
+      throw new Error(`${target.label} state write failed, notifications skipped: ${error.message}`);
     }
 
     const toNotify = ((transitioned ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
     if (toNotify.length > 0) {
-      // The permanent gate record for Rapport Parc. Written from the
-      // same compare-and-set result as the notification, so the log and
-      // the feed can never disagree about whether an entry happened.
-      // The driver name is stamped from this moment's fleet data rather
-      // than resolved at read time — drivers change, and a log that
-      // rewrites its own history is worse than no log.
       const driverOf = new Map(positioned.map((t) => [t.truck_id, t.driverName ?? null]));
-      const enteredAt = new Date().toISOString();
 
-      const { error: entryError } = await supabase.from("hq_entries").insert(
-        toNotify.map((truck_id) => ({
-          truck_id,
-          driver_name: driverOf.get(truck_id) ?? null,
-          entered_at: enteredAt,
-        }))
-      );
-      if (entryError) console.error("[hqArrivalCheck] parc entry log failed:", entryError);
+      if (target.onArrived) await target.onArrived(toNotify, driverOf);
 
       await supabase.from("notifications").insert(
-        toNotify.map((truck_id) => ({
-          truck_id,
-          kind: "hq_arrival" as const,
-          title: "Arrived at headquarters",
-          message: `${truck_id} has arrived at PARC OMD - Headquarters & Parking.`,
-        }))
+        toNotify.map((truck_id) => target.notification(truck_id))
       );
     }
   }
 
   if (departed.length > 0) {
-    const { error } = await supabase.rpc("mark_trucks_hq_state", {
+    const { error } = await supabase.rpc(target.rpcName, {
       p_truck_ids: departed,
-      p_at_hq: false,
+      [target.rpcFlagArg]: false,
     });
     // Also thrown rather than logged: a departure that fails to persist
-    // leaves the truck flagged at_hq forever, and a truck that never
-    // "leaves" can never be seen to arrive again. That is the same
+    // leaves the truck flagged as present forever, and a truck that
+    // never "leaves" can never be seen to arrive again. That is the same
     // silent, permanent stall as a failed arrival write, just reached
     // from the other side.
     if (error) {
-      throw new Error(`HQ departure write failed: ${error.message}`);
+      throw new Error(`${target.label} departure write failed: ${error.message}`);
     }
   }
 }

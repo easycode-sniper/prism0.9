@@ -11,6 +11,7 @@ import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { CHART_COLORS, doughnutOptions, installChartDefaults } from "@/lib/chartTheme";
+import type { NotificationKind } from "@/lib/notifications/kinds";
 import { formatTime } from "@/lib/format";
 
 // A truck within this distance of a station is treated as "at the pump".
@@ -143,14 +144,31 @@ export default function DashboardPage() {
     }],
   };
 
-  const alertCounts = { off_route: 0, speeding: 0, site_arrival: 0, factory_arrival: 0, hq_arrival: 0 };
+  // Keyed by NotificationKind so adding a kind is a compile error here
+  // rather than a slice silently missing from the chart — which is
+  // exactly what the previous object literal allowed.
+  const alertCounts: Record<NotificationKind, number> = {
+    off_route: 0,
+    speeding: 0,
+    site_approaching: 0,
+    site_arrival: 0,
+    factory_arrival: 0,
+    hq_arrival: 0,
+  };
   for (const n of notifications) alertCounts[n.kind]++;
 
   const alertChart = {
-    labels: ["Off Route", "Speeding", "Site Arrival", "Factory Arrival", "HQ Arrival"],
+    labels: ["Off Route", "Speeding", "Nearing Client", "Site Arrival", "Factory Arrival", "HQ Arrival"],
     datasets: [{
-      data: [alertCounts.off_route, alertCounts.speeding, alertCounts.site_arrival, alertCounts.factory_arrival, alertCounts.hq_arrival],
-      backgroundColor: [CHART.red, CHART.amber, CHART.green, CHART.pink, CHART.cyan],
+      data: [
+        alertCounts.off_route,
+        alertCounts.speeding,
+        alertCounts.site_approaching,
+        alertCounts.site_arrival,
+        alertCounts.factory_arrival,
+        alertCounts.hq_arrival,
+      ],
+      backgroundColor: [CHART.red, CHART.amber, CHART.amber, CHART.green, CHART.pink, CHART.cyan],
       borderWidth: 0,
     }],
   };

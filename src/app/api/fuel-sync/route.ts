@@ -124,17 +124,58 @@ async function handle(request: NextRequest) {
     }
     console.log(`[fuel-sync] parsed: ${transactions.length} kept, ${skipped} skipped, at ${since()}`);
 
+    // Transaction No is the primary key, and the sheet is maintained by
+    // pasting batches of logs into it by hand — so an overlapping paste
+    // duplicates rows, and the whole sync dies on a unique violation.
+    // That is what stopped it: one duplicated transaction number froze
+    // the table for a day and a half.
+    //
+    // Deduplicating here rather than in SQL is not a preference: the
+    // insert reads its rows from jsonb_to_recordset, and ON CONFLICT
+    // cannot absorb duplicates that arrive inside the same statement —
+    // Postgres raises "cannot affect row a second time", the identical
+    // failure the HQ arrival check hit. The payload has to be unique
+    // before it is handed over.
+    //
+    // Last occurrence wins: if the same transaction is present twice, the
+    // later row in the sheet is the more likely correction.
+    const byId = new Map<string, FuelTransaction>();
+    const duplicated = new Set<string>();
+    for (const t of transactions) {
+      if (byId.has(t.transactionNo)) duplicated.add(t.transactionNo);
+      byId.set(t.transactionNo, t);
+    }
+    const unique = [...byId.values()];
+
+    if (duplicated.size > 0) {
+      // Named, not just counted — a duplicated transaction number can
+      // mean a duplicated *fill*, which would double-count litres, so
+      // whoever maintains the sheet needs to be able to find them.
+      const sample = [...duplicated].slice(0, 5).join(", ");
+      console.warn(
+        `[fuel-sync] ${duplicated.size} duplicate transaction number(s) collapsed: ${sample}` +
+          (duplicated.size > 5 ? ` (+${duplicated.size - 5} more)` : "")
+      );
+    }
+
     const supabase = createServiceClient();
     const { data: refreshedCount, error } = await supabase.rpc(
       "refresh_fuel_transactions",
-      { p_rows: transactions.map(toDbRow) }
+      { p_rows: unique.map(toDbRow) }
     );
     console.log(`[fuel-sync] rpc returned at ${since()}`);
 
     if (error) throw new Error(`refresh_fuel_transactions failed: ${error.message}`);
 
     console.log(`[fuel-sync] synced ${refreshedCount} transactions (${skipped} unparseable rows skipped) in ${since()}`);
-    return NextResponse.json({ ok: true, synced: refreshedCount, skipped, ms: Date.now() - t0 });
+    return NextResponse.json({
+      ok: true,
+      synced: refreshedCount,
+      skipped,
+      duplicatesCollapsed: duplicated.size,
+      duplicateSample: [...duplicated].slice(0, 5),
+      ms: Date.now() - t0,
+    });
   } catch (err) {
     console.error(`[fuel-sync] failed at ${since()}:`, err);
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });

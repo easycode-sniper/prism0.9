@@ -30,7 +30,7 @@ export default function CarburantPage() {
         <h2 style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", fontWeight: 600 }}>Carburant</h2>
         <p className="t-dim" style={{ fontSize: ".85rem", marginTop: "4px" }}>
           {rows
-            ? `${rows.length} transactions in the last 24h · ${Math.round(totalLitres).toLocaleString("en-GB")} L · ${Math.round(totalDa).toLocaleString("en-GB")} DA`
+            ? `Last ${rows.length} transactions · ${Math.round(totalLitres).toLocaleString("en-GB")} L · ${Math.round(totalDa).toLocaleString("en-GB")} DA`
             : "Loading…"}
         </p>
       </div>
@@ -47,7 +47,7 @@ export default function CarburantPage() {
 
       {!error && rows !== null && rows.length === 0 && (
         <div className="surface t-dim" style={{ padding: "28px", textAlign: "center", fontSize: ".85rem" }}>
-          No fuel transactions in the last 24 hours.
+          No fuel transactions recorded yet.
         </div>
       )}
 

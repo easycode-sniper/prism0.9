@@ -26,6 +26,17 @@ export interface FuelTransactionRow {
   varianceDa: number | null;
 }
 
+// A fixed number of rows rather than a time window. A 24-hour window
+// answers "what happened today", which is a different question from the
+// one this page is asked — the sheet syncs in bursts, so a quiet day
+// showed a nearly empty table and a catch-up sync showed several
+// hundred rows at once. A hundred is a page you can scroll to the end
+// of, and it is the same size whenever you open it.
+//
+// Not exported: every export of a "use server" file has to be an async
+// function, so a bare const here fails the build outright.
+const FUEL_ROW_LIMIT = 100;
+
 export async function listRecentFuelTransactions(): Promise<{
   data: FuelTransactionRow[];
   error?: string;
@@ -34,15 +45,13 @@ export async function listRecentFuelTransactions(): Promise<{
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { data: [], error: "Not authenticated" };
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
   const { data, error } = await supabase
     .from("fuel_transactions")
     .select(
       "model, truck_id, category, driver_name, occurred_at, card_no, station, fuel_type, amount_da, odometer_km, distance_km, litres_filled, variance_da"
     )
-    .gte("occurred_at", since)
-    .order("occurred_at", { ascending: false });
+    .order("occurred_at", { ascending: false })
+    .limit(FUEL_ROW_LIMIT);
 
   if (error) return { data: [], error: error.message };
 

@@ -1169,7 +1169,12 @@ hr {
      the same 44px search box and 46px button are a fifth of the panel,
      so they tighten a notch — the text is already large, because that
      is what the zoom was for. */
-  .dispatch-panel .field { padding: 5px 10px; font-size: 0.78rem; line-height: 1.35; }
+  /* .psection in the selector is load-bearing, not decoration. The
+     global control default is input:not([type=checkbox]):not([type=radio]),
+     which scores (0,2,1) — above the (0,2,0) of .dispatch-panel .field —
+     so this rule silently lost every time and the search box kept its
+     full-size 10px padding through both short-viewport tiers. */
+  .dispatch-panel .psection .field { padding: 5px 10px; font-size: 0.78rem; line-height: 1.35; }
   .dispatch-panel .field.mb-2,
   .dispatch-panel .seg.mb-2 { margin-bottom: 6px; }
   .dispatch-panel .btn-brand { padding: 9px 18px; font-size: 0.85rem; }
@@ -1208,9 +1213,12 @@ hr {
   .dispatch-panel__body { gap: 8px; padding: 8px 12px; }
 
   .dispatch-panel .fleet-row__pick { padding: 4px 4px 4px 8px; gap: 7px; }
-  .dispatch-panel .fleet-row__name { font-size: 0.74rem; }
+  /* Both lines inherit a 1.5 line-height, which on an 11px name is
+     nearly six pixels of air per row and the single biggest thing
+     between the panel and another truck on screen. */
+  .dispatch-panel .fleet-row__name { font-size: 0.74rem; line-height: 1.25; }
   .dispatch-panel .fleet-row__meta,
-  .dispatch-panel .fleet-row__id { font-size: 0.66rem; }
+  .dispatch-panel .fleet-row__id { font-size: 0.66rem; line-height: 1.25; }
   .dispatch-panel .fleet-row__box { width: 15px; height: 15px; }
 
   /* Sized so the two lists and everything framing them add up to less
@@ -1219,10 +1227,18 @@ hr {
      thing being fixed, and a list half out of view is the same bug with
      a smaller number. */
   .fleet-list,
-  .site-picker { max-height: clamp(76px, 14vh, 136px); }
+  .site-picker { max-height: clamp(96px, 17.5vh, 170px); }
 
   .dispatch-panel .psection__head { margin-bottom: 3px; }
-  .dispatch-panel .field { padding: 4px 9px; font-size: 0.75rem; }
+  .dispatch-panel .psection .field { padding: 4px 9px; font-size: 0.75rem; line-height: 1.3; }
+
+  /* The status filter is the row's worth of height that buys a row of
+     trucks. Search still narrows the list, and the four states it drops
+     are readable from the rows themselves — every one carries its
+     status in the line under the name. !important because the strip
+     carries an inline display:flex from the JSX, which no stylesheet
+     rule can outrank. */
+  .dispatch-panel .psection .seg--sm.mb-2 { display: none !important; }
   .dispatch-panel .field.mb-2,
   .dispatch-panel .seg.mb-2 { margin-bottom: 4px; }
   .dispatch-panel__action { padding: 6px 12px; }

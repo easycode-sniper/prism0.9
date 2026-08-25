@@ -24,14 +24,14 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <>
-      <div className="brand" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        <div className="brand-mark" style={{ width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--r-md)", background: "var(--panel-3)", border: "1px solid var(--line)" }}>
+      <div className="brand">
+        <div className="brand-mark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/omd-logo.png" alt="OMD" width={24} height={24} style={{ objectFit: "contain" }} />
         </div>
-        <div>
-          <h1 style={{ fontFamily: "var(--font-mono)", fontSize: "1rem", fontWeight: 600, letterSpacing: ".02em" }}>{t("brand.title")}</h1>
-          <span style={{ display: "block", fontSize: ".65rem", color: "var(--text-dim)", letterSpacing: ".08em", textTransform: "uppercase", marginTop: "1px" }}>{t("brand.subtitle")}</span>
+        <div className="brand-text">
+          <h1 className="brand-title">{t("brand.title")}</h1>
+          <span className="brand-sub">{t("brand.subtitle")}</span>
         </div>
       </div>
 
@@ -40,21 +40,23 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
           <Link
             key={item.href}
             href={item.href}
+            title={t(item.key)}
             className={`seg-item${pathname === item.href ? " is-active" : ""}`}
             aria-current={pathname === item.href ? "page" : undefined}
           >
             <item.icon size={15} strokeWidth={2} />
-            {t(item.key)}
+            <span className="nav-label">{t(item.key)}</span>
           </Link>
         ))}
         {isAdmin && (
           <Link
             href="/admin"
+            title={t("nav.admin")}
             className={`seg-item${pathname.startsWith("/admin") ? " is-active" : ""}`}
             aria-current={pathname.startsWith("/admin") ? "page" : undefined}
           >
             <Settings size={15} strokeWidth={2} />
-            {t("nav.admin")}
+            <span className="nav-label">{t("nav.admin")}</span>
           </Link>
         )}
       </nav>
@@ -65,7 +67,10 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
 export function FleetActiveCount() {
   const { activeRuns, fleetData } = useFleet();
   return (
-    <span>Active: <strong style={{ color: "var(--amber)" }}>{activeRuns}</strong> / <span>{fleetData.trucks.length || "—"}</span></span>
+    <span className="topbar-active">
+      <span className="topbar-active__label">Active:</span>{" "}
+      <strong style={{ color: "var(--amber)" }}>{activeRuns}</strong> / <span>{fleetData.trucks.length || "—"}</span>
+    </span>
   );
 }
 

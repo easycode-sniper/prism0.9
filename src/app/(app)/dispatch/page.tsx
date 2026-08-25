@@ -317,7 +317,7 @@ export default function DispatchPage() {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <h1 className="text-lg font-semibold t-primary">{t("dispatch.title")}</h1>
-              <p className="mt-0.5 text-xs" style={{ color: "var(--text-dim)" }}>{t("dispatch.subtitle")}</p>
+              <p className="dispatch-sub mt-0.5 text-xs" style={{ color: "var(--text-dim)" }}>{t("dispatch.subtitle")}</p>
             </div>
             <button
               type="button"
@@ -429,9 +429,11 @@ export default function DispatchPage() {
                               </span>
                               <span className="fleet-row__meta">
                                 <span className="fleet-row__dot" style={{ background: statusColor(tr.status) }} />
-                                {tr.status}
-                                {tr.status === "moving" && tr.speed != null ? ` · ${Math.round(tr.speed)} km/h` : ""}
-                                {tr.dispatched ? " · on run" : ""}
+                                <span className="fleet-row__status">
+                                  {tr.status}
+                                  {tr.status === "moving" && tr.speed != null ? ` · ${Math.round(tr.speed)} km/h` : ""}
+                                  {tr.dispatched ? " · on run" : ""}
+                                </span>
                               </span>
                             </span>
                             <span className="fleet-row__id">{tr.truck_id}</span>
@@ -460,7 +462,7 @@ export default function DispatchPage() {
                       be changed. */}
                   <span className="psection__title">
                     Destination
-                    <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: "var(--text-faint)" }}>
+                    <span className="psection__origin" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: "var(--text-faint)" }}>
                       {" "}· from {FACTORY_NAME}
                     </span>
                   </span>

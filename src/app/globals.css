@@ -536,6 +536,124 @@ input::placeholder, textarea::placeholder {
 .seg--sm { padding: 2px; }
 .seg--sm .seg-item { padding: 4px 10px; font-size: 0.72rem; }
 
+/* ── App shell ────────────────────────────────────────────────
+   The topbar carries the brand, nine tabs and the account controls on
+   one row. At full width that is about 1530px of content, which is
+   fine on the 1920px desk it was drawn for and nowhere else.
+
+   Chrome's page zoom divides the CSS viewport: 200% on a 1080p screen
+   is 960x496 CSS px, and 150% is 1280x661. Below roughly 1530px the
+   header used to overflow the page sideways — the logo squashed from
+   38px to 19px wide, the brand wrapped to three lines and the header
+   grew from 64px to 122px. Together with the strip that put the first
+   pixel of the dispatch panel 197px down a 496px screen, which is what
+   made a zoomed-in window look broken rather than merely large.
+
+   The ladder below keeps one row down to 960px by spending label text
+   instead of layout: first the tabs tighten and the brand loses its
+   strapline, then the tabs go to icons and the wordmark goes with them.
+   Nothing is removed — the label stays in the accessibility tree and
+   returns as a tooltip. */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 20px;
+  margin: 14px 16px 0;
+  z-index: 2500;
+}
+
+/* flex: none, because a squashed logo is worse than a tight header. */
+.brand { display: flex; align-items: center; gap: 10px; flex: none; }
+
+.brand-mark {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+}
+
+.brand-title {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.brand-sub {
+  display: block;
+  margin-top: 1px;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The tabs are the one part allowed to give ground, so they are the
+   only part with a min-width the flexbox can act on. */
+#tabs { min-width: 0; }
+
+#topbar-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.topbar-active { white-space: nowrap; }
+
+#operations-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 16px 14px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+}
+
+.ops-pill { padding: 7px 14px; border-radius: var(--r-pill); }
+
+@media (max-width: 1560px) {
+  #tabs .seg-item { padding: 6px 10px; font-size: 0.78rem; gap: 5px; }
+  .brand-sub { display: none; }
+  #topbar-stats { gap: 10px; }
+}
+
+@media (max-width: 1360px) {
+  #tabs .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  #tabs .seg-item { padding: 8px 9px; gap: 0; }
+  .brand-text { display: none; }
+  .topbar-active__label { display: none; }
+}
+
+/* A short viewport is the other half of a zoomed-in window, and the
+   shell's own margins are the cheapest height to give back. */
+@media (max-height: 840px) {
+  .topbar { margin: 8px 12px 0; padding: 8px 14px; }
+  #operations-strip { margin: 9px 12px 10px; gap: 8px; }
+  .ops-pill { padding: 5px 12px; }
+}
+
 /* ── Overlays ─────────────────────────────────────────────────
    Popovers scale from their trigger, modals from their own centre —
    a modal is not anchored to anything, so growing it out of a corner
@@ -935,7 +1053,10 @@ hr {
 .dispatch-panel {
   display: flex;
   flex-direction: column;
-  width: 384px;
+  /* 384px is right beside a 1536px map and absurd beside a 576px one.
+     The clamp holds the drawn width from 1480px up and gives the map
+     back its share as the viewport shrinks under page zoom. */
+  width: clamp(300px, 26vw, 384px);
   flex: none;
   height: 100%;
   min-height: 0;
@@ -979,6 +1100,49 @@ hr {
 }
 
 .psection--grow { flex: 1 1 0; min-height: 268px; }
+
+/* Two 268px sections need 552px of body. A 1080p screen at 200% zoom
+   offers about 230px, so they used to overflow by nearly 500px: the
+   truck list was crushed to a row and a half and the whole Destination
+   step sat below the fold with no sign it was there.
+
+   Under a short viewport the sections stop dividing the panel and
+   simply stack. Each list keeps a bounded height — 101 trucks and 125
+   sites have to scroll somewhere — and the body becomes the one scroll
+   that walks you from trucks to destination, with the action bar
+   pinned under it the whole way. */
+@media (max-height: 840px) {
+  .dispatch-panel__head { padding: 10px 12px 8px; }
+  .dispatch-sub { display: none; }
+  .dispatch-panel__body { padding: 10px 12px; gap: 12px; }
+  .dispatch-panel__action { padding: 9px 12px; gap: 7px; }
+
+  /* Field and button metrics are drawn for a 1080p desk. Under zoom
+     the same 44px search box and 46px button are a fifth of the panel,
+     so they tighten a notch — the text is already large, because that
+     is what the zoom was for. */
+  .dispatch-panel .field { padding: 5px 10px; font-size: 0.78rem; line-height: 1.35; }
+  .dispatch-panel .field.mb-2,
+  .dispatch-panel .seg.mb-2 { margin-bottom: 6px; }
+  .dispatch-panel .btn-brand { padding: 9px 18px; font-size: 0.85rem; }
+
+  .psection--grow { flex: 0 0 auto; min-height: 0; }
+  .psection__head { margin-bottom: 5px; }
+  .fleet-list,
+  .site-picker { flex: 0 0 auto; max-height: clamp(120px, 26vh, 260px); }
+
+  /* The body is the scroll now, so the label of the step you are
+     reading stays put while its list moves under it. Each header is
+     bounded by its own section, so Trucks hands over to Destination
+     rather than stacking. */
+  .dispatch-panel .psection__head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-block: 2px;
+    background: var(--bg);
+  }
+}
 
 /* Always in view, so the count and the destination stay readable while
    the list above is scrolled. */
@@ -1030,6 +1194,10 @@ hr {
 }
 
 .psection__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -1038,9 +1206,19 @@ hr {
 }
 
 .psection__count {
+  flex: none;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--text-faint);
+}
+
+/* "· from Usine Amouda Ciment" is context, not a control — every run
+   leaves from there. Once the panel narrows under page zoom it stops
+   fitting on the label's line, and a two-line section header pushed
+   the header of a sticky, scrolling section into the list below it. */
+@media (max-width: 1300px) {
+  .psection__origin { display: none; }
 }
 
 .psection__count--on { color: var(--green); }
@@ -1126,9 +1304,21 @@ hr {
   display: flex;
   align-items: center;
   gap: 5px;
+  min-width: 0;
   margin-top: 1px;
   font-size: 0.69rem;
   color: var(--text-dim);
+}
+
+/* "moving · 28 km/h · on run" is three text nodes that the browser
+   merges into one anonymous flex item, which then wrapped to a second
+   line once the panel narrowed under page zoom — a 44px row became
+   68px and the list lost half its trucks. Named, it truncates. */
+.fleet-row__status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fleet-row__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }

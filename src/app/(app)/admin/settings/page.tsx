@@ -51,7 +51,17 @@ export default function AdminSettingsPage() {
   }
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center text-sm t-dim">Loading settings...</div>;
+    return (
+      <div style={{ padding: "24px 28px", maxWidth: "640px" }}>
+        <div className="skeleton skeleton--line" style={{ width: "160px", marginBottom: "18px" }} />
+        <div className="skeleton-stack" aria-hidden="true">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="skeleton" style={{ height: "44px" }} />
+          ))}
+        </div>
+        <span className="sr-only" role="status">Loading settings</span>
+      </div>
+    );
   }
 
   return (

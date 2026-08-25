@@ -169,7 +169,11 @@ export default function AdminSitesPage() {
         />
 
         {loading ? (
-          <p className="panel-empty">Loading…</p>
+          <div className="skeleton-stack" role="status" aria-label="Loading sites">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="skeleton skeleton--row" aria-hidden="true" />
+            ))}
+          </div>
         ) : sites.length === 0 ? (
           <p className="panel-empty">No clients yet. Add the first one above.</p>
         ) : visible.length === 0 ? (

@@ -24,7 +24,11 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <>
-      <div className="brand">
+      {/* Keeps .brand on the element itself: the header is a grid and
+          .topbar > .brand is what puts it in column 1, so wrapping it in
+          a link would take it out of that column. The link IS the
+          brand. */}
+      <Link href="/dashboard" className="brand brand-link" aria-label={`${t("brand.title")} — go to dashboard`}>
         <div className="brand-mark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/omd-logo.png" alt="OMD" width={24} height={24} style={{ objectFit: "contain" }} />
@@ -33,7 +37,7 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
           <h1 className="brand-title">{t("brand.title")}</h1>
           <span className="brand-sub">{t("brand.subtitle")}</span>
         </div>
-      </div>
+      </Link>
 
       <nav id="tabs" className="seg">
         {NAV_ITEMS.map((item) => (

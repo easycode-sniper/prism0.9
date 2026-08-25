@@ -108,7 +108,14 @@ export default function LoginPage() {
             <hr className="signin-rule" />
 
             <button type="submit" className="signin-submit">
-              {loading ? "Signing in…" : "Sign in"}
+              {loading ? (
+                <>
+                  <span className="spinner" aria-hidden="true" />
+                  Signing in…
+                </>
+              ) : (
+                "Sign in"
+              )}
             </button>
           </fieldset>
         </form>

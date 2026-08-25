@@ -78,7 +78,17 @@ export default function HistoryPage() {
   }
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center text-sm t-dim">Loading history...</div>;
+    return (
+      <div style={{ padding: "24px 28px" }}>
+        <div className="skeleton skeleton--line" style={{ width: "180px", marginBottom: "18px" }} />
+        <div className="skeleton-stack" aria-hidden="true">
+          {Array.from({ length: 9 }, (_, i) => (
+            <div key={i} className="skeleton skeleton--row" />
+          ))}
+        </div>
+        <span className="sr-only" role="status">Loading history</span>
+      </div>
+    );
   }
 
   return (

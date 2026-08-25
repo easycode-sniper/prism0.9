@@ -31,7 +31,7 @@ export default function CarburantPage() {
         <p className="t-dim" style={{ fontSize: ".85rem", marginTop: "4px" }}>
           {rows
             ? `Last ${rows.length} transactions · ${Math.round(totalLitres).toLocaleString("en-GB")} L · ${Math.round(totalDa).toLocaleString("en-GB")} DA`
-            : "Loading…"}
+            : "Reading the fuel sheet…"}
         </p>
       </div>
 
@@ -42,7 +42,11 @@ export default function CarburantPage() {
       )}
 
       {!error && rows === null && (
-        <div className="t-dim" style={{ fontSize: ".85rem", padding: "24px 0" }}>Loading transactions…</div>
+        <div className="skeleton-stack" role="status" aria-label="Loading transactions">
+          {Array.from({ length: 10 }, (_, i) => (
+            <div key={i} className="skeleton skeleton--row" aria-hidden="true" />
+          ))}
+        </div>
       )}
 
       {!error && rows !== null && rows.length === 0 && (

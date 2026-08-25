@@ -146,29 +146,26 @@ export default function DriversPage() {
           className="t-primary placeholder-current"
           style={{ maxWidth: "300px", background: "var(--well-bg)", boxShadow: "var(--well-shadow)", border: "none", borderRadius: "var(--r-md)", padding: "8px 13px", fontSize: ".83rem" }}
         />
-        {([
-          ["all", "All"],
-          ["reachable", "Has phone"],
-          ["missing", "No phone"],
-        ] as [Filter, string][]).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setFilter(value)}
-            style={{
-              background: filter === value ? "var(--accent)" : "var(--well-bg)",
-              boxShadow: "var(--well-shadow)",
-              color: filter === value ? "var(--bg)" : "var(--text-dim)",
-              border: "none",
-              borderRadius: "var(--r-md)",
-              padding: "8px 14px",
-              fontSize: ".78rem",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {label}
-          </button>
-        ))}
+        {/* The same segmented control monitoring, notifications and
+            dispatch use, rather than a fourth hand-rolled set of pills.
+            It brings the hover and active states with it. */}
+        <div className="seg seg--sm">
+          {([
+            ["all", "All"],
+            ["reachable", "Has phone"],
+            ["missing", "No phone"],
+          ] as [Filter, string][]).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setFilter(value)}
+              aria-pressed={filter === value}
+              className={`seg-item${filter === value ? " is-active" : ""}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (
@@ -206,8 +203,7 @@ export default function DriversPage() {
                     title={d.inDirectory ? "Edit phone and address" : "Add phone and address"}
                     aria-label={`Edit details for ${d.name}`}
                     aria-expanded={editing === d.name}
-                    className="t-dim"
-                    style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px", lineHeight: 0 }}
+                    className="icon-ghost"
                   >
                     {editing === d.name ? <X size={14} /> : <Pencil size={14} />}
                   </button>
@@ -216,8 +212,7 @@ export default function DriversPage() {
                   onClick={() => copyOne(d)}
                   title="Copy name, phone and address"
                   aria-label={`Copy details for ${d.name}`}
-                  className="t-dim"
-                  style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px", lineHeight: 0 }}
+                  className="icon-ghost"
                 >
                   {copiedName === d.name ? <Check size={14} className="c-green" /> : <Copy size={14} />}
                 </button>

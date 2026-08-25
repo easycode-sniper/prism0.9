@@ -183,14 +183,20 @@ export async function fetchSheetRows(spreadsheetId: string, range: string): Prom
   const token = await getAccessToken();
 
   // FORMATTED_STRING, deliberately: this is the text the sheet itself
-  // displays, and the Carburant page shows it verbatim. The column is
-  // not what needs interpreting — 163 of the rows in the sheet carry a
-  // date that has not happened yet, and the page's job is to show what
-  // the sheet says rather than to second-guess it.
+  // displays, and the Carburant page prints it verbatim rather than
+  // interpreting it. It has to, because the sheet renders days 1-12 as month/day and days 13+ as
+// day/month. The flip is exact and visible at one row boundary: row 510
+// is "8/12/2026 23:18:51" and row 511 is "13/8/2026 08:11:50" — 12
+// August into 13 August, continuous. Both halves are August 2026; the
+// sheet contains no other month and no future date.
+//
+// Reading every row day-first, as the parser does, turns rows 2-510
+// into 8 January through 8 December. That is where occurred_at's wrong
+// months come from.
   //
   // SERIAL_NUMBER was tried here and changed nothing, which is the
   // answer: dateTimeRenderOption applies only to real date cells, and
-  // this column is text.
+  // this column is text. There is no render option that resolves it.
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
 
   const resp = await fetchWithTimeout(

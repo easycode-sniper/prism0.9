@@ -1,29 +1,29 @@
 -- Mirror the sheet's own date text, and its row order.
 --
--- NOTE: this file's first version explained the change with a theory
--- that turned out to be wrong — that the sheet mixed day-first and
--- month-first formats between hand-pasted batches. It does not. Of 1142
--- rows, 633 have a first component above 12 ("25/8/2026") and so can
--- only be day-first, and not one row has a second component above 12.
--- The format is consistent and the parser reads it correctly.
+-- The Date & Time column is genuinely ambiguous, and the sheet's own
+-- row order is the only thing that resolves it. The sheet is
+-- append-only, so its rows are in chronological order, and read that
+-- way the flip is visible at a single boundary: row 510 is
+-- "8/12/2026 23:18:51" and row 511 is "13/8/2026 08:11:50" — 12 August
+-- into 13 August, continuous. Days 1-12 are written month/day, days 13
+-- and up day/month. Every row is August 2026; there is no other month
+-- in the sheet and no future date.
 --
--- The real problem is in the source data: 163 rows in the sheet carry a
--- date that has not happened yet — "8/9/2026", "8/12/2026" — and those
--- sorted above today, so a page ordered on occurred_at and capped at a
--- hundred rows showed nothing but fills dated months ahead.
+-- Read day-first, as the parser does, the first 509 rows land on
+-- 8 January through 8 December. Those are the wrong months in
+-- occurred_at, and 163 of them read as later in the year than today,
+-- which is why a page ordered on that column and capped at a hundred
+-- rows showed nothing but fills dated months ahead.
 --
--- So the Carburant page stops depending on that column. occurred_raw
--- holds the cell exactly as the sheet renders it and the page prints
--- that, which keeps a bad date visible as the office typed it rather
--- than laundering it through a reformat. sheet_row is the row's position
--- in the sheet, which is what "the last hundred transactions" means: the
--- sheet is append-ordered, so its last hundred rows are the last hundred
--- logged.
+-- So the Carburant page stops depending on it. occurred_raw holds the
+-- cell exactly as the sheet renders it and the page prints that;
+-- sheet_row holds the row's position, which is what "the last hundred
+-- transactions" means for an append-only sheet.
 --
 -- occurred_at stays, still parsed day-first, because the dashboard's
--- litres-today tile has to filter on a real timestamp. Rows with a bad
--- date in the sheet will still land on the wrong day there — fixing that
--- means fixing the sheet, not the parser.
+-- litres-today tile has to filter on a real timestamp. It is wrong for
+-- rows dated on or before the 12th and is known to be — a proper fix
+-- is deferred, not forgotten.
 
 ALTER TABLE public.fuel_transactions
   ADD COLUMN IF NOT EXISTS occurred_raw TEXT,

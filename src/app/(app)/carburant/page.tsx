@@ -93,12 +93,12 @@ function FuelRow({ row }: { row: FuelTransactionRow }) {
       <td className="t-dim">{row.model ?? "—"}</td>
       <td className="truck-id">{truckLabel}</td>
       <td className="t-primary">{row.driverName ?? "—"}</td>
-      {/* The sheet's own text, verbatim, so the page and the sheet can
-          never disagree about a date. Some rows in the sheet are dated
-          months ahead; showing the cell is what makes that visible to
-          the office instead of hiding it behind a reformat. Falls back
-          to the parsed instant only for a row synced before the raw
-          cell was stored. */}
+      {/* The sheet's own text, verbatim. The column is genuinely
+          ambiguous — the sheet writes days 1-12 as month/day and days
+          13+ as day/month — so any single reading of it is wrong for
+          half the rows. Printing the cell is the one thing that always
+          matches what the office sees. Falls back to the parsed instant
+          only for a row synced before the raw cell was stored. */}
       <td className="t-dim">{row.occurredRaw ?? formatOpsDateTime(row.occurredAt)}</td>
       <td className="t-dim">{row.cardNo ?? "—"}</td>
       <td className="t-dim">{row.station ?? "—"}</td>

@@ -112,25 +112,31 @@ function fromSheetSerial(serial: number): string | null {
  *  local time. Algeria does not observe DST, so +01:00 is correct
  *  year-round, matching OPS_UTC_OFFSET elsewhere in the app.
  *
- *  Day-first is not a guess. Of 1142 rows in the sheet, 633 have a first
- *  component above 12 ("25/8/2026") and can only be read that way, and
- *  not one row has a second component above 12 — so nothing in the data
- *  contradicts it. This function is doing the right thing with what it
- *  is given.
+ *  KNOWN WRONG for part of the sheet, and left that way deliberately
+ *  until it is fixed properly. The source renders days 1-12 as
+ *  month/day and days 13+ as day/month, flipping at one exact row
+ *  boundary: "8/12/2026 23:18:51" followed by "13/8/2026 08:11:50",
+ *  which is 12 August into 13 August. Read day-first, the first 509
+ *  rows land on 8 January through 8 December instead of 1-12 August.
  *
- *  What that leaves is 163 rows whose date is genuinely in the future,
- *  "8/9/2026" and the like, sitting that way in the sheet itself. Those
- *  are entry errors in the source, not parse errors here, and they are
- *  why the Carburant page shows occurred_raw and orders on sheet_row
- *  rather than trusting this value.
+ *  Two statistics look like they settle the format and do not. That no
+ *  row has a second component above 12 is exactly what a month/day
+ *  block (second = day, 1-12) followed by a day/month block (second =
+ *  month, always 8) produces. That 633 rows can only be day-first is
+ *  true of the second block alone. Only the sheet's own row order,
+ *  which is chronological because it is append-only, tells the two
+ *  halves apart.
+ *
+ *  So nothing here should be trusted for a fill dated on or before the
+ *  12th. The Carburant page shows occurred_raw and orders on sheet_row
+ *  for that reason; the dashboard's litres-today tile still filters on
+ *  this value and is wrong for those rows.
  *
  *  The number branch exists because a real date cell would arrive as a
  *  Sheets serial; this column is text, so it does not fire today.
  *
  *  Returns null rather than throwing, so one bad cell skips its row
- *  instead of failing the whole sync. An impossible month returns null
- *  rather than being swapped to fit: a dropped row shows up in the
- *  sync's skip count, and a silently moved one does not. */
+ *  instead of failing the whole sync. */
 export function parseSheetDateTime(raw: unknown): string | null {
   if (typeof raw === "number") return fromSheetSerial(raw);
   if (typeof raw !== "string") return null;

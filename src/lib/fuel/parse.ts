@@ -39,7 +39,13 @@ export interface FuelTransaction {
   truckId: string | null;
   category: FuelCategory;
   driverName: string | null;
-  occurredAt: string; // ISO instant
+  occurredAt: string; // ISO instant, parsed day-first — ambiguous, see occurredRaw
+  /** The Date & Time cell exactly as the sheet renders it. What the
+   *  Carburant page shows, so the app and the sheet cannot disagree. */
+  occurredRaw: string | null;
+  /** 1-based row number in the sheet. The sheet is append-ordered, so
+   *  this is what "most recent" means for a column nobody can parse. */
+  sheetRow: number | null;
   cardNo: string | null;
   station: string | null;
   fuelType: string | null;
@@ -181,7 +187,7 @@ const COL = {
  * that is unconditionally present on every genuine transaction and
  * unconditionally absent on the filler rows, so it is the filter.
  */
-export function parseFuelRow(cells: string[]): FuelTransaction | null {
+export function parseFuelRow(cells: string[], sheetRow?: number): FuelTransaction | null {
   const transactionNo = cleanText(cells[COL.transactionNo]);
   if (!transactionNo) return null;
 
@@ -201,8 +207,14 @@ export function parseFuelRow(cells: string[]): FuelTransaction | null {
   // silently corrupt whichever day it landed on, so it is dropped
   // instead. Every one of 800 real rows in the source has a real date;
   // this only fires on genuine corruption.
-  const occurredAt = parseSheetDateTime(cells[COL.dateTime]);
+  const rawDateCell = cells[COL.dateTime];
+  const occurredAt = parseSheetDateTime(rawDateCell);
   if (!occurredAt) return null;
+
+  // Stringified rather than cleanText'd: this is a mirror, so it keeps
+  // whatever the sheet shows, including a value that arrived as a number.
+  const occurredRaw =
+    rawDateCell == null || String(rawDateCell).trim() === "" ? null : String(rawDateCell).trim();
 
   const amountDa = parseSheetNumber(cells[COL.amountFilled]) ?? 0;
   const odometerKm = parseSheetNumber(cells[COL.odometer]);
@@ -226,6 +238,8 @@ export function parseFuelRow(cells: string[]): FuelTransaction | null {
     category,
     driverName: cleanText(cells[COL.driver]),
     occurredAt,
+    occurredRaw,
+    sheetRow: sheetRow ?? null,
     cardNo: cleanText(cells[COL.cardNo]),
     station: cleanText(cells[COL.station]),
     fuelType: cleanText(cells[COL.fuelType]),

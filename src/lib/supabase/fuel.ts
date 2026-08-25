@@ -16,6 +16,7 @@ export interface FuelTransactionRow {
   category: "truck" | "vh_service";
   driverName: string | null;
   occurredAt: string;
+  occurredRaw: string | null;
   cardNo: string | null;
   station: string | null;
   fuelType: string | null;
@@ -48,9 +49,15 @@ export async function listRecentFuelTransactions(): Promise<{
   const { data, error } = await supabase
     .from("fuel_transactions")
     .select(
-      "model, truck_id, category, driver_name, occurred_at, card_no, station, fuel_type, amount_da, odometer_km, distance_km, litres_filled, variance_da"
+      "model, truck_id, category, driver_name, occurred_at, occurred_raw, sheet_row, card_no, station, fuel_type, amount_da, odometer_km, distance_km, litres_filled, variance_da"
     )
-    .order("occurred_at", { ascending: false })
+    // Ordered by position in the sheet, not by occurred_at. The sheet is
+    // append-ordered, so its last rows are the last logged — and the date
+    // column cannot be read unambiguously, so sorting on it put December
+    // above yesterday and filled this page with rows from months that
+    // have not happened. nullsFirst: false keeps any row synced before
+    // sheet_row existed at the bottom rather than the top.
+    .order("sheet_row", { ascending: false, nullsFirst: false })
     .limit(FUEL_ROW_LIMIT);
 
   if (error) return { data: [], error: error.message };
@@ -62,6 +69,7 @@ export async function listRecentFuelTransactions(): Promise<{
       category: r.category as "truck" | "vh_service",
       driverName: r.driver_name as string | null,
       occurredAt: r.occurred_at as string,
+      occurredRaw: (r.occurred_raw as string | null) ?? null,
       cardNo: r.card_no as string | null,
       station: r.station as string | null,
       fuelType: r.fuel_type as string | null,

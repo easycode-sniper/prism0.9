@@ -182,19 +182,17 @@ async function fetchWithTimeout(
 export async function fetchSheetRows(spreadsheetId: string, range: string): Promise<string[][]> {
   const token = await getAccessToken();
 
-  // SERIAL_NUMBER, not FORMATTED_STRING. FORMATTED_STRING renders each
-  // date through that cell's own display format, and this sheet is
-  // maintained by pasting batches of logs in by hand — so the batches
-  // carry different date formats and the same column came back as a mix
-  // of D/M/YYYY and M/D/YYYY. Any parser reading those strings has to
-  // guess, and guessing wrong is invisible: it silently moves a fill to
-  // another month rather than failing. It did, for every row whose day
-  // of the month was 12 or less.
+  // FORMATTED_STRING, deliberately: this is the text the sheet itself
+  // displays, and the Carburant page shows it verbatim rather than
+  // interpreting it. The column cannot be read unambiguously — the sheet
+  // is filled by pasting batches in by hand and the batches disagree on
+  // day-first vs month-first — so mirroring the cell is the only reading
+  // that is never wrong.
   //
-  // The serial is the number the date actually is — days since the
-  // 1899-12-30 epoch, with the time as the fraction — so it carries no
-  // format and nothing to guess at.
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
+  // SERIAL_NUMBER was tried here and changed nothing, which is itself
+  // the answer: dateTimeRenderOption only applies to real date cells,
+  // and these are text.
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
 
   const resp = await fetchWithTimeout(
     url,

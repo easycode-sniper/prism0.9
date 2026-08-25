@@ -93,7 +93,12 @@ function FuelRow({ row }: { row: FuelTransactionRow }) {
       <td className="t-dim">{row.model ?? "—"}</td>
       <td className="truck-id">{truckLabel}</td>
       <td className="t-primary">{row.driverName ?? "—"}</td>
-      <td className="t-dim">{formatOpsDateTime(row.occurredAt)}</td>
+      {/* The sheet's own text, verbatim. Its date column mixes day-first
+          and month-first between hand-pasted batches, so any parse of it
+          is wrong for some rows — showing the cell means the page and the
+          sheet always agree. Falls back to the parsed instant only for a
+          row synced before the raw cell was stored. */}
+      <td className="t-dim">{row.occurredRaw ?? formatOpsDateTime(row.occurredAt)}</td>
       <td className="t-dim">{row.cardNo ?? "—"}</td>
       <td className="t-dim">{row.station ?? "—"}</td>
       <td className="t-dim">{row.fuelType ?? "—"}</td>

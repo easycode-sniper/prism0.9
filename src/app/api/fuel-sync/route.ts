@@ -78,6 +78,8 @@ function toDbRow(t: FuelTransaction) {
     category: t.category,
     driver_name: t.driverName,
     occurred_at: t.occurredAt,
+    occurred_raw: t.occurredRaw,
+    sheet_row: t.sheetRow,
     card_no: t.cardNo,
     station: t.station,
     fuel_type: t.fuelType,
@@ -111,8 +113,11 @@ async function handle(request: NextRequest) {
 
     const transactions: FuelTransaction[] = [];
     let skipped = 0;
-    for (const row of rawRows) {
-      const parsed = parseFuelRow(row);
+    // The index is the row's position in the sheet, and RANGE starts at
+    // A2, so +2 makes it the row number a person would read off the
+    // sheet itself. It is what the Carburant page orders by.
+    for (const [i, row] of rawRows.entries()) {
+      const parsed = parseFuelRow(row, i + 2);
       if (parsed) transactions.push(parsed);
       // A row with real cells that still fails to parse (no usable date)
       // is worth knowing about; the formula-filler tail rows (no

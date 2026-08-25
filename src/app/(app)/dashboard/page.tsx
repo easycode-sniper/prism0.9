@@ -15,11 +15,9 @@ import {
   Tooltip,
 } from "chart.js";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
-import { ArrowRight, Route, ShieldAlert } from "lucide-react";
+import { ArrowRight, MapPinOff, Route, ShieldAlert } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { getFuelPeriodStats, getDashboardSeries, type FuelPeriodStats, type DashboardSeries } from "@/lib/supabase/dashboard";
-import type { GeofenceRecord } from "@/lib/supabase/geofences";
-import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import {
   CHART_COLORS,
@@ -33,38 +31,6 @@ import {
 } from "@/lib/chartTheme";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
-
-const GEOFENCE_EDGE_BUFFER_METERS = 150;
-
-function isWithinCircle(lat: number, lng: number, centerLat: number, centerLng: number, radiusMeters: number): boolean {
-  return haversineMeters(lat, lng, centerLat, centerLng) <= radiusMeters;
-}
-
-function classifyTruckLocation(
-  lat: number,
-  lng: number,
-  geofences: GeofenceRecord[]
-): "factory" | "base" | "customer_site" | "in_transit" {
-  const factory = geofences.find((g) => g.kind === "factory");
-  if (factory) {
-    if (factory.ring && isWithinGeofence([lat, lng], factory.ring, GEOFENCE_EDGE_BUFFER_METERS)) return "factory";
-    if (!factory.ring && factory.centerLat != null && factory.centerLng != null) {
-      if (isWithinCircle(lat, lng, factory.centerLat, factory.centerLng, factory.radiusMeters ?? 300)) return "factory";
-    }
-  }
-
-  for (const g of geofences) {
-    if (g.kind !== "site") continue;
-    const within = g.ring
-      ? isWithinGeofence([lat, lng], g.ring, GEOFENCE_EDGE_BUFFER_METERS)
-      : g.centerLat != null && g.centerLng != null
-        ? isWithinCircle(lat, lng, g.centerLat, g.centerLng, g.radiusMeters ?? GEOFENCE_EDGE_BUFFER_METERS)
-        : false;
-    if (within) return g.siteId ? "customer_site" : "base";
-  }
-
-  return "in_transit";
-}
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip);
 installChartDefaults();
@@ -91,7 +57,7 @@ function relativeTime(iso: string): string {
 
 export default function DashboardPage() {
   const { t } = useTranslation();
-  const { fleetData, geofences, notifications, dispatches } = useFleet();
+  const { fleetData, notifications, dispatches } = useFleet();
 
   const [fuel, setFuel] = useState<FuelPeriodStats | null>(null);
   const [series, setSeries] = useState<DashboardSeries | null>(null);
@@ -124,22 +90,31 @@ export default function DashboardPage() {
 
   const trucks = fleetData.trucks;
 
-  // ── Where the fleet is, right now ──
-  const occupancy = useMemo(() => {
-    const acc = { factory: 0, base: 0, customer_site: 0, in_transit: 0 };
+  // ── What the fleet is doing, right now ──
+  //
+  // Status rather than location. Location needs a geofence per place,
+  // and only two exist — the factory and the parc — so "at a client
+  // site" could never be anything but zero however the fleet moved,
+  // while every truck always has a status.
+  const fleetStatus = useMemo(() => {
+    const acc = { moving: 0, stationary: 0, offline: 0 };
     for (const tr of trucks) {
-      if (tr.lat == null || tr.lng == null) continue;
-      acc[classifyTruckLocation(tr.lat, tr.lng, geofences)]++;
+      if (tr.status === "moving") acc.moving++;
+      else if (tr.status === "idle") acc.stationary++;
+      else acc.offline++;
     }
     return acc;
-  }, [trucks, geofences]);
+  }, [trucks]);
 
-  const locationChart = {
-    labels: ["At factory", "At parc", "At client site", "In transit"],
+  const statusChart = {
+    labels: ["Moving", "Stationary", "Offline"],
     datasets: [
       {
-        data: [occupancy.factory, occupancy.base, occupancy.customer_site, occupancy.in_transit],
-        backgroundColor: [CHART_COLORS.pink, CHART_COLORS.cyan, CHART_COLORS.green, CHART_COLORS.amber],
+        data: [fleetStatus.moving, fleetStatus.stationary, fleetStatus.offline],
+        // The taxonomy, unchanged: green is a truck that is moving, amber
+        // one that is stopped, and an unreachable truck is not a state
+        // worth a hue — it is the absence of one.
+        backgroundColor: [CHART_COLORS.green, CHART_COLORS.amber, CHART_COLORS.empty],
         borderWidth: 0,
       },
     ],
@@ -266,14 +241,27 @@ export default function DashboardPage() {
         <section className="panel dash-panel">
           <header className="dash-panel__head">
             <div>
-              <div className="dash-panel__title">Where the fleet is</div>
-              <div className="dash-panel__sub">Live, for every truck reporting a position.</div>
+              <div className="dash-panel__title">What the fleet is doing</div>
+              <div className="dash-panel__sub">
+                {trucks.length > 0
+                  ? `${trucks.length} vehicles reporting.`
+                  : "Waiting for the first fleet snapshot."}
+              </div>
             </div>
           </header>
           <div className="dash-panel__body">
-            <div className="dash-chart dash-chart--donut">
-              <Doughnut data={locationChart} options={doughnutOptions} />
-            </div>
+            {trucks.length === 0 ? (
+              <p className="dash-empty">
+                <span>
+                  <MapPinOff size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                  No fleet snapshot yet — the monitoring job may not be running.
+                </span>
+              </p>
+            ) : (
+              <div className="dash-chart dash-chart--donut">
+                <Doughnut data={statusChart} options={doughnutOptions} />
+              </div>
+            )}
           </div>
         </section>
       </div>

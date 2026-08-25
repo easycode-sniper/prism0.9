@@ -82,8 +82,17 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadGeofences = useCallback(async () => {
+    // `if (result.data)` was always true — an error path returns an empty
+    // array, which is truthy — so a failed load overwrote the geofences
+    // with none and said nothing. Consumers cannot tell "no geofence is
+    // defined" from "the request failed", and both read as every truck
+    // being in transit.
     const result = await listGeofences();
-    if (result.data) setGeofences(result.data);
+    if (result.error) {
+      console.error("[FleetProvider] geofences failed to load:", result.error);
+      return;
+    }
+    setGeofences(result.data);
   }, []);
 
   const loadGasStations = useCallback(async () => {

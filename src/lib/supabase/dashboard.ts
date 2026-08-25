@@ -54,11 +54,18 @@ export interface FuelPeriodStats {
   unpairedAmountDa: number;
 }
 
-// The sheet holds roughly a month of fills (1142 rows at the time of
-// writing). Aggregating those in JS costs one round trip and no
-// migration; an RPC would be faster and is worth it only once this is
-// several months deep.
-const FUEL_ROW_CAP = 5000;
+// PostgREST caps a response at 1000 rows and does NOT error when it
+// truncates — .limit(5000) silently returned 1000, so this aggregate was
+// summing the first 1000 fills of 1147 and reporting the result as the
+// month. Every figure was understated and the period label stopped at
+// the 1000th row's date, which is how it surfaced.
+//
+// Paged explicitly instead. The page size is the server's cap: asking
+// for more per page does nothing.
+const FUEL_PAGE = 1000;
+// A guard against paging forever if the table grows unexpectedly, not a
+// data limit — a month is about 1150 fills, so this is roughly a year.
+const FUEL_MAX_PAGES = 15;
 
 export async function getFuelPeriodStats(): Promise<{ stats?: FuelPeriodStats; error?: string }> {
   const supabase = await createClient();
@@ -68,15 +75,21 @@ export async function getFuelPeriodStats(): Promise<{ stats?: FuelPeriodStats; e
   // Ordered by sheet position, which is chronological because the sheet
   // is append-only — and unlike occurred_at, it is not affected by the
   // date column's mixed formats.
-  const { data, error } = await supabase
-    .from("fuel_transactions")
-    .select("distance_km, litres_filled, amount_da, variance_da, occurred_raw, sheet_row")
-    .order("sheet_row", { ascending: true, nullsFirst: false })
-    .limit(FUEL_ROW_CAP);
+  const rows: Record<string, unknown>[] = [];
+  for (let page = 0; page < FUEL_MAX_PAGES; page++) {
+    const from = page * FUEL_PAGE;
+    const { data, error } = await supabase
+      .from("fuel_transactions")
+      .select("distance_km, litres_filled, amount_da, variance_da, occurred_raw, sheet_row")
+      .order("sheet_row", { ascending: true, nullsFirst: false })
+      .range(from, from + FUEL_PAGE - 1);
 
-  if (error) return { error: error.message };
-
-  const rows = data ?? [];
+    if (error) return { error: error.message };
+    const batch = data ?? [];
+    rows.push(...batch);
+    // A short page is the last page. Anything else means there is more.
+    if (batch.length < FUEL_PAGE) break;
+  }
   let km = 0;
   let litres = 0;
   let amountDa = 0;
@@ -86,7 +99,11 @@ export async function getFuelPeriodStats(): Promise<{ stats?: FuelPeriodStats; e
   let unpairedFills = 0;
   let unpairedAmountDa = 0;
 
-  for (const r of rows) {
+  for (const row of rows) {
+    const r = row as {
+      distance_km: number | null; litres_filled: number | null; amount_da: number | null;
+      variance_da: number | null; occurred_raw: string | null;
+    };
     const l = r.litres_filled != null ? Number(r.litres_filled) : 0;
     const amount = r.amount_da != null ? Number(r.amount_da) : 0;
     // No variance means the sheet had no distance to price this fill

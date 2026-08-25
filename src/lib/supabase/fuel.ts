@@ -52,11 +52,12 @@ export async function listRecentFuelTransactions(): Promise<{
       "model, truck_id, category, driver_name, occurred_at, occurred_raw, sheet_row, card_no, station, fuel_type, amount_da, odometer_km, distance_km, litres_filled, variance_da"
     )
     // Ordered by position in the sheet, not by occurred_at. The sheet is
-    // append-ordered, so its last rows are the last logged — and the date
-    // column cannot be read unambiguously, so sorting on it put December
-    // above yesterday and filled this page with rows from months that
-    // have not happened. nullsFirst: false keeps any row synced before
-    // sheet_row existed at the bottom rather than the top.
+    // append-ordered, so its last rows are the last logged — and 163 of
+    // its rows carry a date in the future, which sorted every one of
+    // them above today. This page was showing 44 December fills, 41
+    // November and 15 October, and not one real recent one.
+    // nullsFirst: false keeps any row synced before sheet_row existed at
+    // the bottom rather than the top.
     .order("sheet_row", { ascending: false, nullsFirst: false })
     .limit(FUEL_ROW_LIMIT);
 

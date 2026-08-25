@@ -183,15 +183,14 @@ export async function fetchSheetRows(spreadsheetId: string, range: string): Prom
   const token = await getAccessToken();
 
   // FORMATTED_STRING, deliberately: this is the text the sheet itself
-  // displays, and the Carburant page shows it verbatim rather than
-  // interpreting it. The column cannot be read unambiguously — the sheet
-  // is filled by pasting batches in by hand and the batches disagree on
-  // day-first vs month-first — so mirroring the cell is the only reading
-  // that is never wrong.
+  // displays, and the Carburant page shows it verbatim. The column is
+  // not what needs interpreting — 163 of the rows in the sheet carry a
+  // date that has not happened yet, and the page's job is to show what
+  // the sheet says rather than to second-guess it.
   //
-  // SERIAL_NUMBER was tried here and changed nothing, which is itself
-  // the answer: dateTimeRenderOption only applies to real date cells,
-  // and these are text.
+  // SERIAL_NUMBER was tried here and changed nothing, which is the
+  // answer: dateTimeRenderOption applies only to real date cells, and
+  // this column is text.
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
 
   const resp = await fetchWithTimeout(

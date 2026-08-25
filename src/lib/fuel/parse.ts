@@ -108,29 +108,29 @@ function fromSheetSerial(serial: number): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-/** A sheet date cell -> ISO instant.
+/** A sheet date cell -> ISO instant, read day-first as Africa/Algiers
+ *  local time. Algeria does not observe DST, so +01:00 is correct
+ *  year-round, matching OPS_UTC_OFFSET elsewhere in the app.
  *
- *  Normally a number: the fetch asks Sheets for SERIAL_NUMBER, so a real
- *  date cell arrives as its serial and there is nothing to interpret.
+ *  Day-first is not a guess. Of 1142 rows in the sheet, 633 have a first
+ *  component above 12 ("25/8/2026") and can only be read that way, and
+ *  not one row has a second component above 12 — so nothing in the data
+ *  contradicts it. This function is doing the right thing with what it
+ *  is given.
  *
- *  This used to read a formatted string and assume day-first, reasoning
- *  from a sample where the second component was always 8 that the data
- *  had to be D/M against August. It was month-first, and the giveaway is
- *  in the odometer: ordered by odometer — which only ever climbs — the
- *  dates ran Jan 8, Feb 8, Apr 8, Jun 8, Oct 8, Dec 8 and only then Aug
- *  13 onward. Read each of those months as the day of August and the
- *  sequence is exactly in order. Every fill whose day was 12 or less had
- *  been moved to another month, 474 rows of 1142, some of them into the
- *  future.
+ *  What that leaves is 163 rows whose date is genuinely in the future,
+ *  "8/9/2026" and the like, sitting that way in the sheet itself. Those
+ *  are entry errors in the source, not parse errors here, and they are
+ *  why the Carburant page shows occurred_raw and orders on sheet_row
+ *  rather than trusting this value.
  *
- *  The string branch stays for a cell that holds text rather than a real
- *  date, which this sheet does produce. It is deliberately strict about
- *  the day-first order and returns null on an impossible month rather
- *  than swapping the two to make it fit: dropping one row is visible in
- *  the sync's skip count, and silently moving it is not.
+ *  The number branch exists because a real date cell would arrive as a
+ *  Sheets serial; this column is text, so it does not fire today.
  *
  *  Returns null rather than throwing, so one bad cell skips its row
- *  instead of failing the whole sync. */
+ *  instead of failing the whole sync. An impossible month returns null
+ *  rather than being swapped to fit: a dropped row shows up in the
+ *  sync's skip count, and a silently moved one does not. */
 export function parseSheetDateTime(raw: unknown): string | null {
   if (typeof raw === "number") return fromSheetSerial(raw);
   if (typeof raw !== "string") return null;

@@ -71,19 +71,75 @@ export function parseSheetNumber(cell: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** "1/8/2026 02:47:58" -> ISO instant, read as Africa/Algiers local time.
- *  Day-first: the sheet is filled by hand in Algeria, and the only way to
- *  tell D/M from M/D apart in this data is that every value seen so far
- *  has a first component of 1-9 against a constant second component of
- *  8 (August) — i.e. day-first, not month-first with a very unlikely
- *  all-January dataset. Algeria does not observe DST, so +01:00 is the
- *  correct offset year-round, matching OPS_UTC_OFFSET elsewhere in the
- *  app. Returns null rather than throwing on a value that doesn't parse,
- *  since one bad cell should skip that field, not the whole sync. */
-export function parseSheetDateTime(raw: string): string | null {
-  const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/);
+/** Sheets' 1899-12-30 epoch, in UTC. The serial is a day count with the
+ *  time as its fraction, and it is what a date cell actually IS —
+ *  independent of whatever format that cell happens to display in. */
+const SHEETS_EPOCH_UTC = Date.UTC(1899, 11, 30);
+
+/** A date-time serial from Sheets -> ISO instant, read as Africa/Algiers
+ *  wall-clock time. Algeria does not observe DST, so +01:00 is correct
+ *  year-round, matching OPS_UTC_OFFSET elsewhere in the app. */
+function fromSheetSerial(serial: number): string | null {
+  if (!Number.isFinite(serial) || serial <= 0) return null;
+
+  // Rounded to whole seconds before it becomes a date. The serial is a
+  // float, so a time that is exactly 23:00:00 can arrive as .9583333329
+  // of a day and truncate to 22:59:59 — an hour-boundary error that
+  // would land a late-evening fill on the previous day.
+  const ms = SHEETS_EPOCH_UTC + Math.round(serial * 86_400) * 1000;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+
+  // The serial encodes wall-clock time with no zone of its own, so it is
+  // built in UTC and read back out of the UTC fields, then re-stamped as
+  // +01:00 — the offset the sheet was filled in.
+  const p = (n: number) => String(n).padStart(2, "0");
+  const iso =
+    `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}` +
+    `T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}+01:00`;
+
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/** A sheet date cell -> ISO instant.
+ *
+ *  Normally a number: the fetch asks Sheets for SERIAL_NUMBER, so a real
+ *  date cell arrives as its serial and there is nothing to interpret.
+ *
+ *  This used to read a formatted string and assume day-first, reasoning
+ *  from a sample where the second component was always 8 that the data
+ *  had to be D/M against August. It was month-first, and the giveaway is
+ *  in the odometer: ordered by odometer — which only ever climbs — the
+ *  dates ran Jan 8, Feb 8, Apr 8, Jun 8, Oct 8, Dec 8 and only then Aug
+ *  13 onward. Read each of those months as the day of August and the
+ *  sequence is exactly in order. Every fill whose day was 12 or less had
+ *  been moved to another month, 474 rows of 1142, some of them into the
+ *  future.
+ *
+ *  The string branch stays for a cell that holds text rather than a real
+ *  date, which this sheet does produce. It is deliberately strict about
+ *  the day-first order and returns null on an impossible month rather
+ *  than swapping the two to make it fit: dropping one row is visible in
+ *  the sync's skip count, and silently moving it is not.
+ *
+ *  Returns null rather than throwing, so one bad cell skips its row
+ *  instead of failing the whole sync. */
+export function parseSheetDateTime(raw: unknown): string | null {
+  if (typeof raw === "number") return fromSheetSerial(raw);
+  if (typeof raw !== "string") return null;
+
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // A serial that came back as a numeric string rather than a number.
+  if (/^\d+(\.\d+)?$/.test(trimmed)) return fromSheetSerial(Number(trimmed));
+
+  const m = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/);
   if (!m) return null;
   const [, d, mo, y, h, mi, s] = m;
+  if (Number(mo) < 1 || Number(mo) > 12 || Number(d) < 1 || Number(d) > 31) return null;
+
   const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}T${h.padStart(2, "0")}:${mi}:${s}+01:00`;
   const parsed = new Date(iso);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
@@ -145,7 +201,7 @@ export function parseFuelRow(cells: string[]): FuelTransaction | null {
   // silently corrupt whichever day it landed on, so it is dropped
   // instead. Every one of 800 real rows in the source has a real date;
   // this only fires on genuine corruption.
-  const occurredAt = parseSheetDateTime(cells[COL.dateTime] ?? "");
+  const occurredAt = parseSheetDateTime(cells[COL.dateTime]);
   if (!occurredAt) return null;
 
   const amountDa = parseSheetNumber(cells[COL.amountFilled]) ?? 0;

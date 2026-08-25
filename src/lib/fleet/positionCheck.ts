@@ -283,6 +283,15 @@ export async function runPositionCheck(
       factory_arrival_notified: nowFactoryArrived ? true : undefined,
       site_approach_notified: nowApproaching ? true : undefined,
       arrived_at: nowSiteArrived ? result.timestamp.toISOString() : undefined,
+      // Reaching the client is the end of the run, so the run is closed
+      // here rather than waiting for a dispatcher to press stop. This
+      // one field is what makes the rest of it happen: tick.ts only
+      // loads dispatches with status 'active', so a completed run stops
+      // being route-checked and stops accruing an ETA on the next tick;
+      // listActiveDispatches drops it from Active Runs; and the History
+      // page already reads 'completed'. arrived_at above is the moment
+      // it ended, and what History measures the duration against.
+      status: nowSiteArrived ? "completed" : undefined,
     })
     .eq("id", dispatch.id)
     .select("id");

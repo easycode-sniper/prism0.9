@@ -24,14 +24,14 @@ export default function HistoryPage() {
 
   function exportCsv() {
     if (records.length === 0) return;
-    const header = ["Truck", "Driver", "Client", "Destination", "Dispatched", "Stopped", "Duration (min)", "Status", "Off Route", "Speeding", "Dispatcher"];
+    const header = ["Truck", "Driver", "Client", "Destination", "Dispatched", "Ended", "Duration (min)", "Status", "Off Route", "Speeding", "Dispatcher"];
     const rows = records.map((r) => [
       r.truck_id,
       r.driver_name || "",
       r.client || "",
       r.site_name || "",
       r.dispatched_at,
-      r.stopped_at || "",
+      r.ended_at || "",
       r.duration_minutes?.toString() || "",
       r.status,
       r.ever_off_route ? "Yes" : "No",
@@ -121,7 +121,7 @@ export default function HistoryPage() {
                 <th className="px-4 py-3">Destination</th>
                 <th className="px-4 py-3">Client</th>
                 <th className="px-4 py-3">Dispatched</th>
-                <th className="px-4 py-3">Stopped</th>
+                <th className="px-4 py-3">Ended</th>
                 <th className="px-4 py-3">Duration</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Alerts</th>
@@ -134,7 +134,7 @@ export default function HistoryPage() {
                   <td className="px-4 py-3 t-primary">{r.site_name || "—"}</td>
                   <td className="px-4 py-3 t-dim">{r.client || "—"}</td>
                   <td className="px-4 py-3 t-dim">{formatDateTime(r.dispatched_at)}</td>
-                  <td className="px-4 py-3 t-dim">{r.stopped_at ? formatDateTime(r.stopped_at) : "—"}</td>
+                  <td className="px-4 py-3 t-dim">{r.ended_at ? formatDateTime(r.ended_at) : "—"}</td>
                   <td className="px-4 py-3 t-dim">{r.duration_minutes != null ? `${r.duration_minutes} min` : "—"}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={r.status} />

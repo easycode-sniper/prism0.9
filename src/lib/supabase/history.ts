@@ -12,7 +12,7 @@ export interface HistoryRecord {
   client: string | null;
   driver_name: string | null;
   dispatched_at: string;
-  stopped_at: string | null;
+  ended_at: string | null;
   status: "completed" | "stopped";
   reached_site: boolean | null;
   reached_factory: boolean | null;
@@ -50,16 +50,28 @@ export async function getHistoryData(): Promise<{ data: HistoryRecord[]; error: 
     `
     )
     .in("status", ["stopped", "completed"])
-    .order("stopped_at", { ascending: false, nullsFirst: false })
+    // Ordered by dispatched_at, not by when the run ended: a run that
+    // completed on arrival has no stopped_at, so ordering on that column
+    // sorted every completed run to the bottom — where the 500-row limit
+    // then cut them off. dispatched_at is never null. The rows are put
+    // back into ended-at order below, once both endings are resolved.
+    .order("dispatched_at", { ascending: false })
     .limit(500);
 
   if (error) return { data: [], error: error.message };
 
   const records: HistoryRecord[] = ((data ?? []) as any[]).map((d) => {
-    const stoppedAt = d.stopped_at ? new Date(d.stopped_at) : null;
+    // A run ends either when the truck reached the client or when a
+    // dispatcher stopped it early. Arrival comes first: it is the real
+    // end of the delivery, and a run completed that way never gets a
+    // stopped_at at all. So this duration answers the question the
+    // History page is actually asked — how long the truck took to reach
+    // the destination — and still covers stopped runs the old way.
+    const endedAtRaw: string | null = d.arrived_at ?? d.stopped_at ?? null;
+    const endedAt = endedAtRaw ? new Date(endedAtRaw) : null;
     const dispatchedAt = new Date(d.dispatched_at);
-    const durationMinutes = stoppedAt
-      ? Math.round((stoppedAt.getTime() - dispatchedAt.getTime()) / 60000)
+    const durationMinutes = endedAt
+      ? Math.round((endedAt.getTime() - dispatchedAt.getTime()) / 60000)
       : null;
 
     return {
@@ -69,7 +81,7 @@ export async function getHistoryData(): Promise<{ data: HistoryRecord[]; error: 
       client: Array.isArray(d.site) ? d.site[0]?.client : d.site?.client || null,
       driver_name: d.driver_name || null,
       dispatched_at: d.dispatched_at,
-      stopped_at: d.stopped_at,
+      ended_at: endedAtRaw,
       status: d.status,
       reached_site: d.site_arrival_notified,
       reached_factory: d.factory_arrival_notified,
@@ -83,6 +95,9 @@ export async function getHistoryData(): Promise<{ data: HistoryRecord[]; error: 
         : d.dispatcher?.full_name || null,
     };
   });
+
+  // Newest ending first, which is what the fetch order could not express.
+  records.sort((a, b) => (b.ended_at ?? "").localeCompare(a.ended_at ?? ""));
 
   return { data: records, error: null };
 }

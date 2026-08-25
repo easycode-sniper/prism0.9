@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { fetchSheetRows } from "@/lib/fuel/googleSheets";
-import { parseFuelRow, type FuelTransaction } from "@/lib/fuel/parse";
+import { dateCellOf, parseFuelRow, parseSheetDateTime, resolveOccurredAt, type FuelTransaction } from "@/lib/fuel/parse";
 
 // Scheduled fuel-sheet sync. Called every 15 minutes by pg_cron + pg_net
 // from Supabase — same mechanism as /api/tick, and the same reason: no
@@ -111,13 +111,30 @@ async function handle(request: NextRequest) {
     const rawRows = await fetchSheetRows(SPREADSHEET_ID, RANGE);
     console.log(`[fuel-sync] sheet read: ${rawRows.length} rows at ${since()}`);
 
+    // Dates are resolved across the whole column before any row is
+    // parsed, because a single cell cannot say which format it is in.
+    // The sheet changed format partway down — month-first above row 511,
+    // day-first below — and the only thing that distinguishes them is
+    // that the sheet is append-only, so its rows are in time order.
+    const resolvedDates = resolveOccurredAt(rawRows.map(dateCellOf));
+    // How many rows the order-based reading disagreed with the naive
+    // day-first one on. Logged because it is the number that should fall
+    // to zero once the sheet's own column is normalised — if it does
+    // not, the two halves are still there.
+    const ambiguousFixed = resolvedDates.filter((iso, i) => {
+      if (!iso) return false;
+      const naive = parseSheetDateTime(dateCellOf(rawRows[i]));
+      return naive != null && naive !== iso;
+    }).length;
+    console.log(`[fuel-sync] dates resolved: ${ambiguousFixed} row(s) read against the sheet's order`);
+
     const transactions: FuelTransaction[] = [];
     let skipped = 0;
     // The index is the row's position in the sheet, and RANGE starts at
     // A2, so +2 makes it the row number a person would read off the
     // sheet itself. It is what the Carburant page orders by.
     for (const [i, row] of rawRows.entries()) {
-      const parsed = parseFuelRow(row, i + 2);
+      const parsed = parseFuelRow(row, i + 2, resolvedDates[i]);
       if (parsed) transactions.push(parsed);
       // A row with real cells that still fails to parse (no usable date)
       // is worth knowing about; the formula-filler tail rows (no

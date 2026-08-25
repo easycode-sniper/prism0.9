@@ -108,29 +108,15 @@ function fromSheetSerial(serial: number): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-/** A sheet date cell -> ISO instant, read day-first as Africa/Algiers
+/** A sheet date cell -> ISO instant, read DAY-FIRST, as Africa/Algiers
  *  local time. Algeria does not observe DST, so +01:00 is correct
  *  year-round, matching OPS_UTC_OFFSET elsewhere in the app.
  *
- *  KNOWN WRONG for part of the sheet, and left that way deliberately
- *  until it is fixed properly. The source renders days 1-12 as
- *  month/day and days 13+ as day/month, flipping at one exact row
- *  boundary: "8/12/2026 23:18:51" followed by "13/8/2026 08:11:50",
- *  which is 12 August into 13 August. Read day-first, the first 509
- *  rows land on 8 January through 8 December instead of 1-12 August.
- *
- *  Two statistics look like they settle the format and do not. That no
- *  row has a second component above 12 is exactly what a month/day
- *  block (second = day, 1-12) followed by a day/month block (second =
- *  month, always 8) produces. That 633 rows can only be day-first is
- *  true of the second block alone. Only the sheet's own row order,
- *  which is chronological because it is append-only, tells the two
- *  halves apart.
- *
- *  So nothing here should be trusted for a fill dated on or before the
- *  12th. The Carburant page shows occurred_raw and orders on sheet_row
- *  for that reason; the dashboard's litres-today tile still filters on
- *  this value and is wrong for those rows.
+ *  This is the single-cell reading, and it is right for most of the
+ *  sheet but not all of it — see resolveOccurredAt below, which is what
+ *  the sync actually uses. Kept exported because it is the correct
+ *  answer whenever a cell is unambiguous, and because the resolver is
+ *  built out of it.
  *
  *  The number branch exists because a real date cell would arrive as a
  *  Sheets serial; this column is text, so it does not fire today.
@@ -185,6 +171,14 @@ const COL = {
   // read nowhere here, recomputed below instead.
 } as const;
 
+/** The Date & Time cell of a raw sheet row. Exported so the sync can
+ *  resolve the whole column without repeating COL.dateTime, which is the
+ *  kind of duplicated index that survives a column being inserted and
+ *  silently reads the wrong one afterwards. */
+export function dateCellOf(cells: unknown[]): unknown {
+  return cells[COL.dateTime];
+}
+
 /**
  * Parse one raw row into a transaction, or null when the row is not a
  * real transaction at all — the sheet's formulas are dragged hundreds of
@@ -193,7 +187,16 @@ const COL = {
  * that is unconditionally present on every genuine transaction and
  * unconditionally absent on the filler rows, so it is the filter.
  */
-export function parseFuelRow(cells: string[], sheetRow?: number): FuelTransaction | null {
+export function parseFuelRow(
+  cells: string[],
+  sheetRow?: number,
+  /** The instant resolved for this row by resolveOccurredAt, which reads
+   *  the column as a sequence and so can tell month-first rows from
+   *  day-first ones. Passed in rather than recomputed because a single
+   *  cell does not carry enough to decide. Falls back to the day-first
+   *  reading when absent, which is right for an unambiguous cell. */
+  occurredAtOverride?: string | null
+): FuelTransaction | null {
   const transactionNo = cleanText(cells[COL.transactionNo]);
   if (!transactionNo) return null;
 
@@ -214,7 +217,7 @@ export function parseFuelRow(cells: string[], sheetRow?: number): FuelTransactio
   // instead. Every one of 800 real rows in the source has a real date;
   // this only fires on genuine corruption.
   const rawDateCell = cells[COL.dateTime];
-  const occurredAt = parseSheetDateTime(rawDateCell);
+  const occurredAt = occurredAtOverride ?? parseSheetDateTime(rawDateCell);
   if (!occurredAt) return null;
 
   // Stringified rather than cleanText'd: this is a mirror, so it keeps
@@ -257,4 +260,151 @@ export function parseFuelRow(cells: string[], sheetRow?: number): FuelTransactio
     expectedCostDa,
     varianceDa,
   };
+}
+
+
+// ── Resolving a column that changed format mid-sheet ──────────
+//
+// The date column is not written one way. Rows 2-510 of the connected
+// sheet are month-first ("8/1/2026" for 1 August) and rows 511 on are
+// day-first ("13/8/2026" for 13 August) — the two halves were pasted in
+// from sources that disagreed, and the join is invisible because both
+// readings are valid whenever the day is 12 or less.
+//
+// No amount of looking at one cell can tell them apart. What can is the
+// order the cells arrive in: the sheet is append-only, so a fill never
+// precedes the one logged above it. Rows 54 and 55 are three minutes
+// apart in the log and read as a month apart under the wrong reading —
+// so the wrong reading is the one that makes time run backwards, or
+// leap, and the right one is the one that keeps it moving.
+//
+// This resolves the whole column at once for that reason, rather than
+// per row. It also self-corrects: if the sheet is normalised to
+// day-first tomorrow, every cell becomes unambiguous or agrees with its
+// neighbours, and this keeps returning the same answers.
+
+interface DateCandidate {
+  iso: string;
+  ms: number;
+}
+
+const DATE_CELL = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/;
+
+function isoFor(day: number, month: number, year: number, time: string): DateCandidate | null {
+  if (month < 1 || month > 12 || day < 1) return null;
+  // Day 0 of the next month is the last day of this one, which is how
+  // this rejects 31 April without a table of month lengths.
+  //
+  // Checked on the numbers rather than by building the date and seeing
+  // whether it rolled over: the instant carries a +01:00 stamp, so a
+  // fill at 00:12 local lands on the previous day in UTC, and a
+  // round-trip comparison reads that legitimate shift as an overflow.
+  // It rejected every early-morning date in the sheet.
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day > daysInMonth) return null;
+
+  const p = (n: number) => String(n).padStart(2, "0");
+  const d = new Date(`${year}-${p(month)}-${p(day)}T${time}+01:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return { iso: d.toISOString(), ms: d.getTime() };
+}
+
+/** Every reading of one cell that is a real date. One entry when the
+ *  cell can only be read one way, two when the day is 12 or less and
+ *  either component could be the month. */
+function candidatesFor(raw: unknown): DateCandidate[] {
+  if (typeof raw === "number") {
+    const iso = fromSheetSerial(raw);
+    return iso ? [{ iso, ms: new Date(iso).getTime() }] : [];
+  }
+  if (typeof raw !== "string") return [];
+
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const iso = fromSheetSerial(Number(trimmed));
+    return iso ? [{ iso, ms: new Date(iso).getTime() }] : [];
+  }
+
+  const m = trimmed.match(DATE_CELL);
+  if (!m) return [];
+
+  const [, aRaw, bRaw, yRaw, h, mi, sec] = m;
+  const a = Number(aRaw);
+  const b = Number(bRaw);
+  const year = Number(yRaw);
+  const time = `${h.padStart(2, "0")}:${mi}:${sec}`;
+
+  const out: DateCandidate[] = [];
+  const dayFirst = isoFor(a, b, year, time);
+  const monthFirst = isoFor(b, a, year, time);
+
+  if (dayFirst) out.push(dayFirst);
+  // Only a genuinely different reading counts as a second candidate —
+  // "8/8/2026" is the same instant either way.
+  if (monthFirst && monthFirst.ms !== dayFirst?.ms) out.push(monthFirst);
+
+  return out;
+}
+
+/** Pick the candidate that best continues from `anchor`, moving in
+ *  `direction`. Forward, that is the earliest candidate at or after the
+ *  previous row; backward, the latest at or before the next one. When
+ *  nothing satisfies the constraint the closest candidate wins, so one
+ *  genuinely out-of-order row cannot derail the rows after it. */
+function pick(cands: DateCandidate[], anchor: number, direction: 1 | -1): DateCandidate {
+  const ordered = direction === 1
+    ? [...cands].sort((x, y) => x.ms - y.ms)
+    : [...cands].sort((x, y) => y.ms - x.ms);
+
+  const forward = ordered.find((c) => (direction === 1 ? c.ms >= anchor : c.ms <= anchor));
+  if (forward) return forward;
+
+  return ordered.reduce((best, c) =>
+    Math.abs(c.ms - anchor) < Math.abs(best.ms - anchor) ? c : best
+  );
+}
+
+/**
+ * Resolve a whole column of date cells, in sheet order, to ISO instants.
+ *
+ * Anchored on the first cell that can only be read one way — a day above
+ * 12 — and then walked outwards in both directions, each ambiguous cell
+ * taking the reading that keeps the sequence moving in the direction the
+ * sheet is written. A cell that is not a date at all resolves to null
+ * and does not disturb its neighbours.
+ *
+ * With no unambiguous cell anywhere, every reading is as good as every
+ * other and it falls back to day-first, which is how the office writes
+ * them and what the column will be once it is normalised.
+ */
+export function resolveOccurredAt(cells: unknown[]): (string | null)[] {
+  const candidates = cells.map(candidatesFor);
+  const resolved: (string | null)[] = candidates.map((c) => (c.length === 1 ? c[0].iso : null));
+
+  const anchor = candidates.findIndex((c) => c.length === 1);
+  if (anchor === -1) {
+    return candidates.map((c) => (c.length > 0 ? c[0].iso : null));
+  }
+
+  let prev = candidates[anchor][0].ms;
+  for (let i = anchor + 1; i < candidates.length; i++) {
+    const c = candidates[i];
+    if (c.length === 0) continue;
+    const chosen = c.length === 1 ? c[0] : pick(c, prev, 1);
+    resolved[i] = chosen.iso;
+    prev = chosen.ms;
+  }
+
+  let next = candidates[anchor][0].ms;
+  for (let i = anchor - 1; i >= 0; i--) {
+    const c = candidates[i];
+    if (c.length === 0) continue;
+    const chosen = c.length === 1 ? c[0] : pick(c, next, -1);
+    resolved[i] = chosen.iso;
+    next = chosen.ms;
+  }
+
+  return resolved;
 }

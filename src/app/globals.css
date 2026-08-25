@@ -1203,6 +1203,11 @@ hr {
 /* The two supporting series, equal weight. */
 .dash-row--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+/* Three supporting series. Equal weight rather than favouring one: the
+   litres bought, what they bought per 100km, and what went wrong are
+   read together, not ranked. */
+.dash-row--trio { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
 /* Who is on, what is running, what just happened. The middle panel is
    the widest because it is the only one holding a table. */
 .dash-row--panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr); }
@@ -1212,9 +1217,16 @@ hr {
   .dash-row--panels { grid-template-columns: minmax(0, 1fr); }
 }
 
+@media (max-width: 1180px) {
+  /* Three charts side by side stop being readable well before the
+     panels below them do. */
+  .dash-row--trio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 760px) {
   .dash { padding: 14px 12px 20px; }
-  .dash-row--pair { grid-template-columns: minmax(0, 1fr); }
+  .dash-row--pair,
+  .dash-row--trio { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ── Dashboard panel ──────────────────────────────────────────

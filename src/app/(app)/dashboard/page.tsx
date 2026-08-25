@@ -164,9 +164,16 @@ export default function DashboardPage() {
     datasets: [{ data: (series?.alerts ?? []).map((p) => p.value), ...BAR_SERIES }],
   };
 
-  const parcChart = {
-    labels: (series?.parcEntries ?? []).map((p) => axisLabel(p.day)),
-    datasets: [{ data: (series?.parcEntries ?? []).map((p) => p.value), ...LINE_SERIES }],
+  const litresChart = {
+    labels: (series?.litres ?? []).map((p) => axisLabel(p.day)),
+    datasets: [{ data: (series?.litres ?? []).map((p) => Math.round(p.value)), ...BAR_SERIES }],
+  };
+
+  const consumptionChart = {
+    labels: (series?.consumption ?? []).map((p) => axisLabel(p.day)),
+    datasets: [
+      { data: (series?.consumption ?? []).map((p) => Number(p.value.toFixed(2))), ...LINE_SERIES },
+    ],
   };
 
   // ── Drivers on duty: anyone the fleet feed can name, moving first ──
@@ -271,18 +278,18 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      {/* ── Tier 3: the two supporting series ── */}
-      <div className="dash-row dash-row--pair">
+      {/* ── Tier 3: what the fuel sheet says, day by day ── */}
+      <div className="dash-row dash-row--trio">
         <section className="panel dash-panel">
           <header className="dash-panel__head">
             <div>
-              <div className="dash-panel__title">Alerts raised per day</div>
-              <div className="dash-panel__sub">Off route, speeding and arrivals, all kinds together.</div>
+              <div className="dash-panel__title">Litres bought per day</div>
+              <div className="dash-panel__sub">Every fill, staff vehicles included.</div>
             </div>
           </header>
           <div className="dash-panel__body">
             <div className="dash-chart">
-              {series ? <Bar data={alertsChart} options={timeSeriesOptions()} /> : <ChartWaiting />}
+              {series ? <Bar data={litresChart} options={timeSeriesOptions({ unit: " L" })} /> : <ChartWaiting />}
             </div>
           </div>
         </section>
@@ -290,13 +297,33 @@ export default function DashboardPage() {
         <section className="panel dash-panel">
           <header className="dash-panel__head">
             <div>
-              <div className="dash-panel__title">Parc entries per day</div>
-              <div className="dash-panel__sub">Trucks arriving at PARC OMD.</div>
+              <div className="dash-panel__title">Consumption per day</div>
+              <div className="dash-panel__sub">
+                L/100km, on fills that logged a distance. The sheet assumes 45.
+              </div>
             </div>
           </header>
           <div className="dash-panel__body">
             <div className="dash-chart">
-              {series ? <Line data={parcChart} options={timeSeriesOptions()} /> : <ChartWaiting />}
+              {series ? (
+                <Line data={consumptionChart} options={timeSeriesOptions({ unit: " L/100km", beginAtZero: false })} />
+              ) : (
+                <ChartWaiting />
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Alerts raised per day</div>
+              <div className="dash-panel__sub">Off route, speeding and arrivals together.</div>
+            </div>
+          </header>
+          <div className="dash-panel__body">
+            <div className="dash-chart">
+              {series ? <Bar data={alertsChart} options={timeSeriesOptions()} /> : <ChartWaiting />}
             </div>
           </div>
         </section>

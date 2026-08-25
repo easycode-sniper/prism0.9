@@ -138,8 +138,13 @@ export interface DashboardSeries {
   km: DayPoint[];
   /** Alerts raised per day — off-route, speeding, arrivals. */
   alerts: DayPoint[];
-  /** Trucks entering PARC OMD per day. */
-  parcEntries: DayPoint[];
+  /** Litres bought per day, summed from the pump transactions. */
+  litres: DayPoint[];
+  /** Litres per 100km per day, on the same rule the headline figure
+   *  uses: only fills carrying a variance, because a fill without one
+   *  had no distance logged against it. A day with no such fill has no
+   *  consumption to report and comes back as 0. */
+  consumption: DayPoint[];
   /** How many days of history actually exist behind the longest series,
    *  so the page can show a range control that does not promise more
    *  than it has. */
@@ -174,7 +179,7 @@ export async function getDashboardSeries(
   const fromDay = from.toISOString().slice(0, 10);
   const fromInstant = `${fromDay}T00:00:00${OPS_UTC_OFFSET}`;
 
-  const [metrics, alerts, entries] = await Promise.all([
+  const [metrics, alerts, fuel] = await Promise.all([
     supabase
       .from("fleet_day_metrics")
       .select("ops_day, km")
@@ -184,10 +189,13 @@ export async function getDashboardSeries(
       .from("notifications")
       .select("created_at")
       .gte("created_at", fromInstant),
+    // Safe to filter on occurred_at now that the sheet's date column is
+    // day-first throughout and resolveOccurredAt guards what arrives
+    // after. It was not before: half the rows sat in the wrong month.
     supabase
-      .from("hq_entries")
-      .select("entered_at")
-      .gte("entered_at", fromInstant),
+      .from("fuel_transactions")
+      .select("occurred_at, litres_filled, distance_km, variance_da")
+      .gte("occurred_at", fromInstant),
   ]);
 
   if (metrics.error) return { error: metrics.error.message };
@@ -212,11 +220,42 @@ export async function getDashboardSeries(
     kmByDay.set(String(r.ops_day), Number(r.km ?? 0));
   }
 
+  // Litres and consumption share one pass. Consumption needs its own
+  // numerator — only the litres on fills that logged a distance — while
+  // the litres line counts every drop bought, so they cannot be derived
+  // from each other.
+  const litresByDay = new Map<string, number>();
+  const pairedLitresByDay = new Map<string, number>();
+  const pumpKmByDay = new Map<string, number>();
+
+  for (const r of fuel.data ?? []) {
+    const raw = r.occurred_at;
+    if (typeof raw !== "string") continue;
+    const at = new Date(raw);
+    if (Number.isNaN(at.getTime())) continue;
+    const key = new Date(at.getTime() + 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const l = r.litres_filled != null ? Number(r.litres_filled) : 0;
+    litresByDay.set(key, (litresByDay.get(key) ?? 0) + l);
+
+    if (r.variance_da != null) {
+      pairedLitresByDay.set(key, (pairedLitresByDay.get(key) ?? 0) + l);
+      pumpKmByDay.set(key, (pumpKmByDay.get(key) ?? 0) + (r.distance_km != null ? Number(r.distance_km) : 0));
+    }
+  }
+
+  const consumptionByDay = new Map<string, number>();
+  for (const [day, dist] of pumpKmByDay) {
+    if (dist <= 0) continue;
+    consumptionByDay.set(day, ((pairedLitresByDay.get(day) ?? 0) * 100) / dist);
+  }
+
   return {
     series: {
       km: densify(kmByDay, span),
       alerts: densify(bucket(alerts.data, "created_at"), span),
-      parcEntries: densify(bucket(entries.data, "entered_at"), span),
+      litres: densify(litresByDay, span),
+      consumption: densify(consumptionByDay, span),
       daysAvailable: kmByDay.size,
     },
   };

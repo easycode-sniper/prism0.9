@@ -11,7 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadWialonConfig, fetchFleetData, type FleetTruck, type VehicleCategory } from "@/lib/fleet/wialon";
 import { loadGeofences } from "@/lib/fleet/geofences";
-import { loadDispatchAndSite, runPositionCheck, runHqArrivalCheck } from "@/lib/fleet/positionCheck";
+import { loadDispatchAndSite, runPositionCheck, runHqArrivalCheck, runFactoryArrivalCheck } from "@/lib/fleet/positionCheck";
 
 export interface TickResult {
   ok: boolean;
@@ -148,6 +148,34 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     } catch (err) {
       warnings.push(`hq: ${(err as Error).message}`);
     }
+  } else {
+    // Previously this fell through in silence. A missing or malformed HQ
+    // geofence would disable parc tracking entirely while the tick kept
+    // reporting ok with no warnings — the same invisibility that hid the
+    // 28-hour outage.
+    warnings.push("hq: no usable site geofence (needs centre and radius); parc arrivals not checked");
+  }
+
+  // Factory arrival runs fleet-wide, not per dispatch. Reaching the
+  // factory to load is what prompts a dispatch to be created, so it
+  // cannot be conditional on one already existing — which is exactly why
+  // the dispatch-scoped version inside runPositionCheck had produced a
+  // single notification in the app's lifetime.
+  const factory = geofences.find((g) => g.kind === "factory");
+  if (factory) {
+    try {
+      await runFactoryArrivalCheck(supabase, cargoTrucks, {
+        name: factory.name,
+        ring: factory.ring,
+        centerLat: factory.centerLat,
+        centerLng: factory.centerLng,
+        radiusMeters: factory.radiusMeters,
+      });
+    } catch (err) {
+      warnings.push(`factory: ${(err as Error).message}`);
+    }
+  } else {
+    warnings.push("factory: no factory geofence found; factory arrivals not checked");
   }
 
   return {

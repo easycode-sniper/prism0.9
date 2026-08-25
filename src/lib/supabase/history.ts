@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import type { NotificationKind } from "@/lib/notifications/kinds";
 
 // ── History ──
 
@@ -136,7 +137,7 @@ export interface NotificationRecord {
   id: string;
   dispatch_id: string | null;
   truck_id: string;
-  kind: "off_route" | "speeding" | "site_arrival" | "factory_arrival" | "hq_arrival";
+  kind: NotificationKind;
   title: string;
   message: string;
   created_at: string;

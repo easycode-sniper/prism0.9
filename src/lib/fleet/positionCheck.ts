@@ -234,8 +234,26 @@ export async function runPositionCheck(
     });
   }
 
+  // Throw rather than ignore the result. Every notification here is
+  // paired with a flag written by the dispatch update just below, and
+  // that flag's whole job is to stop the alert firing twice — so a
+  // swallowed insert doesn't merely lose one alert, it marks the run as
+  // already alerted and suppresses every retry for the rest of the run.
+  // That is exactly how the client-approach alert stayed dead from the
+  // day it shipped: a kind the CHECK constraint didn't allow (fixed in
+  // 026), rejected in silence, flag written anyway.
+  //
+  // tick.ts catches per-dispatch errors and collects them as warnings,
+  // so throwing costs this one truck's check for this one tick and
+  // leaves the flags unwritten — the next tick retries from the same
+  // state, and the failure is visible in the tick response instead of
+  // being invisible forever.
   if (notificationsToInsert.length > 0) {
-    await supabase.from("notifications").insert(notificationsToInsert);
+    const { error: notifyError } = await supabase.from("notifications").insert(notificationsToInsert);
+    if (notifyError) {
+      const kinds = notificationsToInsert.map((n) => n.kind).join(", ");
+      throw new Error(`notification insert failed (${kinds}): ${notifyError.message}`);
+    }
   }
 
   // Update dispatch record — current state (resettable) + lifetime flags

@@ -1425,11 +1425,19 @@ hr {
   color: var(--text-dim);
 }
 
+/* Three actions and a manual-entry toggle in a sidebar this narrow will
+   not always fit on one line — wrapping beats a row that overflows or
+   squeezes its labels into ellipses. */
 .run-card__actions {
   margin-top: 8px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+.run-card__actions .btn-sm {
+  padding: 6px 11px;
 }
 
 .run-card__manual {
@@ -2135,17 +2143,83 @@ html[dir="rtl"] table { text-align: right; }
 .signin-foot a { color: var(--accent); font-weight: 600; }
 .signin-foot a:hover { text-decoration: underline; }
 
-/* The toggle renders both icons and CSS reveals one, keyed off the theme
-   attribute the bootstrap script sets. Choosing in React instead would
-   mean reading the DOM during render — server and client would disagree,
-   and the resulting hydration mismatch resets data-theme to the SSR value. */
-:root[data-theme="light"] :root[data-theme="light"] 
 /* Selected state for the small pill filters. Cream, not a hue — a filter
-   chip is chrome, and the colour channel belongs to the trucks. */
+   chip is chrome, and the colour channel belongs to the trucks.
+   (This rule was dead until now: removing the light theme left a
+   declaration-less `:root[data-theme="light"] :root[data-theme="light"]`
+   directly above it, and a selector with no block simply continues into
+   the next one — so the browser was parsing this as a descendant of a
+   theme that no longer exists. Monitoring's active filter chip was
+   silently unstyled by the same accident.) */
 .btn-sm.is-on {
   border-color: var(--accent);
   color: var(--bg);
   background: var(--accent);
+}
+
+/* The route caption floats over live tiles, so it is the documented
+   .glass--float exception alongside the layer toggles. Bottom-left is
+   the one free corner: zoom sits top-left, the toggles top-centre,
+   Leaflet's attribution bottom-right. */
+.route-caption {
+  position: absolute;
+  bottom: 14px;
+  left: 10px;
+  z-index: 1000;
+  max-width: min(340px, calc(100% - 20px));
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+}
+
+.route-caption__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.route-caption__eyebrow {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.route-caption__truck {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--cyan);
+  margin-right: auto;
+}
+
+.route-caption__leg {
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.route-caption__place {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-caption__place--to {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.route-caption__stats {
+  margin-top: 4px;
+  display: flex;
+  gap: 10px;
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
 }
 
 /* Native select popups are drawn by the platform and do not inherit the

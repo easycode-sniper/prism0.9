@@ -105,6 +105,8 @@ export async function listActiveDispatches() {
       last_deviation_meters,
       last_eta_seconds,
       route_geometry,
+      route_total_distance_meters,
+      route_total_time_seconds,
       site:construction_sites(name, client, lat, lng),
       dispatcher:profiles!dispatches_dispatched_by_fkey(full_name)
     `
@@ -141,6 +143,57 @@ export async function stopDispatch(dispatchId: string) {
   }
 
   return { success: true };
+}
+
+/**
+ * Make sure a run has a drawable route, fetching one if it doesn't.
+ *
+ * The geometry is normally fetched once, when the run is created. That
+ * call goes to the public OSRM demo server, which is rate-limited and
+ * does fail — and when it does, the dispatch is still created (a run
+ * without a drawn line beats no run at all) with a null geometry. Four
+ * of the twenty dispatches in the table are in that state.
+ *
+ * So "Show route" backfills instead of dead-ending on a disabled button:
+ * same origin, same destination, same fetch as `createBatchDispatch`,
+ * written back to the row so it costs one call per run and not one per
+ * click.
+ */
+export async function ensureDispatchRoute(dispatchId: string): Promise<{ ok?: true; error?: string }> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("dispatches")
+    .select("id, route_geometry, site:construction_sites(lat, lng)")
+    .eq("id", dispatchId)
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "Run not found" };
+  if (Array.isArray(data.route_geometry) && data.route_geometry.length >= 2) return { ok: true };
+
+  // The embedded row comes back as an object at runtime; PostgREST's
+  // generated types describe the relationship as an array.
+  const site = (Array.isArray(data.site) ? data.site[0] : data.site) as
+    | { lat: number | null; lng: number | null }
+    | null;
+  if (!site || site.lat == null || site.lng == null) {
+    return { error: "This run's destination has no coordinates, so there is no route to draw." };
+  }
+
+  const route = await fetchRoute([FACTORY_LAT, FACTORY_LNG], [site.lat, site.lng]);
+  if (!route) return { error: "The routing service didn't answer. Try again in a moment." };
+
+  const { error: updateError } = await supabase
+    .from("dispatches")
+    .update({
+      route_geometry: route.geometry,
+      route_total_distance_meters: route.distanceMeters,
+      route_total_time_seconds: route.durationSeconds,
+    })
+    .eq("id", dispatchId);
+
+  if (updateError) return { error: updateError.message };
+  return { ok: true };
 }
 
 export async function listSites() {
@@ -180,6 +233,8 @@ export interface DispatchRecord {
   last_deviation_meters: number | null;
   last_eta_seconds: number | null;
   route_geometry: [number, number][] | null;
+  route_total_distance_meters: number | null;
+  route_total_time_seconds: number | null;
   site: { name: string; client: string | null; lat: number | null; lng: number | null } | null;
   dispatcher: { full_name: string | null } | null;
 }

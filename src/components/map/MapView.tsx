@@ -6,8 +6,16 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { Moon, Satellite as SatelliteIcon, MapPin, Tag, Fuel } from "lucide-react";
+import { Moon, Satellite as SatelliteIcon, MapPin, Tag, Fuel, ArrowRight, X } from "lucide-react";
 import { formatAge } from "@/lib/format";
+
+// Marker HTML is assembled as strings, so anything coming out of the
+// database — site names, client names — has to be escaped on the way in.
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (ch) =>
+    ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : ch === ">" ? "&gt;" : ch === '"' ? "&quot;" : "&#39;"
+  );
+}
 
 // Leaflet markers/popups are raw HTML strings, not React — these are
 // inline stroke-style SVGs (lucide's visual language: 24x24, stroke
@@ -77,12 +85,32 @@ function ringCentroid(ring: [number, number][]): [number, number] {
   return [latSum / ring.length, lngSum / ring.length];
 }
 
+/**
+ * One run's planned road route, drawn on request.
+ *
+ * `id` is the dispatch id and is what the map keys its redraw and its
+ * fit-to-bounds off: the dispatch list refreshes on every poll, so the
+ * object identity changes constantly while the geometry does not, and
+ * refitting on identity would yank the map out from under whoever is
+ * panning it.
+ */
+export interface RouteOverlayData {
+  id: string;
+  truckId: string;
+  line: [number, number][];
+  startLabel: string;
+  endLabel: string;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+}
+
 interface MapViewProps {
   truckMarkers: TruckMarkerData[];
   siteMarkers?: SiteMarkerData[];
   stationMarkers?: StationMarkerData[];
   zones?: ZoneData[];
-  routeLine?: [number, number][] | null;
+  route?: RouteOverlayData | null;
+  onRouteClear?: () => void;
   focusPoint?: [number, number] | null;
 }
 
@@ -166,6 +194,30 @@ function buildLandmarkIcon(svg: string, color: string, label: string): L.DivIcon
   });
 }
 
+// The two ends of a drawn route. Deliberately achromatic: every hue on
+// this map already means something about a truck, and "where this run
+// starts and finishes" is not a vehicle state. A hollow ring leaves, a
+// filled one arrives, and the place name rides underneath so the answer
+// to "from where to where" is on the map itself, not just in the panel.
+function buildRouteEndIcon(label: string, role: "from" | "to"): L.DivIcon {
+  const dot =
+    role === "from"
+      ? `<div style="width:12px;height:12px;border-radius:50%;background:#0e100f;border:2.5px solid #fffce1;"></div>`
+      : `<div style="width:12px;height:12px;border-radius:50%;background:#fffce1;box-shadow:0 0 0 2px #0e100f, 0 0 0 4px rgba(255,252,225,.55);"></div>`;
+
+  const text = label.length > 30 ? `${label.slice(0, 29)}…` : label;
+
+  return L.divIcon({
+    html: `<div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+      ${dot}
+      <div style="margin-top:5px;padding:1.5px 7px;border-radius:100px;background:#0e100f;color:#fffce1;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;letter-spacing:.05em;white-space:nowrap;box-shadow:0 0 0 1px rgba(66,67,61,.9);">${role === "from" ? "FROM" : "TO"} ${escapeHtml(text.toUpperCase())}</div>
+    </div>`,
+    className: "",
+    iconSize: [12, 32],
+    iconAnchor: [6, 6],
+  });
+}
+
 function buildSiteIcon(): L.DivIcon {
   return L.divIcon({
     html: `<div style="width:9px;height:9px;border-radius:50%;background:#ff2fd0;border:1px solid rgba(255,252,225,.7);"></div>`,
@@ -225,7 +277,7 @@ interface MapCore {
   stationLayer: L.MarkerClusterGroup;
   zonesLayer: L.LayerGroup;
   landmarksLayer: L.LayerGroup;
-  routeLayer: L.Polyline | null;
+  routeLayer: L.LayerGroup;
   tileLayers: { dark: L.TileLayer; light: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer };
   ui: { baseLayer: "dark" | "satellite"; showZones: boolean; showNames: boolean; showStations: boolean };
 }
@@ -295,6 +347,9 @@ function getOrCreateMapCore(): MapCore {
   // Above the cluster layers: a landmark disappearing behind a bubble of
   // trucks is the one thing that must never happen to it.
   const landmarksLayer = L.layerGroup().addTo(map);
+  // The route sits under the landmarks and the trucks — it is the thing
+  // they are measured against, not the thing being watched.
+  const routeLayer = L.layerGroup().addTo(map);
 
   core = {
     container,
@@ -304,15 +359,22 @@ function getOrCreateMapCore(): MapCore {
     stationLayer,
     zonesLayer,
     landmarksLayer,
-    routeLayer: null,
+    routeLayer,
     tileLayers: { dark, light, satellite, satelliteLabels },
     ui: { baseLayer: "dark", showZones: true, showNames: true, showStations: true },
   };
   return core;
 }
 
-export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], routeLine = null, focusPoint = null }: MapViewProps) {
+export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], route = null, onRouteClear, focusPoint = null }: MapViewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Both route effects key off the dispatch id, not the object, so a
+  // poll that hands back an identical route doesn't redraw it or move
+  // the viewport. The ref is how they still reach the current geometry.
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const routeId = route?.id ?? null;
 
   const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">(() => getOrCreateMapCore().ui.baseLayer);
   const [showZones, setShowZones] = useState(() => getOrCreateMapCore().ui.showZones);
@@ -499,19 +561,33 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     getOrCreateMapCore().map.setView(focusPoint, 13);
   }, [focusPoint]);
 
-  // Route polyline
+  // The route line, its casing, and its two labelled ends.
   useEffect(() => {
-    const c = getOrCreateMapCore();
+    const { routeLayer } = getOrCreateMapCore();
+    routeLayer.clearLayers();
 
-    if (c.routeLayer) {
-      c.map.removeLayer(c.routeLayer);
-      c.routeLayer = null;
-    }
+    const r = routeRef.current;
+    if (!r || r.line.length < 2) return;
 
-    if (routeLine && routeLine.length >= 2) {
-      c.routeLayer = L.polyline(routeLine, { color: "#00cfff", weight: 4, opacity: 0.85 }).addTo(c.map);
-    }
-  }, [routeLine]);
+    // A dark casing under the cyan line: over satellite imagery a 4px
+    // stroke on its own disappears into pale ground.
+    L.polyline(r.line, { color: "#0e100f", weight: 9, opacity: 0.45 }).addTo(routeLayer);
+    L.polyline(r.line, { color: "#00cfff", weight: 4, opacity: 0.95 }).addTo(routeLayer);
+
+    const start = r.line[0];
+    const end = r.line[r.line.length - 1];
+    L.marker(start, { icon: buildRouteEndIcon(r.startLabel, "from"), zIndexOffset: 900 }).addTo(routeLayer);
+    L.marker(end, { icon: buildRouteEndIcon(r.endLabel, "to"), zIndexOffset: 900 }).addTo(routeLayer);
+  }, [routeId]);
+
+  // Frame the whole run when one is picked — the point of the button is
+  // to see the route end to end, and the map is usually sitting on the
+  // factory at zoom 7 when it's pressed.
+  useEffect(() => {
+    const r = routeRef.current;
+    if (!routeId || !r || r.line.length < 2) return;
+    getOrCreateMapCore().map.fitBounds(L.latLngBounds(r.line), { padding: [56, 56] });
+  }, [routeId]);
 
   function toggleBaseLayer(v: "dark" | "satellite") { setBaseLayer(v); }
   function toggleZones() { setShowZones((v) => !v); }
@@ -544,9 +620,44 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
         <ToggleButton active={showNames} onClick={toggleNames} label="Names" icon={Tag} />
         <ToggleButton active={showStations} onClick={toggleStations} label="Stations" icon={Fuel} />
       </div>
+
+      {/* Naming the two ends in text as well as on the pins: the labels
+          on the map can sit off-screen once you pan, and this is the
+          question the button was added to answer. */}
+      {route && (
+        <div className="glass glass--float route-caption">
+          <div className="route-caption__head">
+            <span className="route-caption__eyebrow">Route</span>
+            <span className="route-caption__truck">{route.truckId}</span>
+            {onRouteClear && (
+              <button type="button" onClick={onRouteClear} className="icon-btn" aria-label="Hide route" title="Hide route">
+                <X size={12} strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+          <div className="route-caption__leg">
+            <span className="route-caption__place" title={route.startLabel}>{route.startLabel}</span>
+            <ArrowRight size={11} strokeWidth={2} style={{ color: "var(--text-faint)", flex: "none" }} />
+            <span className="route-caption__place route-caption__place--to" title={route.endLabel}>{route.endLabel}</span>
+          </div>
+          {(route.distanceMeters != null || route.durationSeconds != null) && (
+            <div className="route-caption__stats">
+              {route.distanceMeters != null && <span>{(route.distanceMeters / 1000).toFixed(0)} km</span>}
+              {route.durationSeconds != null && <span>{formatDuration(route.durationSeconds)} driving</span>}
+            </div>
+          )}
+        </div>
+      )}
+
       <div ref={wrapperRef} className="h-full w-full" />
     </div>
   );
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
 }
 
 function ToggleButton({

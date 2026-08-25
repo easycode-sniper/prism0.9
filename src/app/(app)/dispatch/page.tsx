@@ -3,16 +3,17 @@
 import { useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { createBatchDispatch, stopDispatch } from "@/lib/supabase/actions";
+import { createBatchDispatch, stopDispatch, ensureDispatchRoute } from "@/lib/supabase/actions";
 import { checkPositionForDispatch, checkPositionManual } from "@/lib/supabase/positions";
 import { FACTORY_NAME } from "@/lib/constants";
+import type { RouteOverlayData } from "@/components/map/MapView";
 import { haversineMeters } from "@/lib/geometry";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import type { SiteRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
-import { Radar, Check, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, ArrowRight, MapPin, Square } from "lucide-react";
+import { Radar, Check, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, ArrowRight, MapPin, Square, Route as RouteIcon } from "lucide-react";
 import { formatDateTime, formatAge } from "@/lib/format";
 
 // A truck within this distance of a station is treated as "at the pump".
@@ -106,6 +107,12 @@ export default function DispatchPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [fleetFilter, setFleetFilter] = useState<"all" | "dispatched" | "idle" | "offline">("all");
+
+  // Which run's route is drawn, if any. Held as an id rather than the
+  // record so it survives the dispatch list being refetched, and clears
+  // itself the moment that run is stopped.
+  const [routeRunId, setRouteRunId] = useState<string | null>(null);
+  const [routeLoading, setRouteLoading] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
@@ -215,6 +222,7 @@ export default function DispatchPage() {
   async function handleStop(dispatchId: string) {
     const result = await stopDispatch(dispatchId);
     if (result.error) { setError(result.error); return; }
+    if (routeRunId === dispatchId) setRouteRunId(null);
     await refreshDispatches();
   }
 
@@ -280,7 +288,42 @@ export default function DispatchPage() {
     [gasStations, allTruckMarkers]
   );
 
-  const mostRecentRoute = dispatches[0]?.route_geometry ?? null;
+  // The map used to draw whichever route happened to sit first in the
+  // dispatch list, unlabelled — so the one line on screen belonged to a
+  // run nobody had asked about. It is now shown only on request, and it
+  // says whose it is and where it goes.
+  const routeOverlay = useMemo<RouteOverlayData | null>(() => {
+    const run = dispatches.find((d) => d.id === routeRunId);
+    if (!run?.route_geometry || run.route_geometry.length < 2) return null;
+    return {
+      id: run.id,
+      truckId: run.truck_id,
+      line: run.route_geometry,
+      // Every run leaves from the one factory — that is where
+      // createBatchDispatch fetches the route from.
+      startLabel: FACTORY_NAME,
+      endLabel: run.site?.name ?? "Destination",
+      distanceMeters: run.route_total_distance_meters,
+      durationSeconds: run.route_total_time_seconds,
+    };
+  }, [dispatches, routeRunId]);
+
+  async function handleToggleRoute(dispatchId: string) {
+    if (routeRunId === dispatchId) { setRouteRunId(null); return; }
+    setError(null);
+
+    const run = dispatches.find((d) => d.id === dispatchId);
+    // Runs created while OSRM was down carry no geometry; fetch it now
+    // rather than leaving the button inert.
+    if (!run?.route_geometry || run.route_geometry.length < 2) {
+      setRouteLoading(dispatchId);
+      const result = await ensureDispatchRoute(dispatchId);
+      setRouteLoading(null);
+      if (result.error) { setError(result.error); return; }
+      await refreshDispatches();
+    }
+    setRouteRunId(dispatchId);
+  }
 
   if (sidebarCollapsed) {
     return (
@@ -301,7 +344,8 @@ export default function DispatchPage() {
             siteMarkers={siteMarkers}
             stationMarkers={stationMarkers}
             zones={geofences}
-            routeLine={mostRecentRoute}
+            route={routeOverlay}
+            onRouteClear={() => setRouteRunId(null)}
             focusPoint={focusPoint}
           />
         </div>
@@ -537,6 +581,9 @@ export default function DispatchPage() {
                       dispatch={d}
                       check={checkResults.get(d.id)}
                       checking={checking === d.truck_id || checking === d.id}
+                      routeShown={routeRunId === d.id}
+                      routeLoading={routeLoading === d.id}
+                      onToggleRoute={() => handleToggleRoute(d.id)}
                       onCheckPosition={() => handleCheckPosition(d.id, d.truck_id)}
                       onManualCheck={(lat, lng) => handleManualCheck(d.id, lat, lng)}
                       onStop={() => handleStop(d.id)}
@@ -593,7 +640,8 @@ export default function DispatchPage() {
           siteMarkers={siteMarkers}
           stationMarkers={stationMarkers}
           zones={geofences}
-          routeLine={mostRecentRoute}
+          route={routeOverlay}
+          onRouteClear={() => setRouteRunId(null)}
           focusPoint={focusPoint}
         />
       </div>
@@ -605,6 +653,9 @@ function ActiveRunCard({
   dispatch,
   check,
   checking,
+  routeShown,
+  routeLoading,
+  onToggleRoute,
   onCheckPosition,
   onManualCheck,
   onStop,
@@ -612,6 +663,9 @@ function ActiveRunCard({
   dispatch: DispatchRecord;
   check: PositionCheckResult | undefined;
   checking: boolean;
+  routeShown: boolean;
+  routeLoading: boolean;
+  onToggleRoute: () => void;
   onCheckPosition: () => void;
   onManualCheck: (lat: number, lng: number) => void;
   onStop: () => void;
@@ -672,6 +726,20 @@ function ActiveRunCard({
           <Radar size={12} strokeWidth={2} />
           {checking ? "Checking…" : "Check position"}
         </button>
+        <button
+          type="button"
+          onClick={onToggleRoute}
+          disabled={routeLoading}
+          aria-pressed={routeShown}
+          className={`btn-sm${routeShown ? " is-on" : ""}`}
+          // The label stays put while the pressed state does the talking:
+          // swapping in "Hide route" makes the button grow and reflows the
+          // action row every time it's clicked.
+          title={routeShown ? "Hide this route" : `Show the route: ${FACTORY_NAME} → ${siteName}`}
+        >
+          <RouteIcon size={12} strokeWidth={2} />
+          {routeLoading ? "Routing…" : "Route"}
+        </button>
         <button type="button" onClick={onStop} className="btn-sm danger">
           <Square size={10} strokeWidth={3} />
           Stop
@@ -680,7 +748,6 @@ function ActiveRunCard({
           type="button"
           onClick={() => setManualOpen((v) => !v)}
           className="icon-btn"
-          style={{ marginLeft: "auto" }}
           aria-expanded={manualOpen}
           title="Enter coordinates manually"
           aria-label="Enter coordinates manually"

@@ -554,15 +554,31 @@ input::placeholder, textarea::placeholder {
    strapline, then the tabs go to icons and the wordmark goes with them.
    Nothing is removed — the label stays in the accessibility tree and
    returns as a tooltip. */
+/* Three explicit columns rather than a flex row, so the tabs sit in the
+   middle of the header instead of wherever the two side groups leave
+   them. space-between could not do this: the wordmark and the stats
+   group are different widths, so the strip always sat off-centre, and
+   under 1399px — where the wordmark is hidden entirely — it collapsed
+   flush against the left edge.
+
+   The columns are assigned by hand for that same reason. Hiding .brand
+   removes it from the grid, and with automatic placement the tabs would
+   simply slide up into the empty first column and be left-aligned
+   again; pinned to column 2, they stay centred whether or not the
+   wordmark is drawn. */
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 11px 20px;
   margin: 14px 16px 0;
   z-index: 2500;
 }
+
+.topbar > .brand { grid-column: 1; justify-self: start; }
+.topbar > #tabs { grid-column: 2; }
+.topbar > #topbar-stats { grid-column: 3; justify-self: end; }
 
 /* flex: none, because a squashed logo is worse than a tight header. */
 .brand { display: flex; align-items: center; gap: 10px; flex: none; }
@@ -1162,6 +1178,43 @@ hr {
     padding-block: 2px;
     background: var(--bg);
   }
+}
+
+/* 840px is a desk screen under zoom. A 1366x768 laptop at 100% is the
+   other shape entirely: roughly 617px of viewport, which leaves the
+   panel body about 387px once the header, the operations strip and the
+   action bar have taken theirs. The tier above still asks for ~500px —
+   two 160px lists, two labels, a search box, a filter strip — so the
+   Destination step sat just below the fold, visible only as a heading.
+   You could scroll to it, but you could not see the trucks and the
+   sites at the same time, which is the one thing picking a run needs.
+
+   The height comes back from row metrics rather than from the lists:
+   trimming a truck row from ~44px to ~34px means a shorter list still
+   shows the same three trucks. Both steps then fit on screen together. */
+@media (max-height: 700px) {
+  .dispatch-panel__body { gap: 8px; padding: 8px 12px; }
+
+  .dispatch-panel .fleet-row__pick { padding: 4px 4px 4px 8px; gap: 7px; }
+  .dispatch-panel .fleet-row__name { font-size: 0.74rem; }
+  .dispatch-panel .fleet-row__meta,
+  .dispatch-panel .fleet-row__id { font-size: 0.66rem; }
+  .dispatch-panel .fleet-row__box { width: 15px; height: 15px; }
+
+  /* Sized so the two lists and everything framing them add up to less
+     than the body, because the point of this tier is that the body does
+     not scroll: a Destination list you have to scroll to reach is the
+     thing being fixed, and a list half out of view is the same bug with
+     a smaller number. */
+  .fleet-list,
+  .site-picker { max-height: clamp(76px, 14vh, 136px); }
+
+  .dispatch-panel .psection__head { margin-bottom: 3px; }
+  .dispatch-panel .field { padding: 4px 9px; font-size: 0.75rem; }
+  .dispatch-panel .field.mb-2,
+  .dispatch-panel .seg.mb-2 { margin-bottom: 4px; }
+  .dispatch-panel__action { padding: 6px 12px; }
+  .dispatch-panel .btn-brand { padding: 6px 16px; font-size: 0.8rem; }
 }
 
 /* Always in view, so the count and the destination stay readable while

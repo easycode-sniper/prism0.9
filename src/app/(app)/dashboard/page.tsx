@@ -1,21 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
-import { Doughnut } from "react-chartjs-2";
-import { Truck } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  Filler,
+  Legend,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Tooltip,
+} from "chart.js";
+import { Bar, Doughnut, Line } from "react-chartjs-2";
+import { ArrowRight, Route, ShieldAlert } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
-import { getDriverRatings, DriverRating } from "@/lib/supabase/history";
-import { getDayStats, type DayStats } from "@/lib/supabase/dayStats";
+import { getFuelPeriodStats, getDashboardSeries, type FuelPeriodStats, type DashboardSeries } from "@/lib/supabase/dashboard";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { isWithinGeofence, haversineMeters } from "@/lib/geometry";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
-import { CHART_COLORS, doughnutOptions, installChartDefaults } from "@/lib/chartTheme";
-import type { NotificationKind } from "@/lib/notifications/kinds";
-import { formatTime } from "@/lib/format";
-
-// A truck within this distance of a station is treated as "at the pump".
-const STATION_PROXIMITY_METERS = 150;
+import {
+  CHART_COLORS,
+  doughnutOptions,
+  installChartDefaults,
+  timeSeriesOptions,
+  AREA_SERIES,
+  BAR_SERIES,
+  LINE_SERIES,
+  areaFill,
+} from "@/lib/chartTheme";
+import { metaFor } from "@/lib/notifications/kinds";
+import { formatDuration } from "@/lib/geometry";
 
 const GEOFENCE_EDGE_BUFFER_METERS = 150;
 
@@ -49,304 +66,405 @@ function classifyTruckLocation(
   return "in_transit";
 }
 
-ChartJS.register(ArcElement, Tooltip, Legend);
+ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip);
 installChartDefaults();
+
+const RANGES = [7, 14, 30] as const;
+type Range = (typeof RANGES)[number];
+
+const nf = (n: number) => Math.round(n).toLocaleString("en-GB");
+
+/** "2026-08-25" -> "25 Aug", for an axis that has to fit thirty of them. */
+function axisLabel(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+function relativeTime(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  return `${Math.round(hrs / 24)} d ago`;
+}
 
 export default function DashboardPage() {
   const { t } = useTranslation();
-  const { fleetData, isPolling, geofences, gasStations, notifications } = useFleet();
-  const [connectionStatus, setConnectionStatus] = useState<string>("—");
-  const [ratings, setRatings] = useState<DriverRating[]>([]);
-  const [ratingsError, setRatingsError] = useState<string | null>(null);
-  const [dayStats, setDayStats] = useState<DayStats | null>(null);
+  const { fleetData, geofences, notifications, dispatches } = useFleet();
 
-  useEffect(() => {
-    if (fleetData.error) {
-      setConnectionStatus(fleetData.error);
-    } else if (fleetData.lastUpdated) {
-      setConnectionStatus(`● Wialon configured`);
-    }
-  }, [fleetData]);
+  const [fuel, setFuel] = useState<FuelPeriodStats | null>(null);
+  const [series, setSeries] = useState<DashboardSeries | null>(null);
+  const [range, setRange] = useState<Range>(7);
 
-  // Distance is recomputed by pg_cron every five minutes, so polling this
-  // faster than that would only re-read the same row. Refreshed on the
-  // same cadence rather than tied to the fleet poll.
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      const { stats } = await getDayStats();
-      if (!cancelled && stats) setDayStats(stats);
-    }
-    load();
-    const id = setInterval(load, 5 * 60 * 1000);
+    getFuelPeriodStats().then(({ stats }) => {
+      if (!cancelled && stats) setFuel(stats);
+    });
     return () => {
       cancelled = true;
-      clearInterval(id);
     };
   }, []);
 
-  useEffect(() => {
-    getDriverRatings().then(({ data, error }) => {
-      setRatings(data);
-      setRatingsError(error);
-    });
+  const loadSeries = useCallback(async (days: Range) => {
+    const { series: s } = await getDashboardSeries(days);
+    return s ?? null;
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    loadSeries(range).then((s) => {
+      if (!cancelled) setSeries(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [range, loadSeries]);
+
   const trucks = fleetData.trucks;
-  const total = trucks.length || 84;
-  const moving = trucks.filter((t) => t.status === "moving").length;
-  const idle = trucks.filter((t) => t.status === "idle").length;
-  const offline = trucks.filter((t) => t.status === "offline").length;
 
-  // Chart.js renders to canvas and cannot resolve var(--token), so the
-  // taxonomy is repeated here as literals. Keep in step with globals.css.
-  const CHART = CHART_COLORS;
+  // ── Where the fleet is, right now ──
+  const occupancy = useMemo(() => {
+    const acc = { factory: 0, base: 0, customer_site: 0, in_transit: 0 };
+    for (const tr of trucks) {
+      if (tr.lat == null || tr.lng == null) continue;
+      acc[classifyTruckLocation(tr.lat, tr.lng, geofences)]++;
+    }
+    return acc;
+  }, [trucks, geofences]);
 
-  const statusChart = {
-    labels: ["Moving", "Idle/Stopped", "Offline/No Signal"],
-    datasets: [{
-      data: [moving, idle, offline],
-      backgroundColor: [CHART.green, CHART.amber, CHART.dim],
-      borderWidth: 0,
-    }],
+  const locationChart = {
+    labels: ["At factory", "At parc", "At client site", "In transit"],
+    datasets: [
+      {
+        data: [occupancy.factory, occupancy.base, occupancy.customer_site, occupancy.in_transit],
+        backgroundColor: [CHART_COLORS.pink, CHART_COLORS.cyan, CHART_COLORS.green, CHART_COLORS.amber],
+        borderWidth: 0,
+      },
+    ],
   };
 
-  const trucksWithPosition = trucks.filter((t) => t.lat != null && t.lng != null);
-  const occupancy = { factory: 0, base: 0, customer_site: 0, in_transit: 0 };
-  for (const t of trucksWithPosition) {
-    occupancy[classifyTruckLocation(t.lat!, t.lng!, geofences)]++;
-  }
+  const labels = (series?.km ?? []).map((p) => axisLabel(p.day));
 
-  const geofenceChart = {
-    labels: ["At Factory", "At Base (PARC OMD)", "At Customer Site", "In Transit"],
-    datasets: [{
-      data: [occupancy.factory, occupancy.base, occupancy.customer_site, occupancy.in_transit],
-      backgroundColor: [CHART.pink, CHART.cyan, CHART.green, CHART.amber],
-      borderWidth: 0,
-    }],
+  const kmChart = {
+    labels,
+    datasets: [
+      {
+        data: (series?.km ?? []).map((p) => p.value),
+        ...AREA_SERIES,
+        backgroundColor: (ctx: { chart: { ctx: CanvasRenderingContext2D; chartArea?: { top: number; bottom: number } } }) =>
+          areaFill(ctx.chart.ctx, ctx.chart.chartArea?.top ?? 0, ctx.chart.chartArea?.bottom ?? 0),
+      },
+    ],
   };
 
-  const fuelingTrucks = trucksWithPosition
-    .map((t) => {
-      const station = gasStations.find(
-        (s) => haversineMeters(t.lat!, t.lng!, s.lat, s.lng) <= STATION_PROXIMITY_METERS
-      );
-      return station ? { truckId: t.truck_id, stationName: station.name } : null;
-    })
-    .filter((x): x is { truckId: string; stationName: string } => x !== null);
-
-  const fuelChart = {
-    labels: ["At Gas Station", "Not at Gas Station"],
-    datasets: [{
-      data: [fuelingTrucks.length, trucksWithPosition.length - fuelingTrucks.length],
-      backgroundColor: [CHART.amber, CHART.empty],
-      borderWidth: 0,
-    }],
+  const alertsChart = {
+    labels: (series?.alerts ?? []).map((p) => axisLabel(p.day)),
+    datasets: [{ data: (series?.alerts ?? []).map((p) => p.value), ...BAR_SERIES }],
   };
 
-  // Keyed by NotificationKind so adding a kind is a compile error here
-  // rather than a slice silently missing from the chart — which is
-  // exactly what the previous object literal allowed.
-  const alertCounts: Record<NotificationKind, number> = {
-    off_route: 0,
-    speeding: 0,
-    site_approaching: 0,
-    site_arrival: 0,
-    factory_arrival: 0,
-    hq_arrival: 0,
-  };
-  for (const n of notifications) alertCounts[n.kind]++;
-
-  const alertChart = {
-    labels: ["Off Route", "Speeding", "Nearing Client", "Site Arrival", "Factory Arrival", "HQ Arrival"],
-    datasets: [{
-      data: [
-        alertCounts.off_route,
-        alertCounts.speeding,
-        alertCounts.site_approaching,
-        alertCounts.site_arrival,
-        alertCounts.factory_arrival,
-        alertCounts.hq_arrival,
-      ],
-      backgroundColor: [CHART.red, CHART.amber, CHART.amber, CHART.green, CHART.pink, CHART.cyan],
-      borderWidth: 0,
-    }],
+  const parcChart = {
+    labels: (series?.parcEntries ?? []).map((p) => axisLabel(p.day)),
+    datasets: [{ data: (series?.parcEntries ?? []).map((p) => p.value), ...LINE_SERIES }],
   };
 
-  const chartOptions = doughnutOptions;
+  // ── Drivers on duty: anyone the fleet feed can name, moving first ──
+  const duty = useMemo(() => {
+    const rank = { moving: 0, idle: 1, offline: 2 } as const;
+    const onRun = new Set(dispatches.map((d) => d.truck_id));
+    return trucks
+      .filter((tr) => tr.driverName)
+      .sort((a, b) => (rank[a.status] ?? 3) - (rank[b.status] ?? 3))
+      .slice(0, 6)
+      .map((tr) => ({
+        name: tr.driverName as string,
+        truckId: tr.truck_id,
+        status: tr.status,
+        speed: tr.speed,
+        onRun: onRun.has(tr.truck_id),
+      }));
+  }, [trucks, dispatches]);
+
+  const statusColour = (status: string) =>
+    status === "moving" ? "var(--green)" : status === "idle" ? "var(--amber)" : "var(--text-faint)";
+
+  const signals = notifications.slice(0, 6);
+
+  const periodLabel =
+    fuel?.firstRaw && fuel?.lastRaw ? `${fuel.firstRaw.split(" ")[0]} → ${fuel.lastRaw.split(" ")[0]}` : "the fuel sheet";
 
   return (
-    <div style={{ padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '18px' }}>
+    <div className="dash" style={{ overflowY: "auto", height: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "12px" }}>
         <div>
-          <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: '1.15rem', fontWeight: 600 }}>{t("dashboard.title")}</h2>
-          <p style={{ color: 'var(--text-dim)', fontSize: '.85rem', marginTop: '4px' }}>{t("dashboard.subtitle")}</p>
-          <p style={{ fontSize: '.78rem', color: connectionStatus.includes('●') ? 'var(--green)' : 'var(--amber)', marginTop: '2px' }}>{connectionStatus}</p>
-          <p style={{ fontSize: '.78rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-            Live polling {isPolling ? "active" : "—"} {fleetData.lastUpdated ? `· ${formatTime(fleetData.lastUpdated)}` : ""}
+          <h2 style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", fontWeight: 600 }}>{t("dashboard.title")}</h2>
+          <p className="t-dim" style={{ fontSize: ".78rem", marginTop: "3px" }}>
+            Fuel figures cover {periodLabel}, as the sheet records them.
           </p>
         </div>
       </div>
 
-      {/* KPI Row. auto-fit rather than a fixed 8 columns so the row reflows
-          on a narrow screen instead of squeezing eight unreadable cards
-          onto one line. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: '10px', marginBottom: '20px' }}>
-        <KPICard value={total} label="Total fleet" color="var(--accent)" />
-        <KPICard value={moving} label="Moving" color="var(--green)" />
-        <KPICard value={idle} label="Idle" color="var(--cyan)" />
-        <KPICard value={offline} label="Offline" color="var(--text-dim)" />
-        <KPICard
-          value={dayStats ? Math.round(dayStats.km).toLocaleString("en-GB") : null}
-          label="km today"
-          color="var(--cyan)"
-          hint={dayStats?.computedAt ? `${dayStats.vehiclesMoved} vehicles moved · updated ${formatTime(dayStats.computedAt)}` : undefined}
+      {/* ── Tier 1: the sheet, summed ── */}
+      <div className="dash-row dash-row--kpi">
+        <Kpi label="Kilometres driven" value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? `${nf(fuel.fills)} fills` : ""} />
+        <Kpi label="Litres consumed" value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? `incl. ${nf(fuel.unpairedLitres)} L with no km logged` : ""} />
+        <Kpi label="Amount filled" value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? `${nf(fuel.unpairedFills)} fills logged amount only` : "paid at the pump"} />
+        <Kpi
+          label="Average consumption"
+          value={fuel?.litresPer100Km != null ? fuel.litresPer100Km.toFixed(2) : null}
+          unit="L/100km"
+          foot={fuel ? `${nf(fuel.fills - fuel.unpairedFills)} fills with km logged` : ""}
         />
-        <KPICard
-          value={dayStats ? dayStats.litres.toLocaleString("en-GB") : null}
-          label={dayStats?.fuelEstimated === false ? "Litres" : "Litres est."}
-          color="var(--amber)"
-          hint={
-            dayStats == null
-              ? undefined
-              : dayStats.fuelEstimated
-                ? `No pump transactions synced yet today — estimated from distance. ${dayStats.rates.truck} L/100km trucks, ${dayStats.rates.staff} L/100km staff cars`
-                : "Summed from today's pump transactions"
-          }
+        <Kpi
+          label="Total variance"
+          value={fuel ? nf(fuel.varianceDa) : null}
+          unit="DA"
+          foot={fuel ? (fuel.varianceDa > 0 ? "▲ over the assumed rate" : "▼ under the assumed rate") : ""}
         />
-        <KPICard value={dayStats ? dayStats.activeDispatches : null} label="Active dispatch" color="var(--accent)" />
-        <KPICard value={dayStats ? dayStats.parcEntries : null} label="Parc entries" color="var(--green)" />
       </div>
 
-      {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', gridAutoRows: 'min-content' }}>
-        <div className="surface" style={{ padding: '16px' }}>
-          <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Fleet Status Distribution</h3>
-          <div style={{ position: 'relative', height: '220px' }}>
-            <Doughnut data={statusChart} options={chartOptions} />
-          </div>
-        </div>
-        <div className="surface" style={{ padding: '16px' }}>
-          <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Geofence Occupancy</h3>
-          <div style={{ position: 'relative', height: '220px' }}>
-            <Doughnut data={geofenceChart} options={chartOptions} />
-          </div>
-        </div>
-        <div className="surface" style={{ padding: '16px' }}>
-          <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '4px' }}>Fuel Stop Analysis</h3>
-          <p style={{ fontSize: '.72rem', color: 'var(--text-dim)', marginBottom: '6px' }}>
-            Live proximity to a known station (&lt;{STATION_PROXIMITY_METERS}m)
-          </p>
-          <div style={{ position: 'relative', height: '190px' }}>
-            <Doughnut data={fuelChart} options={chartOptions} />
-          </div>
-          {fuelingTrucks.length > 0 && (
-            <ul style={{ marginTop: '8px', fontSize: '.78rem', color: 'var(--text-dim)', listStyle: 'none', padding: 0 }}>
-              {fuelingTrucks.map((f) => (
-                <li key={f.truckId} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Truck size={13} strokeWidth={2} />
-                  <strong style={{ color: 'var(--amber)' }}>{f.truckId}</strong> — {f.stationName}
-                </li>
+      {/* ── Tier 2: the trend, and the split it explains ── */}
+      <div className="dash-row dash-row--lead">
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div style={{ minWidth: 0 }}>
+              <div className="dash-panel__title">Distance per day</div>
+              <div className="dash-panel__sub">
+                Fleet kilometres, staff cars included.
+                {series && series.daysAvailable < range ? ` ${series.daysAvailable} days recorded so far.` : ""}
+              </div>
+            </div>
+            <div className="seg seg--sm" style={{ flex: "none" }}>
+              {RANGES.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRange(r)}
+                  aria-pressed={range === r}
+                  className={`seg-item${range === r ? " is-active" : ""}`}
+                >
+                  {r}d
+                </button>
               ))}
-            </ul>
-          )}
-        </div>
-        <div className="surface" style={{ padding: '16px' }}>
-          <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '10px' }}>Alert Types Distribution</h3>
-          <div style={{ position: 'relative', height: '220px' }}>
-            <Doughnut data={alertChart} options={chartOptions} />
+            </div>
+          </header>
+          <div className="dash-panel__body">
+            <div className="dash-chart dash-chart--tall">
+              {series ? <Line data={kmChart} options={timeSeriesOptions({ unit: " km" })} /> : <ChartWaiting />}
+            </div>
           </div>
-        </div>
+        </section>
+
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Where the fleet is</div>
+              <div className="dash-panel__sub">Live, for every truck reporting a position.</div>
+            </div>
+          </header>
+          <div className="dash-panel__body">
+            <div className="dash-chart dash-chart--donut">
+              <Doughnut data={locationChart} options={doughnutOptions} />
+            </div>
+          </div>
+        </section>
       </div>
 
-      {/* Driver Ratings */}
-      <div className="surface" style={{ padding: '16px', marginTop: '16px' }}>
-        <h3 style={{ fontSize: '.85rem', fontWeight: 600, marginBottom: '4px' }}>
-          Driver ratings{' '}
-          <span style={{ fontWeight: 400, color: 'var(--text-dim)', fontSize: '.75rem' }}>
-            — % of runs with no route deviation and no speeding over 90km/h
-          </span>
-        </h3>
-        {ratingsError && (
-          <p style={{ color: 'var(--amber)', fontSize: '.8rem', marginTop: '8px' }}>{ratingsError}</p>
-        )}
-        {!ratingsError && ratings.length === 0 && (
-          <p style={{ color: 'var(--text-dim)', fontSize: '.85rem', padding: '20px 0', textAlign: 'center' }}>
-            No completed runs yet — ratings build up as runs finish.
-          </p>
-        )}
-        {ratings.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px', fontSize: '.85rem' }}>
-            <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-dim)', fontSize: '.72rem', textTransform: 'uppercase' }}>
-                <th style={{ padding: '8px 6px' }}>Driver</th>
-                <th style={{ padding: '8px 6px' }}>Total runs</th>
-                <th style={{ padding: '8px 6px' }}>Deviations</th>
-                <th style={{ padding: '8px 6px' }}>Speeding (&gt;90km/h)</th>
-                <th style={{ padding: '8px 6px' }}>Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ratings.map((d) => (
-                <tr key={d.name} style={{ borderTop: '1px solid var(--line)' }}>
-                  <td style={{ padding: '8px 6px' }}>{d.name}</td>
-                  <td style={{ padding: '8px 6px' }}>{d.totalRuns}</td>
-                  <td style={{ padding: '8px 6px' }}>{d.deviations}</td>
-                  <td style={{ padding: '8px 6px', color: d.speedingCount > 0 ? 'var(--red)' : undefined }}>
-                    {d.speedingCount}
-                  </td>
-                  <td style={{ padding: '8px 6px' }}>
-                    <span
-                      style={{
-                        padding: '3px 10px', borderRadius: 'var(--r-lg)', fontSize: '.78rem', fontWeight: 600,
-                        background: d.score >= 90 ? 'rgba(0, 255, 123,.15)' : d.score >= 70 ? 'rgba(255,252,225,.15)' : 'rgba(255, 45, 63,.15)',
-                        color: d.score >= 90 ? 'var(--green)' : d.score >= 70 ? 'var(--accent)' : 'var(--red)',
-                      }}
-                    >
-                      {d.score}%
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      {/* ── Tier 3: the two supporting series ── */}
+      <div className="dash-row dash-row--pair">
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Alerts raised per day</div>
+              <div className="dash-panel__sub">Off route, speeding and arrivals, all kinds together.</div>
+            </div>
+          </header>
+          <div className="dash-panel__body">
+            <div className="dash-chart">
+              {series ? <Bar data={alertsChart} options={timeSeriesOptions()} /> : <ChartWaiting />}
+            </div>
+          </div>
+        </section>
+
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Parc entries per day</div>
+              <div className="dash-panel__sub">Trucks arriving at PARC OMD.</div>
+            </div>
+          </header>
+          <div className="dash-panel__body">
+            <div className="dash-chart">
+              {series ? <Line data={parcChart} options={timeSeriesOptions()} /> : <ChartWaiting />}
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* ── Tier 4: what you actually work from ── */}
+      <div className="dash-row dash-row--panels">
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Drivers on duty</div>
+              <div className="dash-panel__sub">Who is out right now.</div>
+            </div>
+          </header>
+          <div className="dash-panel__body dash-panel__body--flush">
+            {duty.length === 0 ? (
+              <p className="dash-empty">No driver is named on the current fleet feed.</p>
+            ) : (
+              duty.map((d) => (
+                <div key={d.truckId} className="duty-row">
+                  <span className="duty-dot" style={{ background: statusColour(d.status) }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="duty-name">{d.name}</div>
+                    <div className="duty-meta">
+                      {d.status === "moving" ? `moving · ${Math.round(d.speed)} km/h` : d.status}
+                      {d.onRun ? " · on a run" : ""}
+                    </div>
+                  </div>
+                  <span className="truck-id" style={{ fontSize: ".68rem", flex: "none" }}>{d.truckId}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="dash-panel__foot">
+            <Link href="/drivers" className="dash-more">
+              All drivers <ArrowRight size={12} />
+            </Link>
+          </div>
+        </section>
+
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Active runs</div>
+              <div className="dash-panel__sub">Trucks on their way to a client right now.</div>
+            </div>
+          </header>
+          <div className="dash-panel__body dash-panel__body--flush">
+            {dispatches.length === 0 ? (
+              <p className="dash-empty">
+                <span>
+                  <Route size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                  Nothing is running. A run appears here the moment it is dispatched.
+                </span>
+              </p>
+            ) : (
+              <div className="table-wrap" style={{ border: "none", borderRadius: 0 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Truck</th>
+                      <th>Destination</th>
+                      <th>ETA</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dispatches.slice(0, 5).map((d) => (
+                      <tr key={d.id}>
+                        <td className="truck-id">{d.truck_id}</td>
+                        <td className="t-primary">{d.site?.name ?? "—"}</td>
+                        <td className="t-dim">{d.last_eta_seconds != null ? formatDuration(d.last_eta_seconds) : "—"}</td>
+                        <td>
+                          <span className={`status-pill ${d.last_on_route === false ? "off-route" : "dispatched"}`}>
+                            {d.last_on_route === false ? "Off route" : "On route"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div className="dash-panel__foot">
+            <Link href="/dispatch" className="dash-more">
+              Open dispatch <ArrowRight size={12} />
+            </Link>
+          </div>
+        </section>
+
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Operational signals</div>
+              <div className="dash-panel__sub">The latest from the alert feed.</div>
+            </div>
+          </header>
+          <div className="dash-panel__body dash-panel__body--flush">
+            {signals.length === 0 ? (
+              <p className="dash-empty">
+                <span>
+                  <ShieldAlert size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                  Nothing has been raised yet today.
+                </span>
+              </p>
+            ) : (
+              signals.map((n) => {
+                const meta = metaFor(n.kind);
+                const Icon = meta.icon;
+                return (
+                  <div key={n.id} className="signal-row">
+                    <Icon size={13} strokeWidth={2} color={meta.color} className="signal-icon" />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="signal-title">{n.title}</div>
+                      <div className="signal-time">{relativeTime(n.created_at)}</div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className="dash-panel__foot">
+            <Link href="/notifications" className="dash-more">
+              View all <ArrowRight size={12} />
+            </Link>
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
-// `placeholder` renders a reserved slot: the card is real, the metric
-// behind it isn't wired up yet. A null `value` is the same shape for a
-// different reason — the figure is still loading — and renders the same
-// dash rather than a misleading 0. Typography comes from .kpi-value /
-// .kpi-label in globals.css so there's one place to resize a card.
-function KPICard({ value, label, color, placeholder, hint }: {
-  value?: number | string | null;
-  label?: string;
-  color?: string;
-  placeholder?: boolean;
-  /** Tooltip for a figure that needs a caveat — how it was derived, or
-   *  how stale it is. */
-  hint?: string;
+function Kpi({
+  label,
+  value,
+  unit,
+  foot,
+}: {
+  label: string;
+  value: string | null;
+  unit: string;
+  foot: string;
 }) {
-  if (placeholder) {
-    return (
-      <div className="kpi-card kpi-card--empty">
-        <div className="kpi-value">—</div>
-        <div className="kpi-label">&nbsp;</div>
-      </div>
-    );
-  }
-
-  const pending = value == null;
-
   return (
-    <div className={`kpi-card${pending ? " kpi-card--empty" : ""}`} title={hint}>
-      <div className="kpi-value" style={pending ? undefined : { color }}>
-        {pending ? "—" : value}
+    <div className="panel dash-kpi">
+      <div className="dash-kpi__label">{label}</div>
+      {value === null ? (
+        <div className="skeleton skeleton--line" style={{ width: "72%", height: "22px", marginTop: "8px" }} />
+      ) : (
+        <div className="dash-kpi__value">
+          {value}
+          <span className="dash-kpi__unit">{unit}</span>
+        </div>
+      )}
+      <div className="dash-kpi__foot">
+        <span className="dash-delta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {value === null ? "reading the sheet…" : foot}
+        </span>
       </div>
-      <div className="kpi-label">{label}</div>
     </div>
+  );
+}
+
+/** A chart's own waiting state. Sized to the slot it will fill, so the
+ *  row does not resize when the series lands. */
+function ChartWaiting() {
+  return (
+    <div className="skeleton" style={{ position: "absolute", inset: 0, borderRadius: "var(--r-md)" }} role="status" aria-label="Loading chart" />
   );
 }

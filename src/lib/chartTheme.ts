@@ -81,3 +81,103 @@ export const doughnutOptions = {
     },
   },
 };
+
+/**
+ * Shared options for the two time-series shapes on the dashboard.
+ *
+ * Both are achromatic. Every hue in this app is owned by a vehicle state
+ * — green is moving, red is off-route — so spending one on "distance" or
+ * "alerts per day" would put a colour on screen that means nothing about
+ * a truck while sitting beside colours that do. Series that are a
+ * quantity rather than a state are drawn in cream; colour returns on the
+ * charts that really are showing states, like the location split.
+ */
+const AXIS_GRID = "rgba(66, 67, 61, 0.55)";
+
+export function timeSeriesOptions(opts?: {
+  /** Suffix appended to the tooltip value, e.g. " km". */
+  unit?: string;
+  /** Y axis starts at zero unless a series never approaches it. */
+  beginAtZero?: boolean;
+}) {
+  const unit = opts?.unit ?? "";
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index" as const, intersect: false },
+    layout: { padding: { top: 6, right: 4, bottom: 0, left: 0 } },
+    scales: {
+      x: {
+        grid: { display: false },
+        border: { color: LINE },
+        ticks: { color: CHART_COLORS.dim, maxRotation: 0, autoSkipPadding: 18, font: { size: 10 } },
+      },
+      y: {
+        beginAtZero: opts?.beginAtZero ?? true,
+        grid: { color: AXIS_GRID, drawTicks: false },
+        border: { display: false },
+        ticks: { color: CHART_COLORS.dim, maxTicksLimit: 5, padding: 8, font: { size: 10 } },
+      },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        ...doughnutOptions.plugins.tooltip,
+        displayColors: false,
+        callbacks: {
+          label: (ctx: { parsed: { y: number | null } }) =>
+            `${(ctx.parsed.y ?? 0).toLocaleString("en-GB")}${unit}`,
+        },
+      },
+    },
+  };
+}
+
+/** The filled area line — the dashboard's headline series. */
+export const AREA_SERIES = {
+  borderColor: TEXT,
+  borderWidth: 1.5,
+  pointRadius: 0,
+  pointHoverRadius: 4,
+  pointHoverBackgroundColor: TEXT,
+  pointHoverBorderColor: CANVAS,
+  pointHoverBorderWidth: 2,
+  fill: true,
+  tension: 0.35,
+} as const;
+
+/** Bars, for a count per day. Rounded on top only, like the reference. */
+export const BAR_SERIES = {
+  backgroundColor: "rgba(255, 252, 225, 0.22)",
+  hoverBackgroundColor: "rgba(255, 252, 225, 0.42)",
+  borderRadius: 3,
+  borderSkipped: "bottom" as const,
+  maxBarThickness: 22,
+} as const;
+
+/** A plain line with visible points, for a small count per day. */
+export const LINE_SERIES = {
+  borderColor: TEXT,
+  borderWidth: 1.5,
+  pointRadius: 3,
+  pointBackgroundColor: CANVAS,
+  pointBorderColor: TEXT,
+  pointBorderWidth: 1.5,
+  pointHoverRadius: 5,
+  fill: false,
+  tension: 0.3,
+} as const;
+
+/** The vertical wash under the headline series. Chart.js needs a canvas
+ *  context to build a gradient, so this is a function rather than a
+ *  constant, and it falls back to a flat tint when the chart has not been
+ *  laid out yet (the first render, before an area exists to size to). */
+export function areaFill(ctx: CanvasRenderingContext2D, top: number, bottom: number): CanvasGradient | string {
+  if (!Number.isFinite(top) || !Number.isFinite(bottom) || bottom <= top) {
+    return "rgba(255, 252, 225, 0.06)";
+  }
+  const g = ctx.createLinearGradient(0, top, 0, bottom);
+  g.addColorStop(0, "rgba(255, 252, 225, 0.16)");
+  g.addColorStop(1, "rgba(255, 252, 225, 0)");
+  return g;
+}

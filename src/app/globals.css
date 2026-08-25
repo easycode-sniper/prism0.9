@@ -1172,6 +1172,240 @@ hr {
   .login-route, .login-ping { animation: none; }
 }
 
+/* ── Dashboard grid ───────────────────────────────────────────
+   Four tiers, widest-first: the numbers you check without reading, the
+   trend behind them, the two supporting series, then the three
+   operational panels you actually work from.
+
+   Every row is its own grid rather than one grid with spans, because
+   the rows collapse at different widths — the KPI strip can go two-up
+   long before the three panels should stack — and a single grid would
+   have to fight that with span overrides per breakpoint. */
+.dash {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 24px 26px;
+}
+
+.dash-row {
+  display: grid;
+  gap: 14px;
+}
+
+/* The five sheet figures. auto-fit rather than a fixed five, so the row
+   reflows to 3+2 and then 2+2+1 instead of scrolling sideways. */
+.dash-row--kpi { grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }
+
+/* Headline series beside the split it explains: two thirds, one third. */
+.dash-row--lead { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+
+/* The two supporting series, equal weight. */
+.dash-row--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Who is on, what is running, what just happened. The middle panel is
+   the widest because it is the only one holding a table. */
+.dash-row--panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr); }
+
+@media (max-width: 1180px) {
+  .dash-row--lead,
+  .dash-row--panels { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .dash { padding: 14px 12px 20px; }
+  .dash-row--pair { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Dashboard panel ──────────────────────────────────────────
+   The panel body scrolls, the head never does, so a panel in a row of
+   three cannot push its neighbours taller by having more rows. */
+.dash-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dash-panel__head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 15px 10px;
+}
+
+.dash-panel__title {
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.dash-panel__sub {
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+
+.dash-panel__body { flex: 1; min-height: 0; padding: 0 15px 14px; }
+.dash-panel__body--flush { padding: 0 0 6px; }
+
+/* A chart needs a height its parent grid cannot give it — a grid row
+   sizes to content, and a canvas with no height is content of zero. */
+.dash-chart { position: relative; height: 210px; }
+.dash-chart--tall { height: 244px; }
+.dash-chart--donut { height: 232px; }
+
+/* The panel foot: one link out to the page that holds the rest. */
+.dash-panel__foot {
+  flex: none;
+  padding: 10px 15px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.dash-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color var(--dur-hover) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dash-more:hover { color: var(--accent); }
+}
+
+/* ── KPI tile ─────────────────────────────────────────────────
+   Label above, figure below, one line of context under it. The figure
+   is cream, not a status colour: a kilometre is a quantity, not a state
+   a truck is in, and colour on this screen means the latter. */
+.dash-kpi { padding: 13px 15px 14px; min-width: 0; }
+
+.dash-kpi__label {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-kpi__value {
+  margin-top: 7px;
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.dash-kpi__unit {
+  margin-left: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.dash-kpi__foot {
+  margin-top: 6px;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* The delta arrow is achromatic on purpose. The reference this layout
+   comes from paints it green up / red down, and those two colours are
+   already spoken for here — green is a truck that is moving, red is one
+   off route. A green arrow beside a green status dot would make the
+   palette mean two different things at once. Direction is carried by the
+   glyph and the words instead. */
+.dash-delta { font-family: var(--font-mono); color: var(--text); }
+
+/* ── Duty list ────────────────────────────────────────────────
+   A driver per row: status dot, name, what they are on. */
+.duty-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 15px;
+  min-width: 0;
+}
+
+.duty-row + .duty-row { border-top: 1px solid var(--line); }
+
+.duty-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+
+.duty-name {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duty-meta {
+  margin-top: 1px;
+  font-size: 0.66rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Signals feed ─────────────────────────────────────────────
+   Icon, line, elapsed time. Same anatomy as the notifications page, at
+   the density a dashboard column allows. */
+.signal-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 15px;
+  min-width: 0;
+}
+
+.signal-row + .signal-row { border-top: 1px solid var(--line); }
+
+.signal-icon { flex: none; margin-top: 1px; }
+
+.signal-title {
+  font-size: 0.73rem;
+  color: var(--text);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.signal-time { margin-top: 2px; font-size: 0.65rem; color: var(--text-faint); }
+
+/* A dashboard panel with nothing in it still has to hold its height, or
+   the row it sits in collapses around it and the page reflows the moment
+   data arrives. */
+.dash-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  padding: 18px;
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+}
+
 /* ── Dispatch panel ───────────────────────────────────────────
    The panel was a single scrolling column holding three stacked
    sections: a fleet browser, a create-dispatch form, and a list of

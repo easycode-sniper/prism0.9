@@ -587,15 +587,41 @@ export default function DashboardPage() {
                           <td className="t-primary">{d.driverName}</td>
                           <td className="t-dim">{d.fills}</td>
                           <td className="t-dim">{nf(d.km)} km</td>
-                          <td className={d.litresPer100Km != null && d.litresPer100Km > ASSUMED_L_PER_100KM ? "c-red" : "t-dim"}>
+                          <td className={
+                            d.litresPer100Km == null
+                              ? "t-dim"
+                              : d.litresPer100Km > ASSUMED_L_PER_100KM
+                                ? "c-red"
+                                : "c-green"
+                          }>
                             {d.litresPer100Km != null ? `${d.litresPer100Km.toFixed(2)} L` : "—"}
                           </td>
-                          <td className="t-dim">{d.variancePer100Km != null ? `${nf(d.variancePer100Km)} DA` : "—"}</td>
-                          {/* Over the assumed rate is a problem and reads
-                              as one. Under it is simply fine, and stays
-                              achromatic — green on this screen means a
-                              truck is moving. */}
-                          <td className={d.varianceDa > 0 ? "c-red" : "t-dim"}>{nf(d.varianceDa)} DA</td>
+                          <td className={
+                            d.variancePer100Km == null
+                              ? "t-dim"
+                              : d.variancePer100Km > 0
+                                ? "c-red"
+                                : d.variancePer100Km < 0
+                                  ? "c-green"
+                                  : "t-dim"
+                          }>
+                            {d.variancePer100Km != null
+                              ? `${d.variancePer100Km > 0 ? "+" : ""}${nf(d.variancePer100Km)} DA`
+                              : "—"}
+                          </td>
+                          {/* Red over the rate, green under it. The pair
+                              is the point: this column is money, and a
+                              driver who came in below the assumed rate
+                              saved some. Green is already "moving,
+                              on-route, healthy" in chartTheme, and red
+                              was already carrying the bad half here —
+                              leaving the good half achromatic was the
+                              inconsistent choice, not this. Exactly zero
+                              is neither and stays dim. */}
+                          <td className={d.varianceDa > 0 ? "c-red" : d.varianceDa < 0 ? "c-green" : "t-dim"}>
+                            {d.varianceDa > 0 ? "+" : ""}
+                            {nf(d.varianceDa)} DA
+                          </td>
                         </tr>
                       ))}
                     </tbody>

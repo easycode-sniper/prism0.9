@@ -45,6 +45,15 @@ means something about a truck:
 Do not spend one of these on chrome, and do not introduce a sixth. There
 is no purple anywhere — that was the point of the overhaul.
 
+One extension, decided deliberately: on a **money column** where a
+number can be good or bad — the fuel variance on the dashboard — red
+marks an overspend and green marks a saving. That is not a sixth
+meaning. `chartTheme.ts` has always read green as "moving, on-route,
+healthy", and red was already carrying the bad half of that column;
+leaving the good half achromatic was the inconsistent choice. It applies
+to a signed value against a known baseline, not to chrome, and not to a
+quantity that is merely large or small.
+
 Other rules that are easy to break by accident:
 
 - **No drop shadows.** Depth is a surface step (`--bg` → `--panel` →

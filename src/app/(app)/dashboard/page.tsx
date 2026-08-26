@@ -17,7 +17,14 @@ import {
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { ArrowRight, MapPinOff, Route, ShieldAlert } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
-import { getFuelPeriodStats, getDashboardSeries, type FuelPeriodStats, type DashboardSeries } from "@/lib/supabase/dashboard";
+import {
+  getFuelPeriodStats,
+  getDashboardSeries,
+  getDriverVariance,
+  type FuelPeriodStats,
+  type DashboardSeries,
+  type DriverVariance,
+} from "@/lib/supabase/dashboard";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import {
   CHART_COLORS,
@@ -31,6 +38,7 @@ import {
 } from "@/lib/chartTheme";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
+import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip);
 installChartDefaults();
@@ -62,11 +70,22 @@ export default function DashboardPage() {
   const [fuel, setFuel] = useState<FuelPeriodStats | null>(null);
   const [series, setSeries] = useState<DashboardSeries | null>(null);
   const [range, setRange] = useState<Range>(7);
+  const [variance, setVariance] = useState<DriverVariance[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     getFuelPeriodStats().then(({ stats }) => {
       if (!cancelled && stats) setFuel(stats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDriverVariance(6).then(({ drivers }) => {
+      if (!cancelled && drivers) setVariance(drivers);
     });
     return () => {
       cancelled = true;
@@ -444,6 +463,68 @@ export default function DashboardPage() {
           <div className="dash-panel__foot">
             <Link href="/notifications" className="dash-more">
               View all <ArrowRight size={12} />
+            </Link>
+          </div>
+        </section>
+      </div>
+
+      {/* ── Tier 5: where the écart is coming from ── */}
+      <div className="dash-row">
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Highest fuel variance by driver</div>
+              <div className="dash-panel__sub">
+                Overspend against the sheet&rsquo;s assumed {ASSUMED_L_PER_100KM} L/100km, biggest total first.
+                The rate is beside it, because the two do not rank the same.
+              </div>
+            </div>
+          </header>
+          <div className="dash-panel__body dash-panel__body--flush">
+            {variance === null ? (
+              <div style={{ padding: "0 15px 12px" }}>
+                <div className="skeleton-stack">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <div key={i} className="skeleton skeleton--row" />
+                  ))}
+                </div>
+              </div>
+            ) : variance.length === 0 ? (
+              <p className="dash-empty">No fill has come in over the assumed rate yet.</p>
+            ) : (
+              <div className="table-wrap" style={{ border: "none", borderRadius: 0 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Driver</th>
+                      <th>Fills</th>
+                      <th>Distance</th>
+                      <th>Consumption</th>
+                      <th>Per 100km</th>
+                      <th>Variance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {variance.map((d) => (
+                      <tr key={d.driverName}>
+                        <td className="t-primary">{d.driverName}</td>
+                        <td className="t-dim">{d.fills}</td>
+                        <td className="t-dim">{nf(d.km)} km</td>
+                        <td className={d.litresPer100Km != null && d.litresPer100Km > ASSUMED_L_PER_100KM ? "c-red" : "t-dim"}>
+                          {d.litresPer100Km != null ? `${d.litresPer100Km.toFixed(2)} L` : "—"}
+                        </td>
+                        <td className="t-dim">{d.variancePer100Km != null ? `${nf(d.variancePer100Km)} DA` : "—"}</td>
+                        <td className="c-red">{nf(d.varianceDa)} DA</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div className="dash-panel__foot">
+            <Link href="/carburant" className="dash-more">
+              Every fill <ArrowRight size={12} />
             </Link>
           </div>
         </section>

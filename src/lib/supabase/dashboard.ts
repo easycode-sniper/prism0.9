@@ -156,3 +156,40 @@ export async function getDashboardSeries(
     },
   };
 }
+
+// ── Where the variance comes from ─────────────────────────────
+
+export interface DriverVariance {
+  driverName: string;
+  fills: number;
+  km: number;
+  litresPer100Km: number | null;
+  varianceDa: number;
+  /** Dinars of overspend per 100km. The total says who cost the most;
+   *  this says who is actually heavy on fuel, and in the current data
+   *  they are two different drivers. */
+  variancePer100Km: number | null;
+}
+
+export async function getDriverVariance(
+  limit = 6
+): Promise<{ drivers?: DriverVariance[]; error?: string }> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: "Not authenticated" };
+
+  const { data, error } = await supabase.rpc("driver_variance_leaders", { p_limit: limit });
+  if (error) return { error: error.message };
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return {
+    drivers: rows.map((r) => ({
+      driverName: String(r.driver_name ?? "—"),
+      fills: Number(r.fills ?? 0),
+      km: Number(r.km ?? 0),
+      litresPer100Km: r.litres_per_100km == null ? null : Number(r.litres_per_100km),
+      varianceDa: Number(r.variance_da ?? 0),
+      variancePer100Km: r.variance_per_100km == null ? null : Number(r.variance_per_100km),
+    })),
+  };
+}

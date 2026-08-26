@@ -153,14 +153,37 @@ export interface NotificationRecord {
   read: boolean;
 }
 
+/**
+ * How far back the feed reaches. A rolling day, because that is what an
+ * operations feed is for — nobody scrolls to last Tuesday's parc
+ * arrival, and the user asked for exactly this.
+ *
+ * It is also what keeps the page HONEST. Every count on the
+ * notifications page — the group chips, the section headings, "N unread"
+ * — is a .filter() over whatever this returned. Bounding by TIME rather
+ * than by row count means those numbers describe a window the page can
+ * name, instead of silently becoming "within the newest 300" the day the
+ * feed outgrows the limit.
+ *
+ * The row cap below is a guard, not a page size, and the two have to be
+ * read together: fleet-wide speeding took the feed to roughly 145 alerts
+ * a day, so a day's window is ~145 rows against a 500 cap — 3x headroom,
+ * and well under the 1000 rows PostgREST truncates at without erroring.
+ * If the window is ever widened, check that product again.
+ */
+export const NOTIFICATION_FEED_HOURS = 24;
+
 export async function getNotifications(): Promise<{ data: NotificationRecord[]; error: string | null }> {
   const supabase = await createClient();
+
+  const since = new Date(Date.now() - NOTIFICATION_FEED_HOURS * 3600_000).toISOString();
 
   const { data, error } = await supabase
     .from("notifications")
     .select("*")
+    .gte("created_at", since)
     .order("created_at", { ascending: false })
-    .limit(300);
+    .limit(500);
 
   if (error) return { data: [], error: error.message };
   return { data: (data ?? []) as NotificationRecord[], error: null };

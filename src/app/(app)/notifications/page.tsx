@@ -9,6 +9,7 @@ import {
 import { useFleet } from "@/components/providers/FleetProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { formatDateTime } from "@/lib/format";
+import { NOTIFICATION_FEED_HOURS } from "@/lib/supabase/history";
 import {
   metaFor,
   groupFor,
@@ -79,6 +80,10 @@ export default function NotificationsPage() {
           <h1 className="text-2xl font-semibold t-primary">{t("notifications.title")}</h1>
           <p className="mt-1 text-sm t-dim">
             {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
+            {" · "}
+            <span className="t-faint">
+              last {NOTIFICATION_FEED_HOURS} hours
+            </span>
           </p>
         </div>
         {unreadCount > 0 && (
@@ -110,7 +115,9 @@ export default function NotificationsPage() {
       </div>
 
       {notifications.length === 0 ? (
-        <p className="mt-8 text-center text-sm t-dim">No notifications yet.</p>
+        <p className="mt-8 text-center text-sm t-dim">
+          Nothing in the last {NOTIFICATION_FEED_HOURS} hours.
+        </p>
       ) : visibleGroups.length === 0 ? (
         <p className="mt-8 text-center text-sm t-dim">Nothing in this group.</p>
       ) : (

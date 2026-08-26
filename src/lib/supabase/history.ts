@@ -118,32 +118,26 @@ export interface DriverRating {
 export async function getDriverRatings(): Promise<{ data: DriverRating[]; error: string | null }> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("dispatches")
-    .select("truck_id, driver_name, ever_off_route, ever_speeding")
-    .in("status", ["stopped", "completed"]);
-
+  // Aggregated in Postgres. This used to select every completed and
+  // stopped dispatch and reduce them here, which PostgREST silently
+  // truncates at 1000 rows — so past a thousand runs the ratings would
+  // have quietly become "the oldest thousand" while still looking like
+  // a current score. See migration 031.
+  const { data, error } = await supabase.rpc("driver_ratings");
   if (error) return { data: [], error: error.message };
 
-  const byDriver = new Map<string, DriverRating>();
-
-  for (const r of (data ?? []) as any[]) {
-    const name = r.driver_name || `(${r.truck_id})`;
-    if (!byDriver.has(name)) {
-      byDriver.set(name, { name, totalRuns: 0, deviations: 0, speedingCount: 0, cleanRuns: 0, score: 100 });
-    }
-    const entry = byDriver.get(name)!;
-    entry.totalRuns++;
-    if (r.ever_off_route) entry.deviations++;
-    if (r.ever_speeding) entry.speedingCount++;
-    if (!r.ever_off_route && !r.ever_speeding) entry.cleanRuns++;
-  }
-
-  const ratings = Array.from(byDriver.values())
-    .map((d) => ({ ...d, score: d.totalRuns > 0 ? Math.round((d.cleanRuns / d.totalRuns) * 100) : 100 }))
-    .sort((a, b) => b.totalRuns - a.totalRuns);
-
-  return { data: ratings, error: null };
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return {
+    data: rows.map((r) => ({
+      name: String(r.name ?? "—"),
+      totalRuns: Number(r.total_runs ?? 0),
+      deviations: Number(r.deviations ?? 0),
+      speedingCount: Number(r.speeding_count ?? 0),
+      cleanRuns: Number(r.clean_runs ?? 0),
+      score: Number(r.score ?? 100),
+    })),
+    error: null,
+  };
 }
 
 // ── Notifications ──
@@ -186,34 +180,12 @@ export async function markAllNotificationsRead(): Promise<{ error: string | null
   const user = await supabase.auth.getUser();
   if (!user.data.user) return { error: "Not authenticated" };
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.data.user.id)
-    .single();
-
-  if (profile?.role === "admin") {
-    const { error } = await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("read", false);
-    return { error: error?.message ?? null };
-  }
-
-  const { data: dispatches } = await supabase
-    .from("dispatches")
-    .select("id")
-    .eq("dispatched_by", user.data.user.id);
-
-  const dispatchIds = (dispatches ?? []).map((d) => d.id);
-  if (dispatchIds.length === 0) return { error: null };
-
-  const { error } = await supabase
-    .from("notifications")
-    .update({ read: true })
-    .eq("read", false)
-    .in("dispatch_id", dispatchIds);
-
+  // One statement, admin branch included. The previous version fetched
+  // the caller's dispatch ids and passed them to .in(), and that id list
+  // is capped at 1000 — past a thousand dispatches the oldest
+  // notifications could never be marked read, while the button carried
+  // on reporting success. See migration 031.
+  const { error } = await supabase.rpc("mark_my_notifications_read");
   return { error: error?.message ?? null };
 }
 

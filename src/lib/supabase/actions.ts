@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { fetchRoute } from "@/lib/routing";
 import { FACTORY_LAT, FACTORY_LNG } from "@/lib/constants";
+import { haversineMeters } from "@/lib/geometry";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ── Auth ──
 
@@ -23,6 +25,44 @@ export async function signOut() {
 }
 
 // ── Dispatches ──
+
+/** How close counts as "already there". The same buffer runPositionCheck
+ *  uses to call an arrival on a site with no uploaded polygon, so this
+ *  refuses exactly the dispatches that would have completed themselves
+ *  on the next tick — no wider, no narrower. */
+const AT_SITE_METERS = 300;
+
+/** Which of these trucks the newest fleet snapshot puts at the site.
+ *  A truck with no position, or no snapshot at all, is not included: the
+ *  guard only ever refuses on positive evidence. */
+async function trucksAtSite(
+  supabase: SupabaseClient,
+  truckIds: string[],
+  siteLat: number,
+  siteLng: number
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("fleet_snapshots")
+    .select("snapshot_data")
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const trucks = (data?.snapshot_data ?? []) as { truck_id?: string; lat?: number | null; lng?: number | null }[];
+  if (trucks.length === 0) return [];
+
+  const wanted = new Set(truckIds);
+  return trucks
+    .filter(
+      (t) =>
+        t.truck_id != null &&
+        wanted.has(t.truck_id) &&
+        t.lat != null &&
+        t.lng != null &&
+        haversineMeters(t.lat, t.lng, siteLat, siteLng) <= AT_SITE_METERS
+    )
+    .map((t) => t.truck_id as string);
+}
 
 export async function createBatchDispatch(truckIds: string[], siteId: string) {
   const supabase = await createClient();
@@ -48,6 +88,32 @@ export async function createBatchDispatch(truckIds: string[], siteId: string) {
 
   if (site.data.lat == null || site.data.lng == null) {
     return { error: "Site has no coordinates" };
+  }
+
+  // A truck that is already standing at the destination cannot be
+  // dispatched to it.
+  //
+  // This became worth refusing when arrival started ending a run: the
+  // next tick finds the truck inside the site's zone, records the
+  // arrival and completes the dispatch, so it vanishes from Active Runs
+  // within a minute of being created. There is one on record —
+  // 00026-523-35 arrived 38 seconds after it was dispatched. To the
+  // dispatcher that looks like the dispatch silently failing, and the
+  // natural response is to create it again, which does the same thing.
+  //
+  // Refusing rather than warning because of how the yard actually works:
+  // a truck is dispatched when it reaches the factory, so being at the
+  // destination at creation time is not a workflow, it is a mistake. A
+  // truck with no known position is never blocked — absence of evidence
+  // is not evidence it is there.
+  const alreadyThere = await trucksAtSite(supabase, truckIds, site.data.lat, site.data.lng);
+  if (alreadyThere.length > 0) {
+    return {
+      error:
+        alreadyThere.length === 1
+          ? `${alreadyThere[0]} is already at ${site.data.name ?? "that destination"}. Dispatch it once it is back at the factory.`
+          : `${alreadyThere.join(", ")} are already at ${site.data.name ?? "that destination"}. Dispatch them once they are back at the factory.`,
+    };
   }
 
   // All trucks in a convoy share the same origin (the one factory) and

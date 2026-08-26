@@ -1208,6 +1208,20 @@ hr {
    read together, not ranked. */
 .dash-row--trio { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
+/* Two tables that want to be read together — the same variance by driver
+   and by truck — but only once there is room for both. A driver name and
+   a signed DA figure both wrap at half of 1365px, which is the width the
+   office actually runs, so they stack there and pair only above 1500. */
+.dash-row--tables { grid-template-columns: minmax(0, 1fr); }
+
+@media (min-width: 1500px) {
+  .dash-row--tables { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A figure that wraps stops being a figure. */
+.dash-panel td { white-space: nowrap; }
+.dash-panel td:first-child { white-space: normal; }
+
 /* Who is on, what is running, what just happened. The middle panel is
    the widest because it is the only one holding a table. */
 .dash-row--panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr); }

@@ -21,9 +21,11 @@ import {
   getFuelPeriodStats,
   getDashboardSeries,
   getDriverVariance,
+  getTruckVariance,
   type FuelPeriodStats,
   type DashboardSeries,
   type DriverVariance,
+  type TruckVariance,
 } from "@/lib/supabase/dashboard";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import {
@@ -46,25 +48,6 @@ installChartDefaults();
 const RANGES = [7, 14, 30] as const;
 type Range = (typeof RANGES)[number];
 
-/** How many of the sorted drivers the panel shows. The rest are still
- *  loaded and still counted underneath — the sort decides which end of
- *  the roster this window lands on. */
-const VARIANCE_ROWS = 8;
-
-type VarianceKey = keyof Pick<
-  DriverVariance,
-  "driverName" | "fills" | "km" | "litresPer100Km" | "variancePer100Km" | "varianceDa"
->;
-
-const VARIANCE_COLUMNS: { key: VarianceKey; label: string; numeric: boolean }[] = [
-  { key: "driverName", label: "Driver", numeric: false },
-  { key: "fills", label: "Fills", numeric: true },
-  { key: "km", label: "Distance", numeric: true },
-  { key: "litresPer100Km", label: "Consumption", numeric: true },
-  { key: "variancePer100Km", label: "Per 100km", numeric: true },
-  { key: "varianceDa", label: "Variance", numeric: true },
-];
-
 const nf = (n: number) => Math.round(n).toLocaleString("en-GB");
 
 /** "2026-08-25" -> "25 Aug", for an axis that has to fit thirty of them. */
@@ -82,6 +65,146 @@ function relativeTime(iso: string): string {
   return `${Math.round(hrs / 24)} d ago`;
 }
 
+/** How many rows either variance panel shows. The rest stay loaded and
+ *  counted underneath — the sort decides which end of the list this
+ *  window lands on. */
+const VARIANCE_ROWS = 8;
+
+interface SortColumn<T> {
+  key: string;
+  label: string;
+  /** What to sort on. Null sorts to the bottom in both directions. */
+  value: (row: T) => string | number | null;
+  render: (row: T) => React.ReactNode;
+  /** Cell class, so a column can colour itself from its own value. */
+  cellClass?: (row: T) => string;
+}
+
+/**
+ * A table whose columns sort, used for both variance panels.
+ *
+ * Written once rather than twice because the second copy is where the
+ * two drift: the null handling and the direction-on-first-click rule are
+ * easy to get subtly different, and a driver table that sorts nulls to
+ * the bottom beside a truck table that sorts them to the top would be
+ * worse than either alone.
+ */
+function SortableTable<T>({
+  rows,
+  columns,
+  initialKey,
+  rowKey,
+  noteSuffix,
+}: {
+  rows: T[];
+  columns: SortColumn<T>[];
+  initialKey: string;
+  rowKey: (row: T) => string;
+  /** Appended to the count line when sorted on the initial column, so the
+   *  panel can say "worst first" in its own words. */
+  noteSuffix?: (dir: "asc" | "desc") => string;
+}) {
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({
+    key: initialKey,
+    dir: "desc",
+  });
+
+  const sorted = useMemo(() => {
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col) return rows;
+    const sign = sort.dir === "asc" ? 1 : -1;
+
+    return [...rows].sort((a, b) => {
+      const x = col.value(a);
+      const y = col.value(b);
+      // A row with no figure has nothing to rank on, so it sorts to the
+      // bottom whichever way the column runs — at the top of an ascending
+      // sort a null would read as the best score on the board.
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      if (typeof x === "string" && typeof y === "string") return sign * x.localeCompare(y);
+      return sign * (Number(x) - Number(y));
+    });
+  }, [rows, columns, sort]);
+
+  const toggle = (key: string) =>
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "desc" ? "asc" : "desc" }
+        : // A new column opens the way that column is read: text from A,
+          // numbers from the largest.
+          { key, dir: columns.find((c) => c.key === key)?.key === columns[0].key ? "asc" : "desc" }
+    );
+
+  const shown = sorted.slice(0, VARIANCE_ROWS);
+
+  return (
+    <>
+      <div className="table-wrap" style={{ border: "none", borderRadius: 0 }}>
+        <table>
+          <thead>
+            <tr>
+              {columns.map((col) => {
+                const active = sort.key === col.key;
+                return (
+                  <th
+                    key={col.key}
+                    className={`th-sort${active ? " is-sorted" : ""}`}
+                    onClick={() => toggle(col.key)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle(col.key);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="columnheader"
+                    aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+                    title={`Sort by ${col.label.toLowerCase()}`}
+                  >
+                    {col.label}
+                    <span className="th-sort__caret" aria-hidden="true">
+                      {active ? (sort.dir === "asc" ? "▲" : "▼") : "▼"}
+                    </span>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((row) => (
+              <tr key={rowKey(row)}>
+                {columns.map((col) => (
+                  <td key={col.key} className={col.cellClass ? col.cellClass(row) : "t-dim"}>
+                    {col.render(row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-foot-note">
+        Showing {shown.length} of {rows.length}
+        {sort.key === initialKey && noteSuffix ? noteSuffix(sort.dir) : ""}.
+      </div>
+    </>
+  );
+}
+
+/** Red over the sheet's assumed rate, green under it, dim at exactly
+ *  zero or with no figure at all. Shared so the two tables cannot drift
+ *  apart on what a colour means. */
+const signedClass = (v: number | null) =>
+  v == null ? "t-dim" : v > 0 ? "c-red" : v < 0 ? "c-green" : "t-dim";
+
+const signed = (v: number | null, unit: string) =>
+  v == null ? "—" : `${v > 0 ? "+" : ""}${nf(v)} ${unit}`;
+
+const consumptionClass = (v: number | null) =>
+  v == null ? "t-dim" : v > ASSUMED_L_PER_100KM ? "c-red" : "c-green";
+
 export default function DashboardPage() {
   const { t } = useTranslation();
   const { fleetData, notifications, dispatches } = useFleet();
@@ -90,11 +213,7 @@ export default function DashboardPage() {
   const [series, setSeries] = useState<DashboardSeries | null>(null);
   const [range, setRange] = useState<Range>(7);
   const [variance, setVariance] = useState<DriverVariance[] | null>(null);
-  // Worst first, because that is the question the panel is opened with.
-  const [sort, setSort] = useState<{ key: VarianceKey; dir: "asc" | "desc" }>({
-    key: "varianceDa",
-    dir: "desc",
-  });
+  const [truckVariance, setTruckVariance] = useState<TruckVariance[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +229,9 @@ export default function DashboardPage() {
     let cancelled = false;
     getDriverVariance().then(({ drivers }) => {
       if (!cancelled && drivers) setVariance(drivers);
+    });
+    getTruckVariance().then(({ trucks }) => {
+      if (!cancelled && trucks) setTruckVariance(trucks);
     });
     return () => {
       cancelled = true;
@@ -212,37 +334,6 @@ export default function DashboardPage() {
         onRun: onRun.has(tr.truck_id),
       }));
   }, [trucks, dispatches]);
-
-  const sortedVariance = useMemo(() => {
-    if (!variance) return null;
-    const { key, dir } = sort;
-    const sign = dir === "asc" ? 1 : -1;
-
-    return [...variance].sort((a, b) => {
-      const x = a[key];
-      const y = b[key];
-
-      // A driver with no consumption figure has nothing to rank on, so
-      // they sort to the bottom whichever way the column runs rather
-      // than to the top of the ascending one, where a null would read as
-      // the best score on the board.
-      if (x == null && y == null) return 0;
-      if (x == null) return 1;
-      if (y == null) return -1;
-
-      if (typeof x === "string" && typeof y === "string") return sign * x.localeCompare(y);
-      return sign * (Number(x) - Number(y));
-    });
-  }, [variance, sort]);
-
-  const toggleSort = (key: VarianceKey) =>
-    setSort((prev) =>
-      prev.key === key
-        ? { key, dir: prev.dir === "desc" ? "asc" : "desc" }
-        : // A new column opens the way that column is usually read: names
-          // from A, numbers from the largest.
-          { key, dir: key === "driverName" ? "asc" : "desc" }
-    );
 
   const statusColour = (status: string) =>
     status === "moving" ? "var(--green)" : status === "idle" ? "var(--amber)" : "var(--text-faint)";
@@ -523,120 +614,131 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      {/* ── Tier 5: where the écart is coming from ── */}
-      <div className="dash-row">
+      {/* ── Tier 5: where the écart is coming from, both ways ── */}
+      <div className="dash-row dash-row--tables">
         <section className="panel dash-panel">
           <header className="dash-panel__head">
             <div>
               <div className="dash-panel__title">Fuel variance by driver</div>
               <div className="dash-panel__sub">
-                Against the sheet&rsquo;s assumed {ASSUMED_L_PER_100KM} L/100km. Click a column to sort, click
-                again to reverse — the rate and the total do not rank the same driver first.
+                Against the sheet&rsquo;s assumed {ASSUMED_L_PER_100KM} L/100km. Click a column to sort.
+                The truck column matters: a driver with one truck cannot be told apart from it.
               </div>
             </div>
           </header>
           <div className="dash-panel__body dash-panel__body--flush">
-            {sortedVariance === null ? (
-              <div style={{ padding: "0 15px 12px" }}>
-                <div className="skeleton-stack">
-                  {Array.from({ length: 6 }, (_, i) => (
-                    <div key={i} className="skeleton skeleton--row" />
-                  ))}
-                </div>
-              </div>
-            ) : sortedVariance.length === 0 ? (
+            {variance === null ? (
+              <VarianceWaiting />
+            ) : variance.length === 0 ? (
               <p className="dash-empty">No fill carries a variance yet.</p>
             ) : (
-              <>
-                <div className="table-wrap" style={{ border: "none", borderRadius: 0 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        {VARIANCE_COLUMNS.map((col) => {
-                          const active = sort.key === col.key;
-                          return (
-                            <th
-                              key={col.key}
-                              className={`th-sort${active ? " is-sorted" : ""}`}
-                              onClick={() => toggleSort(col.key)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  toggleSort(col.key);
-                                }
-                              }}
-                              tabIndex={0}
-                              role="columnheader"
-                              // Announced rather than left to the caret,
-                              // which a screen reader cannot see.
-                              aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-                              title={`Sort by ${col.label.toLowerCase()}`}
-                            >
-                              {col.label}
-                              <span className="th-sort__caret" aria-hidden="true">
-                                {active ? (sort.dir === "asc" ? "▲" : "▼") : "▼"}
-                              </span>
-                            </th>
-                          );
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedVariance.slice(0, VARIANCE_ROWS).map((d) => (
-                        <tr key={d.driverName}>
-                          <td className="t-primary">{d.driverName}</td>
-                          <td className="t-dim">{d.fills}</td>
-                          <td className="t-dim">{nf(d.km)} km</td>
-                          <td className={
-                            d.litresPer100Km == null
-                              ? "t-dim"
-                              : d.litresPer100Km > ASSUMED_L_PER_100KM
-                                ? "c-red"
-                                : "c-green"
-                          }>
-                            {d.litresPer100Km != null ? `${d.litresPer100Km.toFixed(2)} L` : "—"}
-                          </td>
-                          <td className={
-                            d.variancePer100Km == null
-                              ? "t-dim"
-                              : d.variancePer100Km > 0
-                                ? "c-red"
-                                : d.variancePer100Km < 0
-                                  ? "c-green"
-                                  : "t-dim"
-                          }>
-                            {d.variancePer100Km != null
-                              ? `${d.variancePer100Km > 0 ? "+" : ""}${nf(d.variancePer100Km)} DA`
-                              : "—"}
-                          </td>
-                          {/* Red over the rate, green under it. The pair
-                              is the point: this column is money, and a
-                              driver who came in below the assumed rate
-                              saved some. Green is already "moving,
-                              on-route, healthy" in chartTheme, and red
-                              was already carrying the bad half here —
-                              leaving the good half achromatic was the
-                              inconsistent choice, not this. Exactly zero
-                              is neither and stays dim. */}
-                          <td className={d.varianceDa > 0 ? "c-red" : d.varianceDa < 0 ? "c-green" : "t-dim"}>
-                            {d.varianceDa > 0 ? "+" : ""}
-                            {nf(d.varianceDa)} DA
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="table-foot-note">
-                  Showing {Math.min(VARIANCE_ROWS, sortedVariance.length)} of {sortedVariance.length} drivers
-                  {sort.key === "varianceDa"
-                    ? sort.dir === "desc"
-                      ? " — worst first"
-                      : " — best first"
-                    : ""}
-                  .
-                </div>
-              </>
+              <SortableTable
+                rows={variance}
+                rowKey={(d) => d.driverName}
+                initialKey="varianceDa"
+                noteSuffix={(dir) => (dir === "desc" ? " drivers — worst first" : " drivers — best first")}
+                columns={[
+                  {
+                    key: "driverName",
+                    label: "Driver",
+                    value: (d) => d.driverName,
+                    render: (d) => d.driverName,
+                    cellClass: () => "t-primary",
+                  },
+                  {
+                    key: "trucks",
+                    label: "Truck",
+                    value: (d) => d.trucks,
+                    // One truck is named, because that is the row's
+                    // confound and the reader should see which vehicle to
+                    // check. More than one and the count is the point:
+                    // the figure is no longer one truck's.
+                    render: (d) =>
+                      d.truckCount > 1 ? `${d.truckCount} trucks` : (d.trucks ?? "—"),
+                    cellClass: (d) => (d.truckCount > 1 ? "t-dim" : "truck-id"),
+                  },
+                  { key: "km", label: "Distance", value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
+                  {
+                    key: "litresPer100Km",
+                    label: "L/100km",
+                    value: (d) => d.litresPer100Km,
+                    render: (d) => (d.litresPer100Km != null ? d.litresPer100Km.toFixed(2) : "—"),
+                    cellClass: (d) => consumptionClass(d.litresPer100Km),
+                  },
+                  {
+                    key: "varianceDa",
+                    label: "Variance",
+                    value: (d) => d.varianceDa,
+                    render: (d) => signed(d.varianceDa, "DA"),
+                    cellClass: (d) => signedClass(d.varianceDa),
+                  },
+                ]}
+              />
+            )}
+          </div>
+          <div className="dash-panel__foot">
+            <Link href="/drivers" className="dash-more">
+              All drivers <ArrowRight size={12} />
+            </Link>
+          </div>
+        </section>
+
+        <section className="panel dash-panel">
+          <header className="dash-panel__head">
+            <div>
+              <div className="dash-panel__title">Fuel variance by truck</div>
+              <div className="dash-panel__sub">
+                The same écart, per vehicle. A truck that is thirsty under several drivers is a
+                truck, not a run of unlucky people.
+              </div>
+            </div>
+          </header>
+          <div className="dash-panel__body dash-panel__body--flush">
+            {truckVariance === null ? (
+              <VarianceWaiting />
+            ) : truckVariance.length === 0 ? (
+              <p className="dash-empty">No fill carries a variance yet.</p>
+            ) : (
+              <SortableTable
+                rows={truckVariance}
+                rowKey={(t) => t.truckId}
+                initialKey="varianceDa"
+                noteSuffix={(dir) => (dir === "desc" ? " trucks — worst first" : " trucks — best first")}
+                columns={[
+                  {
+                    key: "truckId",
+                    label: "Truck",
+                    value: (t) => t.truckId,
+                    render: (t) => t.truckId,
+                    cellClass: () => "truck-id",
+                  },
+                  {
+                    key: "drivers",
+                    label: "Drivers",
+                    value: (t) => t.drivers,
+                    render: (t) => t.drivers,
+                    // One driver means this row and that driver's row are
+                    // the same evidence counted twice, which is worth
+                    // seeing before either is treated as proof.
+                    cellClass: (t) => (t.drivers > 1 ? "t-primary" : "t-dim"),
+                  },
+                  { key: "km", label: "Distance", value: (t) => t.km, render: (t) => `${nf(t.km)} km` },
+                  {
+                    key: "litresPer100Km",
+                    label: "L/100km",
+                    value: (t) => t.litresPer100Km,
+                    render: (t) => (t.litresPer100Km != null ? t.litresPer100Km.toFixed(2) : "—"),
+                    cellClass: (t) => consumptionClass(t.litresPer100Km),
+                  },
+                  {
+                    key: "varianceDa",
+                    label: "Variance",
+                    value: (t) => t.varianceDa,
+                    render: (t) => signed(t.varianceDa, "DA"),
+                    cellClass: (t) => signedClass(t.varianceDa),
+                  },
+                ]}
+              />
             )}
           </div>
           <div className="dash-panel__foot">
@@ -676,6 +778,20 @@ function Kpi({
         <span className="dash-delta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {value === null ? "reading the sheet…" : foot}
         </span>
+      </div>
+    </div>
+  );
+}
+
+/** Both variance panels wait the same way, so the pair does not arrive
+ *  looking like two different components. */
+function VarianceWaiting() {
+  return (
+    <div style={{ padding: "0 15px 12px" }}>
+      <div className="skeleton-stack">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="skeleton skeleton--row" />
+        ))}
       </div>
     </div>
   );

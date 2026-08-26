@@ -161,6 +161,11 @@ export async function getDashboardSeries(
 
 export interface DriverVariance {
   driverName: string;
+  /** The truck (or trucks) this driver's figure came from. A driver with
+   *  one truck cannot be separated from it in this data, and the row has
+   *  to admit that rather than leave the reader to assume otherwise. */
+  trucks: string | null;
+  truckCount: number;
   fills: number;
   km: number;
   litresPer100Km: number | null;
@@ -189,6 +194,42 @@ export async function getDriverVariance(
   return {
     drivers: rows.map((r) => ({
       driverName: String(r.driver_name ?? "—"),
+      trucks: (r.trucks as string | null) ?? null,
+      truckCount: Number(r.truck_count ?? 0),
+      fills: Number(r.fills ?? 0),
+      km: Number(r.km ?? 0),
+      litresPer100Km: r.litres_per_100km == null ? null : Number(r.litres_per_100km),
+      varianceDa: Number(r.variance_da ?? 0),
+      variancePer100Km: r.variance_per_100km == null ? null : Number(r.variance_per_100km),
+    })),
+  };
+}
+
+export interface TruckVariance {
+  truckId: string;
+  /** How many drivers the figure covers. One means this row and that
+   *  driver's row are the same evidence counted twice. */
+  drivers: number;
+  fills: number;
+  km: number;
+  litresPer100Km: number | null;
+  varianceDa: number;
+  variancePer100Km: number | null;
+}
+
+export async function getTruckVariance(limit = 500): Promise<{ trucks?: TruckVariance[]; error?: string }> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: "Not authenticated" };
+
+  const { data, error } = await supabase.rpc("truck_variance_leaders", { p_limit: limit });
+  if (error) return { error: error.message };
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return {
+    trucks: rows.map((r) => ({
+      truckId: String(r.truck_id ?? "—"),
+      drivers: Number(r.drivers ?? 0),
       fills: Number(r.fills ?? 0),
       km: Number(r.km ?? 0),
       litresPer100Km: r.litres_per_100km == null ? null : Number(r.litres_per_100km),

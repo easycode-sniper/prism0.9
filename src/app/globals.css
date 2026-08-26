@@ -211,9 +211,7 @@ a.btn-primary:active, a.btn-secondary:active, a.btn-sm:active {
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--accent);
 }
 
-/* Scrollbars: thin, and only visible against the surface they sit on.
-   overscroll-behavior stops a scrolled table from chaining its momentum
-   into the page behind it. */
+/* Scrollbars: thin, and only visible against the surface they sit on. */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -226,7 +224,21 @@ a.btn-primary:active, a.btn-secondary:active, a.btn-sm:active {
 ::-webkit-scrollbar-corner { background: transparent; }
 * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 
-[data-scroll], .scroll-y, main, .overflow-y-auto, .overflow-auto {
+/* overscroll-behavior: contain belongs ONLY on the outermost scroller.
+   On an inner list it is actively hostile, and this is the bug it caused:
+   once such a list reaches its own end, `contain` refuses to hand the
+   remaining wheel travel to the scroller behind it, so the page stops
+   dead and the only way to carry on is to move the pointer off the list
+   entirely. Measured on the admin sites table — inner list at 2214/2214,
+   main stuck at 0 of 356 remaining pixels; with chaining allowed it runs
+   on to 356. Every list of rows in this app sits inside a page that
+   scrolls, so every one of them had this.
+
+   On `main` the property is doing the job it was written for: main is the
+   top of the chain (body is overflow: hidden), so there is nothing above
+   to chain into and all `contain` does here is stop the browser's
+   rubber-band overscroll. Keep it here; do not put it back on a list. */
+main {
   overscroll-behavior: contain;
 }
 
@@ -959,7 +971,6 @@ input::placeholder, textarea::placeholder {
   overflow: auto;
   flex: 1;
   min-height: 0;
-  overscroll-behavior: contain;
 }
 
 table {
@@ -1543,7 +1554,6 @@ hr {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -1869,7 +1879,6 @@ hr {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--panel-2);
@@ -2133,7 +2142,6 @@ select:not([multiple]):not([size]) {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding: 4px 4px 20px;
   display: flex;
   flex-direction: column;

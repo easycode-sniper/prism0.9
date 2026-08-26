@@ -1,7 +1,6 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { opsToday, OPS_UTC_OFFSET } from "@/lib/format";
 
 // Everything the redesigned dashboard reads, in one module so the page
 // makes one round trip per section rather than a query per tile.
@@ -14,10 +13,12 @@ import { opsToday, OPS_UTC_OFFSET } from "@/lib/format";
 // ── The fuel sheet, summed ────────────────────────────────────
 
 export interface FuelPeriodStats {
-  /** What the sheet's own date cells say the first and last fill were.
-   *  Raw text, not a parsed date — the sheet's date column mixes
-   *  month/day and day/month between hand-pasted batches, so these are
-   *  shown as written rather than reformatted into a lie. */
+  /** What the sheet's own date cells say the first and last fill were,
+   *  as written. Taken in sheet-row order rather than by date, which is
+   *  what makes them correct regardless of how the column is formatted —
+   *  the source was mixed month/day and day/month until it was
+   *  normalised, and resolveOccurredAt still guards against a batch
+   *  arriving that way again. */
   firstRaw: string | null;
   lastRaw: string | null;
   fills: number;
@@ -54,90 +55,40 @@ export interface FuelPeriodStats {
   unpairedAmountDa: number;
 }
 
-// PostgREST caps a response at 1000 rows and does NOT error when it
-// truncates — .limit(5000) silently returned 1000, so this aggregate was
-// summing the first 1000 fills of 1147 and reporting the result as the
-// month. Every figure was understated and the period label stopped at
-// the 1000th row's date, which is how it surfaced.
-//
-// Paged explicitly instead. The page size is the server's cap: asking
-// for more per page does nothing.
-const FUEL_PAGE = 1000;
-// A guard against paging forever if the table grows unexpectedly, not a
-// data limit — a month is about 1150 fills, so this is roughly a year.
-const FUEL_MAX_PAGES = 15;
+// Both figures below are summed in Postgres, not here — see migration
+// 028. Selecting the rows to add them up in JS has a ceiling nobody sees
+// coming: PostgREST caps a response at 1000 rows and does NOT error when
+// it truncates, so the month totals were quietly summing 1000 fills of
+// 1147, and the 30-day series was already past the cap the day it
+// shipped. Paging only moves the ceiling; at ~46 fills a day a year is
+// 17,000 rows, and dragging those over the wire to add them is the wrong
+// shape however well it fits. An aggregate is one row at any size.
 
 export async function getFuelPeriodStats(): Promise<{ stats?: FuelPeriodStats; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
 
-  // Ordered by sheet position, which is chronological because the sheet
-  // is append-only — and unlike occurred_at, it is not affected by the
-  // date column's mixed formats.
-  const rows: Record<string, unknown>[] = [];
-  for (let page = 0; page < FUEL_MAX_PAGES; page++) {
-    const from = page * FUEL_PAGE;
-    const { data, error } = await supabase
-      .from("fuel_transactions")
-      .select("distance_km, litres_filled, amount_da, variance_da, occurred_raw, sheet_row")
-      .order("sheet_row", { ascending: true, nullsFirst: false })
-      .range(from, from + FUEL_PAGE - 1);
+  const { data, error } = await supabase.rpc("fuel_period_stats").single();
+  if (error) return { error: error.message };
+  if (!data) return { error: "No fuel data" };
 
-    if (error) return { error: error.message };
-    const batch = data ?? [];
-    rows.push(...batch);
-    // A short page is the last page. Anything else means there is more.
-    if (batch.length < FUEL_PAGE) break;
-  }
-  let km = 0;
-  let litres = 0;
-  let amountDa = 0;
-  let varianceDa = 0;
-  let pairedLitres = 0;
-  let unpairedLitres = 0;
-  let unpairedFills = 0;
-  let unpairedAmountDa = 0;
-
-  for (const row of rows) {
-    const r = row as {
-      distance_km: number | null; litres_filled: number | null; amount_da: number | null;
-      variance_da: number | null; occurred_raw: string | null;
-    };
-    const l = r.litres_filled != null ? Number(r.litres_filled) : 0;
-    const amount = r.amount_da != null ? Number(r.amount_da) : 0;
-    // No variance means the sheet had no distance to price this fill
-    // against — a staff vehicle, or a truck's first fill. It counts
-    // towards what was bought, never towards what the fleet burns.
-    const counted = r.variance_da != null;
-
-    amountDa += amount;
-    litres += l;
-
-    if (counted) {
-      varianceDa += Number(r.variance_da);
-      km += r.distance_km != null ? Number(r.distance_km) : 0;
-      pairedLitres += l;
-    } else {
-      unpairedLitres += l;
-      unpairedFills += 1;
-      unpairedAmountDa += amount;
-    }
-  }
+  const r = data as Record<string, unknown>;
+  const num = (v: unknown) => (v == null ? 0 : Number(v));
 
   return {
     stats: {
-      firstRaw: (rows[0]?.occurred_raw as string | null) ?? null,
-      lastRaw: (rows[rows.length - 1]?.occurred_raw as string | null) ?? null,
-      fills: rows.length,
-      km,
-      litres,
-      amountDa,
-      litresPer100Km: km > 0 ? (pairedLitres * 100) / km : null,
-      varianceDa,
-      unpairedLitres,
-      unpairedFills,
-      unpairedAmountDa,
+      firstRaw: (r.first_raw as string | null) ?? null,
+      lastRaw: (r.last_raw as string | null) ?? null,
+      fills: num(r.fills),
+      km: num(r.km),
+      litres: num(r.litres),
+      amountDa: num(r.amount_da),
+      litresPer100Km: r.litres_per_100km == null ? null : Number(r.litres_per_100km),
+      varianceDa: num(r.variance_da),
+      unpairedLitres: num(r.unpaired_litres),
+      unpairedFills: num(r.unpaired_fills),
+      unpairedAmountDa: num(r.unpaired_amount_da),
     },
   };
 }
@@ -168,21 +119,6 @@ export interface DashboardSeries {
   daysAvailable: number;
 }
 
-/** Fills a day-keyed count map into a dense, ascending series so a gap in
- *  the data reads as a zero rather than as a shorter chart. */
-function densify(counts: Map<string, number>, days: number): DayPoint[] {
-  const out: DayPoint[] = [];
-  const today = new Date(`${opsToday()}T12:00:00${OPS_UTC_OFFSET}`);
-
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setUTCDate(d.getUTCDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    out.push({ day: key, value: counts.get(key) ?? 0 });
-  }
-  return out;
-}
-
 export async function getDashboardSeries(
   days = 30
 ): Promise<{ series?: DashboardSeries; error?: string }> {
@@ -190,90 +126,29 @@ export async function getDashboardSeries(
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
 
-  const span = Math.min(Math.max(days, 1), 90);
-  const from = new Date(`${opsToday()}T12:00:00${OPS_UTC_OFFSET}`);
-  from.setUTCDate(from.getUTCDate() - (span - 1));
-  const fromDay = from.toISOString().slice(0, 10);
-  const fromInstant = `${fromDay}T00:00:00${OPS_UTC_OFFSET}`;
+  // The RPC returns one row per day, already dense and already bucketed
+  // to the Africa/Algiers operations day — so a fill logged at 00:12
+  // local counts against the day the office worked it. At most 90 rows
+  // however many fills sit behind them.
+  const { data, error } = await supabase.rpc("dashboard_daily_series", { p_days: days });
+  if (error) return { error: error.message };
 
-  const [metrics, alerts, fuel] = await Promise.all([
-    supabase
-      .from("fleet_day_metrics")
-      .select("ops_day, km")
-      .gte("ops_day", fromDay)
-      .order("ops_day", { ascending: true }),
-    supabase
-      .from("notifications")
-      .select("created_at")
-      .gte("created_at", fromInstant),
-    // Safe to filter on occurred_at now that the sheet's date column is
-    // day-first throughout and resolveOccurredAt guards what arrives
-    // after. It was not before: half the rows sat in the wrong month.
-    supabase
-      .from("fuel_transactions")
-      .select("occurred_at, litres_filled, distance_km, variance_da")
-      .gte("occurred_at", fromInstant),
-  ]);
-
-  if (metrics.error) return { error: metrics.error.message };
-
-  // Bucketed at +01:00 rather than UTC, so a fill logged at 00:30 local
-  // counts against the day the office worked it, not the previous one.
-  const bucket = (rows: { [k: string]: unknown }[] | null, field: string) => {
-    const m = new Map<string, number>();
-    for (const r of rows ?? []) {
-      const raw = r[field];
-      if (typeof raw !== "string") continue;
-      const local = new Date(raw);
-      if (Number.isNaN(local.getTime())) continue;
-      const key = new Date(local.getTime() + 60 * 60 * 1000).toISOString().slice(0, 10);
-      m.set(key, (m.get(key) ?? 0) + 1);
-    }
-    return m;
-  };
-
-  const kmByDay = new Map<string, number>();
-  for (const r of metrics.data ?? []) {
-    kmByDay.set(String(r.ops_day), Number(r.km ?? 0));
-  }
-
-  // Litres and consumption share one pass. Consumption needs its own
-  // numerator — only the litres on fills that logged a distance — while
-  // the litres line counts every drop bought, so they cannot be derived
-  // from each other.
-  const litresByDay = new Map<string, number>();
-  const pairedLitresByDay = new Map<string, number>();
-  const pumpKmByDay = new Map<string, number>();
-
-  for (const r of fuel.data ?? []) {
-    const raw = r.occurred_at;
-    if (typeof raw !== "string") continue;
-    const at = new Date(raw);
-    if (Number.isNaN(at.getTime())) continue;
-    const key = new Date(at.getTime() + 60 * 60 * 1000).toISOString().slice(0, 10);
-
-    const l = r.litres_filled != null ? Number(r.litres_filled) : 0;
-    litresByDay.set(key, (litresByDay.get(key) ?? 0) + l);
-
-    if (r.variance_da != null) {
-      pairedLitresByDay.set(key, (pairedLitresByDay.get(key) ?? 0) + l);
-      pumpKmByDay.set(key, (pumpKmByDay.get(key) ?? 0) + (r.distance_km != null ? Number(r.distance_km) : 0));
-    }
-  }
-
-  const consumptionByDay = new Map<string, number>();
-  for (const [day, dist] of pumpKmByDay) {
-    if (dist <= 0) continue;
-    consumptionByDay.set(day, ((pairedLitresByDay.get(day) ?? 0) * 100) / dist);
-  }
+  const rows = (data ?? []) as { day: string; km: string | number; litres: string | number;
+                                 consumption: string | number; alerts: string | number }[];
+  const point = (r: typeof rows[number], field: "km" | "litres" | "consumption" | "alerts") => ({
+    day: r.day,
+    value: Number(r[field] ?? 0),
+  });
 
   return {
     series: {
-      km: densify(kmByDay, span),
-      alerts: densify(bucket(alerts.data, "created_at"), span),
-      litres: densify(litresByDay, span),
-      consumption: densify(consumptionByDay, span),
-      daysAvailable: kmByDay.size,
+      km: rows.map((r) => point(r, "km")),
+      alerts: rows.map((r) => point(r, "alerts")),
+      litres: rows.map((r) => point(r, "litres")),
+      consumption: rows.map((r) => point(r, "consumption")),
+      // Days that actually carry a distance reading, so the panel can say
+      // how much history is really behind a 30-day frame.
+      daysAvailable: rows.filter((r) => Number(r.km ?? 0) > 0).length,
     },
   };
 }

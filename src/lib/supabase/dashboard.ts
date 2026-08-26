@@ -238,3 +238,41 @@ export async function getTruckVariance(limit = 500): Promise<{ trucks?: TruckVar
     })),
   };
 }
+
+// ── Who keeps crossing the limit ──────────────────────────────
+
+export interface DriverSpeeding {
+  driverName: string;
+  /** The truck (or trucks) the alerts came from, same admission the
+   *  variance rows make: with one truck the driver and the vehicle are
+   *  not separable in this data. */
+  trucks: string | null;
+  truckCount: number;
+  /** Crossings of the limit this month — one per false->true transition
+   *  of is_speeding, so slowing down and speeding up again counts twice. */
+  times: number;
+  lastAt: string | null;
+}
+
+export async function getDriverSpeeding(limit = 100): Promise<{ drivers?: DriverSpeeding[]; error?: string }> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: "Not authenticated" };
+
+  // Counted and grouped in Postgres: notifications grow without bound and
+  // PostgREST truncates at 1000 rows without erroring. One row per driver
+  // who sped at least once this month, which is far smaller.
+  const { data, error } = await supabase.rpc("driver_speeding_leaders", { p_limit: limit });
+  if (error) return { error: error.message };
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return {
+    drivers: rows.map((r) => ({
+      driverName: String(r.driver_name ?? "—"),
+      trucks: (r.trucks as string | null) ?? null,
+      truckCount: Number(r.truck_count ?? 0),
+      times: Number(r.times ?? 0),
+      lastAt: (r.last_at as string | null) ?? null,
+    })),
+  };
+}

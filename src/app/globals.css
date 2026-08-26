@@ -1292,9 +1292,15 @@ hr {
 
 /* A chart needs a height its parent grid cannot give it — a grid row
    sizes to content, and a canvas with no height is content of zero. */
-.dash-chart { position: relative; height: 210px; }
-.dash-chart--tall { height: 244px; }
-.dash-chart--donut { height: 232px; }
+/* Chart heights carry most of this page. Four tiers cannot fit 768px of
+   screen — still less the 617px the dispatch office actually runs — and
+   pretending otherwise is what made zooming out feel like the fix. What
+   they can do is stop spending height that the series does not use: a
+   30-point daily line is legible well under 200px, and the doughnut is
+   sized by its own diameter plus a legend, not by the box around it. */
+.dash-chart { position: relative; height: 170px; }
+.dash-chart--tall { height: 200px; }
+.dash-chart--donut { height: 200px; }
 
 /* The panel foot: one link out to the page that holds the rest. */
 .dash-panel__foot {
@@ -1322,13 +1328,23 @@ hr {
    Label above, figure below, one line of context under it. The figure
    is cream, not a status colour: a kilometre is a quantity, not a state
    a truck is in, and colour on this screen means the latter. */
-.dash-kpi { padding: 13px 15px 14px; min-width: 0; }
+/* The tile is deliberately tight. Everything here that could be spent on
+   height is spent: the figure keeps its 1.5rem because shrinking it is
+   what zooming out already does badly — the whole complaint about
+   reading this at 67% was that the type went with the layout — so the
+   height comes out of padding, margins and the leading on the two label
+   lines, which carry no information in their whitespace. 101px to 79px
+   at identical type sizes. */
+.dash-kpi { padding: 9px 13px 10px; min-width: 0; }
 
 .dash-kpi__label {
   font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  /* 1.25 rather than the inherited 1.5: a single uppercase line at
+     0.66rem has nothing below the baseline to clear. */
+  line-height: 1.25;
   color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
@@ -1336,7 +1352,7 @@ hr {
 }
 
 .dash-kpi__value {
-  margin-top: 7px;
+  margin-top: 3px;
   font-family: var(--font-mono);
   font-size: 1.5rem;
   font-weight: 700;
@@ -1353,8 +1369,9 @@ hr {
 }
 
 .dash-kpi__foot {
-  margin-top: 6px;
+  margin-top: 3px;
   font-size: 0.68rem;
+  line-height: 1.25;
   color: var(--text-dim);
   display: flex;
   align-items: center;
@@ -1428,6 +1445,86 @@ hr {
   font-size: 0.68rem;
   color: var(--text-dim);
   border-top: 1px solid var(--line);
+}
+
+/* ── Ranked bar list ──────────────────────────────────────────
+   A name on a bar whose length is its share of the leader, with the
+   figure outside on the right. Used for the speeding leaderboard.
+
+   The bar is the only coloured thing here and it is red, which is the
+   taxonomy behaving itself: red already means off-route and speeding, so
+   a red bar on this panel is the same statement the map makes. The name
+   and the count stay achromatic — a count is a quantity, and colouring
+   it would spend a second hue on the same fact.
+
+   The name is laid OVER the track rather than inside the fill, so every
+   row starts its label at the same x and a driver with one crossing is
+   still readable against a bar a few pixels wide. */
+.rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 15px 12px;
+  /* Six and a half rows, then scroll — the same bargain the variance
+     tables strike, and for the same reason: a bad month could name
+     thirty drivers and this panel would push everything below it off the
+     page. The half row is the cue that the list continues. */
+  max-height: calc((30px + 6px) * 6.5 + 16px);
+  overflow-y: auto;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rank-row__track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  height: 30px;
+}
+
+.rank-row__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--red) 26%, transparent);
+  /* Widths come from the data, so they animate rather than jump when the
+     month rolls over or a new alert lands. */
+  transition: width var(--dur-enter) var(--ease-out);
+}
+
+.rank-row__name {
+  position: relative;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-row__value {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-row__meta {
+  flex: none;
+  font-size: 0.66rem;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
 }
 
 /* ── Duty list ────────────────────────────────────────────────

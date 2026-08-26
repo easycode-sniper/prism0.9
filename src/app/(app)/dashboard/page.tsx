@@ -15,17 +15,19 @@ import {
   Tooltip,
 } from "chart.js";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
-import { ArrowRight, MapPinOff, Route, ShieldAlert } from "lucide-react";
+import { ArrowRight, Gauge, MapPinOff, Route, ShieldAlert } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import {
   getFuelPeriodStats,
   getDashboardSeries,
   getDriverVariance,
   getTruckVariance,
+  getDriverSpeeding,
   type FuelPeriodStats,
   type DashboardSeries,
   type DriverVariance,
   type TruckVariance,
+  type DriverSpeeding,
 } from "@/lib/supabase/dashboard";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import {
@@ -43,6 +45,7 @@ import {
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
 import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
+import { SPEED_LIMIT_KMH } from "@/lib/constants";
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip);
 installChartDefaults();
@@ -196,6 +199,75 @@ function SortableTable<T>({
   );
 }
 
+/**
+ * Who crossed the limit most often this month, as a ranked bar list.
+ *
+ * The bar length is the driver's share of the worst offender, not of the
+ * fleet total — the question this panel answers is "who stands out", and
+ * against a total of a few dozen crossings every bar would otherwise be a
+ * stub. The floor of 4% keeps a single crossing visible as a mark rather
+ * than nothing at all.
+ *
+ * One row is one crossing of the limit, not one run and not one minute
+ * spent over it: the tick raises the alert on a false->true transition of
+ * is_speeding, so slowing down and speeding up again counts twice. The
+ * footer says so, because "9 times" is otherwise ambiguous enough to
+ * argue with.
+ */
+function SpeedingPanel({ rows }: { rows: DriverSpeeding[] | null }) {
+  const worst = rows && rows.length > 0 ? Math.max(...rows.map((r) => r.times)) : 0;
+  const total = rows ? rows.reduce((sum, r) => sum + r.times, 0) : 0;
+
+  return (
+    <section className="panel dash-panel">
+      <header className="dash-panel__head">
+        <div>
+          <div className="dash-panel__title">Over the limit, by driver</div>
+          <div className="dash-panel__sub">
+            Times above {SPEED_LIMIT_KMH} km/h this month, on a dispatched run.
+          </div>
+        </div>
+      </header>
+      <div className="dash-panel__body dash-panel__body--flush">
+        {rows === null ? (
+          <VarianceWaiting />
+        ) : rows.length === 0 ? (
+          <p className="dash-empty">
+            <span>
+              <Gauge size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+              Nobody has crossed {SPEED_LIMIT_KMH} km/h this month.
+            </span>
+          </p>
+        ) : (
+          <div className="rank-list">
+            {rows.map((r) => (
+              <div key={r.driverName} className="rank-row">
+                <div className="rank-row__track">
+                  <div
+                    className="rank-row__fill"
+                    style={{ width: `${Math.max((r.times / worst) * 100, 4)}%` }}
+                  />
+                  <span className="rank-row__name">{r.driverName}</span>
+                </div>
+                <span className="rank-row__meta">
+                  {r.truckCount > 1 ? `${r.truckCount} trucks` : (r.trucks ?? "")}
+                </span>
+                <span className="rank-row__value">{r.times}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {rows !== null && rows.length > 0 && (
+        <div className="table-foot-note">
+          {total} crossing{total === 1 ? "" : "s"} of the limit by {rows.length}{" "}
+          driver{rows.length === 1 ? "" : "s"}. Slowing down and speeding up again counts twice.
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** Red over the sheet's assumed rate, green under it, dim at exactly
  *  zero or with no figure at all. Shared so the two tables cannot drift
  *  apart on what a colour means. */
@@ -217,6 +289,7 @@ export default function DashboardPage() {
   const [range, setRange] = useState<Range>(7);
   const [variance, setVariance] = useState<DriverVariance[] | null>(null);
   const [truckVariance, setTruckVariance] = useState<TruckVariance[] | null>(null);
+  const [speeding, setSpeeding] = useState<DriverSpeeding[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,6 +308,9 @@ export default function DashboardPage() {
     });
     getTruckVariance().then(({ trucks }) => {
       if (!cancelled && trucks) setTruckVariance(trucks);
+    });
+    getDriverSpeeding().then(({ drivers }) => {
+      if (!cancelled && drivers) setSpeeding(drivers);
     });
     return () => {
       cancelled = true;
@@ -536,6 +612,19 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
+      </div>
+
+      {/* ── Tier 3b: who is driving over the limit ──
+          Its own row rather than a fourth column in the tier below: the
+          bar length IS the comparison, and squeezed into a third of the
+          width the difference between six crossings and three stops being
+          visible, which is the only thing this panel is for.
+
+          A bare .dash-row, not --tables: that modifier goes two-up above
+          1500px and this row has one child, which would leave half the
+          row empty on a wide screen. */}
+      <div className="dash-row">
+        <SpeedingPanel rows={speeding} />
       </div>
 
       {/* ── Tier 4: what you actually work from ── */}

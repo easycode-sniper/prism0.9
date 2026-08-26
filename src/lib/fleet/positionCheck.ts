@@ -11,7 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence } from "@/lib/geometry";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
-import { FACTORY_LAT, FACTORY_LNG } from "@/lib/constants";
+import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH } from "@/lib/constants";
 
 export interface PositionCheckResult {
   truckId: string;
@@ -31,10 +31,6 @@ export interface PositionCheckResult {
 
 const ROUTE_BUFFER_METERS = 400;
 const FALLBACK_AVG_SPEED_KMH = 65;
-
-// Speed limit — drivers must not exceed this. Matches the same rule as
-// the original single-file app.
-const SPEED_LIMIT_KMH = 90;
 
 // Geofence arrival buffers — edge buffer for real polygon geofences
 // (GPS noise near the boundary), and a plain-distance buffer for sites

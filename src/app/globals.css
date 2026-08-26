@@ -2938,3 +2938,35 @@ select option {
   background: var(--panel-2);
   color: var(--text);
 }
+
+/* ── Notifications feed ───────────────────────────────────────
+   Each group previews a few rows and expands in place. The page groups
+   alerts so the four kinds of work can be seen at once, and without a
+   cap the largest group defeats that on its own: parc arrivals are the
+   most common alert in the system, so "Factory" sat thousands of pixels
+   below "Parc" and the feed read as parc entries and nothing else. */
+.notif-more {
+  margin-top: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 0.74rem;
+  font-family: var(--font-sans);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .notif-more:hover { color: var(--text); border-color: var(--text-faint); }
+}
+
+/* Unread as a state rather than a rival number beside the count. */
+.notif-chip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  flex: none;
+}

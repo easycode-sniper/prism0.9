@@ -17,12 +17,33 @@ import {
   type NotificationGroup,
 } from "@/lib/notifications/kinds";
 
+/**
+ * How many rows a group shows before it asks to be expanded.
+ *
+ * Grouping exists so the four kinds of work can be seen at once. Without
+ * a cap the first group swallows the page: parc arrivals are the most
+ * common alert in the system — 110 of 204 rows today — so "Factory"
+ * sat about ten thousand pixels below "Parc" and the feed read as
+ * nothing but parc entries. Six is enough to see what a group is doing
+ * and short enough that all four headings share one screen.
+ */
+const GROUP_PREVIEW = 6;
+
 export default function NotificationsPage() {
   const { t } = useTranslation();
   // Shared app-wide (already realtime-subscribed by FleetProvider)
   // instead of this page fetching its own copy on every visit.
   const { notifications, refreshNotifications } = useFleet();
   const [only, setOnly] = useState<NotificationGroup | "all">("all");
+  const [expanded, setExpanded] = useState<Set<NotificationGroup>>(new Set());
+
+  const toggleExpanded = (g: NotificationGroup) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
+      return next;
+    });
 
   async function handleMarkRead(id: string) {
     await markNotificationRead(id);
@@ -97,6 +118,11 @@ export default function NotificationsPage() {
           {visibleGroups.map((g) => {
             const items = grouped.get(g)!;
             const unread = items.filter((n) => !n.read).length;
+            // Filtering to a group with the chip IS asking for that group,
+            // so it opens fully without a second click.
+            const isExpanded = only === g || expanded.has(g);
+            const shown = isExpanded ? items : items.slice(0, GROUP_PREVIEW);
+            const hidden = items.length - shown.length;
             return (
               <section key={g}>
                 <div className="mb-2 flex items-baseline gap-2">
@@ -109,10 +135,19 @@ export default function NotificationsPage() {
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {items.map((n) => (
+                  {shown.map((n) => (
                     <NotificationRow key={n.id} n={n} onMarkRead={handleMarkRead} />
                   ))}
                 </div>
+                {hidden > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => toggleExpanded(g)}
+                    className="notif-more"
+                  >
+                    {isExpanded ? "Show fewer" : `Show all ${items.length}`}
+                  </button>
+                )}
               </section>
             );
           })}
@@ -143,9 +178,16 @@ function GroupChip({
       style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: ".78rem" }}
     >
       {label}
+      {/* Always the total, never the unread count. "All 204" beside
+          "Parc 15" was comparing two different things — the group chips
+          switched to unread as soon as a group had any — and the section
+          heading below then said 110 for the same group. Unread is a
+          dot, which is a state, not a second number competing with the
+          first. */}
       <span className="font-mono" style={{ opacity: 0.7, fontSize: ".7rem" }}>
-        {unread > 0 ? unread : count}
+        {count}
       </span>
+      {unread > 0 && <span className="notif-chip-dot" aria-label={`${unread} unread`} />}
     </button>
   );
 }

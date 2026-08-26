@@ -1400,6 +1400,29 @@ hr {
 
 /* The count under a table that is showing part of itself. Without it,
    "8 rows" reads as the whole answer rather than the top of one. */
+/* A table that holds the height of about eight rows and scrolls the rest
+   in place. Used by the two fuel-variance panels, which list every driver
+   and every truck the sheet names: without a cap a busy month would run
+   the panel down the page and shove the tier below it out of sight, and
+   with the old fixed slice of eight the remaining rows were unreachable
+   without leaving the dashboard.
+
+   `thead th` is already position: sticky, so the sort controls stay put
+   at the bottom of a long list — which is what makes scrolling here a
+   real substitute for a second page rather than a worse one. The height
+   is stated in rows: 11px + 11px of cell padding plus the 1px rule, over
+   a 0.87rem body at the inherited 1.5 leading.
+
+   The half row is deliberate. Cut at a whole eight the list reads as
+   finished — the last row sits flush on the footer rule and there is
+   nothing to say another twenty-six are under it, because an overlay
+   scrollbar is invisible until you already scrolled. A row sliced in two
+   at the fold is the cue, and it costs half a row of height. */
+.table-wrap--capped {
+  --row-h: calc(0.87rem * 1.5 + 23px);
+  max-height: calc(var(--row-h) * 8.5 + 40px);
+}
+
 .table-foot-note {
   padding: 9px 15px;
   font-size: 0.68rem;

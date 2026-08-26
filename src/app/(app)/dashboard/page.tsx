@@ -67,10 +67,10 @@ function relativeTime(iso: string): string {
   return `${Math.round(hrs / 24)} d ago`;
 }
 
-/** How many rows either variance panel shows. The rest stay loaded and
- *  counted underneath — the sort decides which end of the list this
- *  window lands on. */
-const VARIANCE_ROWS = 8;
+/** Every driver and every truck the sheet names is rendered. The panel
+ *  keeps the height of about eight rows (.table-wrap--capped) and the
+ *  rest are a scroll away, so a long list cannot push the tier below it
+ *  off the screen and nobody has to leave the dashboard to read it. */
 
 interface SortColumn<T> {
   key: string;
@@ -96,12 +96,15 @@ function SortableTable<T>({
   columns,
   initialKey,
   rowKey,
+  unit,
   noteSuffix,
 }: {
   rows: T[];
   columns: SortColumn<T>[];
   initialKey: string;
   rowKey: (row: T) => string;
+  /** What the rows are, for the count line: "drivers", "trucks". */
+  unit: string;
   /** Appended to the count line when sorted on the initial column, so the
    *  panel can say "worst first" in its own words. */
   noteSuffix?: (dir: "asc" | "desc") => string;
@@ -139,11 +142,9 @@ function SortableTable<T>({
           { key, dir: columns.find((c) => c.key === key)?.key === columns[0].key ? "asc" : "desc" }
     );
 
-  const shown = sorted.slice(0, VARIANCE_ROWS);
-
   return (
     <>
-      <div className="table-wrap" style={{ border: "none", borderRadius: 0 }}>
+      <div className="table-wrap table-wrap--capped" style={{ border: "none", borderRadius: 0 }}>
         <table>
           <thead>
             <tr>
@@ -175,7 +176,7 @@ function SortableTable<T>({
             </tr>
           </thead>
           <tbody>
-            {shown.map((row) => (
+            {sorted.map((row) => (
               <tr key={rowKey(row)}>
                 {columns.map((col) => (
                   <td key={col.key} className={col.cellClass ? col.cellClass(row) : "t-dim"}>
@@ -188,7 +189,7 @@ function SortableTable<T>({
         </table>
       </div>
       <div className="table-foot-note">
-        Showing {shown.length} of {rows.length}
+        {rows.length} {unit}
         {sort.key === initialKey && noteSuffix ? noteSuffix(sort.dir) : ""}.
       </div>
     </>
@@ -684,7 +685,8 @@ export default function DashboardPage() {
                 rows={variance}
                 rowKey={(d) => d.driverName}
                 initialKey="varianceDa"
-                noteSuffix={(dir) => (dir === "desc" ? " drivers — worst first" : " drivers — best first")}
+                unit="drivers"
+                noteSuffix={(dir) => (dir === "desc" ? " — worst first" : " — best first")}
                 columns={[
                   {
                     key: "driverName",
@@ -724,11 +726,6 @@ export default function DashboardPage() {
               />
             )}
           </div>
-          <div className="dash-panel__foot">
-            <Link href="/drivers" className="dash-more">
-              All drivers <ArrowRight size={12} />
-            </Link>
-          </div>
         </section>
 
         <section className="panel dash-panel">
@@ -751,7 +748,8 @@ export default function DashboardPage() {
                 rows={truckVariance}
                 rowKey={(t) => t.truckId}
                 initialKey="varianceDa"
-                noteSuffix={(dir) => (dir === "desc" ? " trucks — worst first" : " trucks — best first")}
+                unit="trucks"
+                noteSuffix={(dir) => (dir === "desc" ? " — worst first" : " — best first")}
                 columns={[
                   {
                     key: "truckId",
@@ -788,11 +786,6 @@ export default function DashboardPage() {
                 ]}
               />
             )}
-          </div>
-          <div className="dash-panel__foot">
-            <Link href="/carburant" className="dash-more">
-              Every fill <ArrowRight size={12} />
-            </Link>
           </div>
         </section>
       </div>

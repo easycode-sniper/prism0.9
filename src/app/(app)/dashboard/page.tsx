@@ -443,8 +443,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Tier 1: the sheet, summed ── */}
-      <div className="dash-row dash-row--kpi">
+      {/* ── The sheet, summed ─────────────────────────────────
+          One surface with hairline dividers rather than five bordered
+          cards in a gapped grid. Same five figures, but five borders and
+          four gutters were most of what made this strip look heavy — the
+          numbers were never the problem. */}
+      <div className="kpi-strip">
         <Kpi label="Kilometres driven" value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? `${nf(fuel.fills)} fills` : ""} />
         <Kpi label="Litres consumed" value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? `incl. ${nf(fuel.unpairedLitres)} L with no km logged` : ""} />
         <Kpi label="Amount filled" value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? `${nf(fuel.unpairedFills)} fills logged amount only` : "paid at the pump"} />
@@ -462,421 +466,408 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* ── Tier 2: the trend, and the split it explains ── */}
-      <div className="dash-row dash-row--lead">
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div style={{ minWidth: 0 }}>
-              <div className="dash-panel__title">Distance per day</div>
-              <div className="dash-panel__sub">
-                {/* The last point is always today, and today is always
-                    partial — at 02:00 it is a hundredth of a day's
-                    distance, which draws as a dive to the floor. Said
-                    plainly rather than hidden by dropping the point:
-                    the current day is the one people look for. */}
-                Fleet kilometres, staff cars included. Today is still counting.
-                {series && series.daysAvailable < range ? ` ${series.daysAvailable} days recorded so far.` : ""}
-              </div>
-            </div>
-            <div className="seg seg--sm" style={{ flex: "none" }}>
-              {RANGES.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRange(r)}
-                  aria-pressed={range === r}
-                  className={`seg-item${range === r ? " is-active" : ""}`}
-                >
-                  {r}d
-                </button>
-              ))}
-            </div>
-          </header>
-          <div className="dash-panel__body">
-            <div className="dash-chart dash-chart--tall">
-              {series ? (
-                <Line
-                  data={kmChart}
-                  options={timeSeriesOptions({ unit: " km", days: kmDays })}
-                  plugins={[crosshairPlugin]}
-                />
-              ) : (
-                <ChartWaiting />
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">What the fleet is doing</div>
-              <div className="dash-panel__sub">
-                {trucks.length > 0
-                  ? `${trucks.length} vehicles reporting.`
-                  : "Waiting for the first fleet snapshot."}
-              </div>
-            </div>
-          </header>
-          <div className="dash-panel__body">
-            {trucks.length === 0 ? (
-              <p className="dash-empty">
-                <span>
-                  <MapPinOff size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-                  No fleet snapshot yet — the monitoring job may not be running.
-                </span>
-              </p>
-            ) : (
-              <div className="dash-chart dash-chart--donut">
-                <Doughnut
-                  data={statusChart}
-                  options={doughnutOptions}
-                  plugins={[doughnutCentrePlugin]}
-                />
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* ── Tier 3: what the fuel sheet says, day by day ── */}
-      <div className="dash-row dash-row--trio">
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">Litres bought per day</div>
-              <div className="dash-panel__sub">Every fill, staff vehicles included.</div>
-            </div>
-          </header>
-          <div className="dash-panel__body">
-            <div className="dash-chart">
-              {series ? (
-                <Bar
-                  data={litresChart}
-                  options={timeSeriesOptions({ unit: " L", days: litreDays })}
-                  plugins={[crosshairPlugin]}
-                />
-              ) : (
-                <ChartWaiting />
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">Consumption per day</div>
-              <div className="dash-panel__sub">
-                L/100km, on fills that logged a distance. The sheet assumes 45.
-              </div>
-            </div>
-          </header>
-          <div className="dash-panel__body">
-            <div className="dash-chart">
-              {series ? (
-                <Line
-                  data={consumptionChart}
-                  options={timeSeriesOptions({
-                    unit: " L/100km",
-                    beginAtZero: false,
-                    days: consumptionDays,
-                  })}
-                  plugins={[crosshairPlugin]}
-                />
-              ) : (
-                <ChartWaiting />
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">Alerts raised per day</div>
-              <div className="dash-panel__sub">Off route, speeding and arrivals together.</div>
-            </div>
-          </header>
-          <div className="dash-panel__body">
-            <div className="dash-chart">
-              {series ? (
-                <Bar
-                  data={alertsChart}
-                  options={timeSeriesOptions({ days: alertDays })}
-                  plugins={[crosshairPlugin]}
-                />
-              ) : (
-                <ChartWaiting />
-              )}
-            </div>
-          </div>
-        </section>
-      </div>
-
-      {/* ── Tier 3b: who is driving over the limit ──
-          Its own row rather than a fourth column in the tier below: the
-          bar length IS the comparison, and squeezed into a third of the
-          width the difference between six crossings and three stops being
-          visible, which is the only thing this panel is for.
-
-          A bare .dash-row, not --tables: that modifier goes two-up above
-          1500px and this row has one child, which would leave half the
-          row empty on a wide screen. */}
-      <div className="dash-row">
-        <SpeedingPanel rows={speeding} />
-      </div>
-
-      {/* ── Tier 4: what you actually work from ── */}
-      <div className="dash-row dash-row--panels">
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">Drivers on duty</div>
-              <div className="dash-panel__sub">Who is out right now.</div>
-            </div>
-          </header>
-          <div className="dash-panel__body dash-panel__body--flush">
-            {duty.length === 0 ? (
-              <p className="dash-empty">No driver is named on the current fleet feed.</p>
-            ) : (
-              duty.map((d) => (
-                <div key={d.truckId} className="duty-row">
-                  <span className="duty-dot" style={{ background: statusColour(d.status) }} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="duty-name">{d.name}</div>
-                    <div className="duty-meta">
-                      {d.status === "moving" ? `moving · ${Math.round(d.speed)} km/h` : d.status}
-                      {d.onRun ? " · on a run" : ""}
-                    </div>
-                  </div>
-                  <span className="truck-id" style={{ fontSize: ".68rem", flex: "none" }}>{d.truckId}</span>
+      {/* ── Two zones ─────────────────────────────────────────
+          Everything that answers "what is happening right now" goes in a
+          fixed 350px rail; everything that answers "what has been
+          happening" gets the rest. Four full-width tiers spent a 1366px
+          screen stacking narrow content down a long page — the variance
+          tables in particular were reading five columns across a width
+          they never needed. */}
+      <div className="dash-grid">
+        <main className="dash-main">
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div style={{ minWidth: 0 }}>
+                <div className="dash-panel__title">Distance per day</div>
+                <div className="dash-panel__sub">
+                  {/* The last point is always today, and today is always
+                      partial — at 02:00 it is a hundredth of a day's
+                      distance, which draws as a dive to the floor. Said
+                      plainly rather than hidden by dropping the point:
+                      the current day is the one people look for. */}
+                  Fleet kilometres, staff cars included. Today is still counting.
+                  {series && series.daysAvailable < range ? ` ${series.daysAvailable} days recorded so far.` : ""}
                 </div>
-              ))
-            )}
-          </div>
-          <div className="dash-panel__foot">
-            <Link href="/drivers" className="dash-more">
-              All drivers <ArrowRight size={12} />
-            </Link>
-          </div>
-        </section>
-
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">Active runs</div>
-              <div className="dash-panel__sub">Trucks on their way to a client right now.</div>
-            </div>
-          </header>
-          <div className="dash-panel__body dash-panel__body--flush">
-            {dispatches.length === 0 ? (
-              <p className="dash-empty">
-                <span>
-                  <Route size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-                  Nothing is running. A run appears here the moment it is dispatched.
-                </span>
-              </p>
-            ) : (
-              <div className="table-wrap" style={{ border: "none", borderRadius: 0 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Truck</th>
-                      <th>Destination</th>
-                      <th>ETA</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dispatches.slice(0, 5).map((d) => (
-                      <tr key={d.id}>
-                        <td className="truck-id">{d.truck_id}</td>
-                        <td className="t-primary">{d.site?.name ?? "—"}</td>
-                        <td className="t-dim">{d.last_eta_seconds != null ? formatDuration(d.last_eta_seconds) : "—"}</td>
-                        <td>
-                          <span className={`status-pill ${d.last_on_route === false ? "off-route" : "dispatched"}`}>
-                            {d.last_on_route === false ? "Off route" : "On route"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
-            )}
-          </div>
-          <div className="dash-panel__foot">
-            <Link href="/dispatch" className="dash-more">
-              Open dispatch <ArrowRight size={12} />
-            </Link>
-          </div>
-        </section>
-
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">Operational signals</div>
-              <div className="dash-panel__sub">The latest from the alert feed.</div>
+              <div className="seg seg--sm" style={{ flex: "none" }}>
+                {RANGES.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRange(r)}
+                    aria-pressed={range === r}
+                    className={`seg-item${range === r ? " is-active" : ""}`}
+                  >
+                    {r}d
+                  </button>
+                ))}
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              <div className="dash-chart dash-chart--tall">
+                {series ? (
+                  <Line
+                    data={kmChart}
+                    options={timeSeriesOptions({ unit: " km", days: kmDays })}
+                    plugins={[crosshairPlugin]}
+                  />
+                ) : (
+                  <ChartWaiting />
+                )}
+              </div>
             </div>
-          </header>
-          <div className="dash-panel__body dash-panel__body--flush">
-            {signals.length === 0 ? (
-              <p className="dash-empty">
-                <span>
-                  <ShieldAlert size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-                  Nothing has been raised yet today.
-                </span>
-              </p>
-            ) : (
-              signals.map((n) => {
-                const meta = metaFor(n.kind);
-                const Icon = meta.icon;
-                return (
-                  <div key={n.id} className="signal-row">
-                    <Icon size={13} strokeWidth={2} color={meta.color} className="signal-icon" />
+          </section>
+
+        <div className="dash-row dash-row--trio">
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">Litres bought per day</div>
+                <div className="dash-panel__sub">Every fill, staff vehicles included.</div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              <div className="dash-chart">
+                {series ? (
+                  <Bar
+                    data={litresChart}
+                    options={timeSeriesOptions({ unit: " L", days: litreDays })}
+                    plugins={[crosshairPlugin]}
+                  />
+                ) : (
+                  <ChartWaiting />
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">Consumption per day</div>
+                <div className="dash-panel__sub">
+                  L/100km, on fills that logged a distance. The sheet assumes 45.
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              <div className="dash-chart">
+                {series ? (
+                  <Line
+                    data={consumptionChart}
+                    options={timeSeriesOptions({
+                      unit: " L/100km",
+                      beginAtZero: false,
+                      days: consumptionDays,
+                    })}
+                    plugins={[crosshairPlugin]}
+                  />
+                ) : (
+                  <ChartWaiting />
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">Alerts raised per day</div>
+                <div className="dash-panel__sub">Off route, speeding and arrivals together.</div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              <div className="dash-chart">
+                {series ? (
+                  <Bar
+                    data={alertsChart}
+                    options={timeSeriesOptions({ days: alertDays })}
+                    plugins={[crosshairPlugin]}
+                  />
+                ) : (
+                  <ChartWaiting />
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
+
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">Fuel variance by truck</div>
+                <div className="dash-panel__sub">
+                  The same écart, per vehicle. A truck that is thirsty under several drivers is a
+                  truck, not a run of unlucky people.
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body dash-panel__body--flush">
+              {truckVariance === null ? (
+                <VarianceWaiting />
+              ) : truckVariance.length === 0 ? (
+                <p className="dash-empty">No fill carries a variance yet.</p>
+              ) : (
+                <SortableTable
+                  rows={truckVariance}
+                  rowKey={(t) => t.truckId}
+                  initialKey="varianceDa"
+                  unit="trucks"
+                  noteSuffix={(dir) => (dir === "desc" ? " — worst first" : " — best first")}
+                  columns={[
+                    {
+                      key: "truckId",
+                      label: "Truck",
+                      value: (t) => t.truckId,
+                      render: (t) => t.truckId,
+                      cellClass: () => "truck-id",
+                    },
+                    {
+                      key: "drivers",
+                      label: "Drivers",
+                      value: (t) => t.drivers,
+                      render: (t) => t.drivers,
+                      // One driver means this row and that driver's row are
+                      // the same evidence counted twice, which is worth
+                      // seeing before either is treated as proof.
+                      cellClass: (t) => (t.drivers > 1 ? "t-primary" : "t-dim"),
+                    },
+                    { key: "km", label: "Distance", value: (t) => t.km, render: (t) => `${nf(t.km)} km` },
+                    {
+                      key: "litresPer100Km",
+                      label: "L/100km",
+                      value: (t) => t.litresPer100Km,
+                      render: (t) => (t.litresPer100Km != null ? t.litresPer100Km.toFixed(2) : "—"),
+                      cellClass: (t) => consumptionClass(t.litresPer100Km),
+                    },
+                    {
+                      key: "varianceDa",
+                      label: "Variance",
+                      value: (t) => t.varianceDa,
+                      render: (t) => signed(t.varianceDa, "DA"),
+                      cellClass: (t) => signedClass(t.varianceDa),
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          </section>
+
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">Fuel variance by driver</div>
+                <div className="dash-panel__sub">
+                  Against the sheet&rsquo;s assumed {ASSUMED_L_PER_100KM} L/100km. Click a column to sort.
+                  The truck column matters: a driver with one truck cannot be told apart from it.
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body dash-panel__body--flush">
+              {variance === null ? (
+                <VarianceWaiting />
+              ) : variance.length === 0 ? (
+                <p className="dash-empty">No fill carries a variance yet.</p>
+              ) : (
+                <SortableTable
+                  rows={variance}
+                  rowKey={(d) => d.driverName}
+                  initialKey="varianceDa"
+                  unit="drivers"
+                  noteSuffix={(dir) => (dir === "desc" ? " — worst first" : " — best first")}
+                  columns={[
+                    {
+                      key: "driverName",
+                      label: "Driver",
+                      value: (d) => d.driverName,
+                      render: (d) => d.driverName,
+                      cellClass: () => "t-primary",
+                    },
+                    {
+                      key: "trucks",
+                      label: "Truck",
+                      value: (d) => d.trucks,
+                      // One truck is named, because that is the row's
+                      // confound and the reader should see which vehicle to
+                      // check. More than one and the count is the point:
+                      // the figure is no longer one truck's.
+                      render: (d) =>
+                        d.truckCount > 1 ? `${d.truckCount} trucks` : (d.trucks ?? "—"),
+                      cellClass: (d) => (d.truckCount > 1 ? "t-dim" : "truck-id"),
+                    },
+                    { key: "km", label: "Distance", value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
+                    {
+                      key: "litresPer100Km",
+                      label: "L/100km",
+                      value: (d) => d.litresPer100Km,
+                      render: (d) => (d.litresPer100Km != null ? d.litresPer100Km.toFixed(2) : "—"),
+                      cellClass: (d) => consumptionClass(d.litresPer100Km),
+                    },
+                    {
+                      key: "varianceDa",
+                      label: "Variance",
+                      value: (d) => d.varianceDa,
+                      render: (d) => signed(d.varianceDa, "DA"),
+                      cellClass: (d) => signedClass(d.varianceDa),
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          </section>
+        </main>
+
+        <aside className="dash-rail">
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">What the fleet is doing</div>
+                <div className="dash-panel__sub">
+                  {trucks.length > 0
+                    ? `${trucks.length} vehicles reporting.`
+                    : "Waiting for the first fleet snapshot."}
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              {trucks.length === 0 ? (
+                <p className="dash-empty">
+                  <span>
+                    <MapPinOff size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                    No fleet snapshot yet — the monitoring job may not be running.
+                  </span>
+                </p>
+              ) : (
+                <div className="dash-chart dash-chart--donut">
+                  <Doughnut
+                    data={statusChart}
+                    options={doughnutOptions}
+                    plugins={[doughnutCentrePlugin]}
+                  />
+                </div>
+              )}
+            </div>
+          </section>
+
+          <SpeedingPanel rows={speeding} />
+
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">Drivers on duty</div>
+                <div className="dash-panel__sub">Who is out right now.</div>
+              </div>
+            </header>
+            <div className="dash-panel__body dash-panel__body--flush">
+              {duty.length === 0 ? (
+                <p className="dash-empty">No driver is named on the current fleet feed.</p>
+              ) : (
+                duty.map((d) => (
+                  <div key={d.truckId} className="duty-row">
+                    <span className="duty-dot" style={{ background: statusColour(d.status) }} />
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div className="signal-title">{n.title}</div>
-                      <div className="signal-time">{relativeTime(n.created_at)}</div>
+                      <div className="duty-name">{d.name}</div>
+                      <div className="duty-meta">
+                        {d.status === "moving" ? `moving · ${Math.round(d.speed)} km/h` : d.status}
+                        {d.onRun ? " · on a run" : ""}
+                      </div>
                     </div>
+                    <span className="truck-id" style={{ fontSize: ".68rem", flex: "none" }}>{d.truckId}</span>
                   </div>
-                );
-              })
-            )}
-          </div>
-          <div className="dash-panel__foot">
-            <Link href="/notifications" className="dash-more">
-              View all <ArrowRight size={12} />
-            </Link>
-          </div>
-        </section>
-      </div>
-
-      {/* ── Tier 5: where the écart is coming from, both ways ── */}
-      <div className="dash-row dash-row--tables">
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">Fuel variance by driver</div>
-              <div className="dash-panel__sub">
-                Against the sheet&rsquo;s assumed {ASSUMED_L_PER_100KM} L/100km. Click a column to sort.
-                The truck column matters: a driver with one truck cannot be told apart from it.
-              </div>
+                ))
+              )}
             </div>
-          </header>
-          <div className="dash-panel__body dash-panel__body--flush">
-            {variance === null ? (
-              <VarianceWaiting />
-            ) : variance.length === 0 ? (
-              <p className="dash-empty">No fill carries a variance yet.</p>
-            ) : (
-              <SortableTable
-                rows={variance}
-                rowKey={(d) => d.driverName}
-                initialKey="varianceDa"
-                unit="drivers"
-                noteSuffix={(dir) => (dir === "desc" ? " — worst first" : " — best first")}
-                columns={[
-                  {
-                    key: "driverName",
-                    label: "Driver",
-                    value: (d) => d.driverName,
-                    render: (d) => d.driverName,
-                    cellClass: () => "t-primary",
-                  },
-                  {
-                    key: "trucks",
-                    label: "Truck",
-                    value: (d) => d.trucks,
-                    // One truck is named, because that is the row's
-                    // confound and the reader should see which vehicle to
-                    // check. More than one and the count is the point:
-                    // the figure is no longer one truck's.
-                    render: (d) =>
-                      d.truckCount > 1 ? `${d.truckCount} trucks` : (d.trucks ?? "—"),
-                    cellClass: (d) => (d.truckCount > 1 ? "t-dim" : "truck-id"),
-                  },
-                  { key: "km", label: "Distance", value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
-                  {
-                    key: "litresPer100Km",
-                    label: "L/100km",
-                    value: (d) => d.litresPer100Km,
-                    render: (d) => (d.litresPer100Km != null ? d.litresPer100Km.toFixed(2) : "—"),
-                    cellClass: (d) => consumptionClass(d.litresPer100Km),
-                  },
-                  {
-                    key: "varianceDa",
-                    label: "Variance",
-                    value: (d) => d.varianceDa,
-                    render: (d) => signed(d.varianceDa, "DA"),
-                    cellClass: (d) => signedClass(d.varianceDa),
-                  },
-                ]}
-              />
-            )}
-          </div>
-        </section>
-
-        <section className="panel dash-panel">
-          <header className="dash-panel__head">
-            <div>
-              <div className="dash-panel__title">Fuel variance by truck</div>
-              <div className="dash-panel__sub">
-                The same écart, per vehicle. A truck that is thirsty under several drivers is a
-                truck, not a run of unlucky people.
-              </div>
+            <div className="dash-panel__foot">
+              <Link href="/drivers" className="dash-more">
+                All drivers <ArrowRight size={12} />
+              </Link>
             </div>
-          </header>
-          <div className="dash-panel__body dash-panel__body--flush">
-            {truckVariance === null ? (
-              <VarianceWaiting />
-            ) : truckVariance.length === 0 ? (
-              <p className="dash-empty">No fill carries a variance yet.</p>
-            ) : (
-              <SortableTable
-                rows={truckVariance}
-                rowKey={(t) => t.truckId}
-                initialKey="varianceDa"
-                unit="trucks"
-                noteSuffix={(dir) => (dir === "desc" ? " — worst first" : " — best first")}
-                columns={[
-                  {
-                    key: "truckId",
-                    label: "Truck",
-                    value: (t) => t.truckId,
-                    render: (t) => t.truckId,
-                    cellClass: () => "truck-id",
-                  },
-                  {
-                    key: "drivers",
-                    label: "Drivers",
-                    value: (t) => t.drivers,
-                    render: (t) => t.drivers,
-                    // One driver means this row and that driver's row are
-                    // the same evidence counted twice, which is worth
-                    // seeing before either is treated as proof.
-                    cellClass: (t) => (t.drivers > 1 ? "t-primary" : "t-dim"),
-                  },
-                  { key: "km", label: "Distance", value: (t) => t.km, render: (t) => `${nf(t.km)} km` },
-                  {
-                    key: "litresPer100Km",
-                    label: "L/100km",
-                    value: (t) => t.litresPer100Km,
-                    render: (t) => (t.litresPer100Km != null ? t.litresPer100Km.toFixed(2) : "—"),
-                    cellClass: (t) => consumptionClass(t.litresPer100Km),
-                  },
-                  {
-                    key: "varianceDa",
-                    label: "Variance",
-                    value: (t) => t.varianceDa,
-                    render: (t) => signed(t.varianceDa, "DA"),
-                    cellClass: (t) => signedClass(t.varianceDa),
-                  },
-                ]}
-              />
-            )}
-          </div>
-        </section>
+          </section>
+
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">Active runs</div>
+                <div className="dash-panel__sub">Trucks on their way to a client right now.</div>
+              </div>
+            </header>
+            <div className="dash-panel__body dash-panel__body--flush">
+              {dispatches.length === 0 ? (
+                <p className="dash-empty">
+                  <span>
+                    <Route size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                    Nothing is running. A run appears here the moment it is dispatched.
+                  </span>
+                </p>
+              ) : (
+                // Rows, not a table. The same four facts in a 350px rail
+                // put the truck id in a column narrow enough to break it
+                // mid-token — "00038-" over "523-35" — and pushed Status
+                // off the panel entirely. Stacked, the destination gets
+                // the full width it actually needs and nothing is cut.
+                <div className="run-list">
+                  {dispatches.slice(0, 5).map((d) => (
+                    <div key={d.id} className="run-row">
+                      <div className="run-row__head">
+                        <span className="truck-id">{d.truck_id}</span>
+                        <span className={`status-pill ${d.last_on_route === false ? "off-route" : "dispatched"}`}>
+                          {d.last_on_route === false ? "Off route" : "On route"}
+                        </span>
+                      </div>
+                      <div className="run-row__dest">{d.site?.name ?? "—"}</div>
+                      <div className="run-row__eta">
+                        {d.last_eta_seconds != null ? `ETA ${formatDuration(d.last_eta_seconds)}` : "no ETA yet"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="dash-panel__foot">
+              <Link href="/dispatch" className="dash-more">
+                Open dispatch <ArrowRight size={12} />
+              </Link>
+            </div>
+          </section>
+
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">Operational signals</div>
+                <div className="dash-panel__sub">The latest from the alert feed.</div>
+              </div>
+            </header>
+            <div className="dash-panel__body dash-panel__body--flush">
+              {signals.length === 0 ? (
+                <p className="dash-empty">
+                  <span>
+                    <ShieldAlert size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                    Nothing has been raised yet today.
+                  </span>
+                </p>
+              ) : (
+                signals.map((n) => {
+                  const meta = metaFor(n.kind);
+                  const Icon = meta.icon;
+                  return (
+                    <div key={n.id} className="signal-row">
+                      <Icon size={13} strokeWidth={2} color={meta.color} className="signal-icon" />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="signal-title">{n.title}</div>
+                        <div className="signal-time">{relativeTime(n.created_at)}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="dash-panel__foot">
+              <Link href="/notifications" className="dash-more">
+                View all <ArrowRight size={12} />
+              </Link>
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
   );
@@ -894,7 +885,10 @@ function Kpi({
   foot: string;
 }) {
   return (
-    <div className="panel dash-kpi">
+    // No .panel here: the surface, border and radius belong to
+    // .kpi-strip, which draws one card for all five. A .panel per cell
+    // would put a border back around each and undo the point.
+    <div className="dash-kpi">
       <div className="dash-kpi__label">{label}</div>
       {value === null ? (
         <div className="skeleton skeleton--line" style={{ width: "72%", height: "22px", marginTop: "8px" }} />

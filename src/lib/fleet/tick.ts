@@ -11,7 +11,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadWialonConfig, fetchFleetData, type FleetTruck, type VehicleCategory } from "@/lib/fleet/wialon";
 import { loadGeofences } from "@/lib/fleet/geofences";
-import { loadDispatchAndSite, runPositionCheck, runHqArrivalCheck, runFactoryArrivalCheck } from "@/lib/fleet/positionCheck";
+import {
+  loadDispatchAndSite,
+  runPositionCheck,
+  runHqArrivalCheck,
+  runFactoryArrivalCheck,
+  runFleetSpeedingCheck,
+} from "@/lib/fleet/positionCheck";
 
 export interface TickResult {
   ok: boolean;
@@ -176,6 +182,30 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     }
   } else {
     warnings.push("factory: no factory geofence found; factory arrivals not checked");
+  }
+
+  // Speeding, fleet-wide and last, because it is the one check that must
+  // not be able to cost the others: a truck over the limit is worth
+  // knowing about, but not at the price of a missed arrival.
+  //
+  // EVERY vehicle, not just cargo — `trucks`, not `cargoTrucks`. The parc
+  // and factory checks drop staff cars because their arrivals are noise;
+  // a speed limit is a safety rule and does not care what the vehicle is
+  // for.
+  //
+  // Offline units are filtered out rather than passed through as "not
+  // speeding". Excluded, a truck that stopped reporting appears in
+  // neither the arrived nor the departed list, so its flag freezes until
+  // it reports again. Passed through, every truck that went quiet would
+  // have its flag cleared and would re-alert the moment it came back —
+  // a flapping tracker turned into a stream of duplicate alerts.
+  try {
+    await runFleetSpeedingCheck(
+      supabase,
+      trucks.filter((t) => t.status !== "offline")
+    );
+  } catch (err) {
+    warnings.push(`speeding: ${(err as Error).message}`);
   }
 
   return {

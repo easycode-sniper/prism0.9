@@ -25,10 +25,23 @@ interface Toast {
 }
 
 // Long enough to read a truck ID and a destination without being an
-// obstacle. Off-route and speeding stay until dismissed — those are the
-// two that warrant interrupting someone.
+// obstacle. Off-route stays until dismissed — a truck leaving its route
+// is one dispatcher's problem, right now, and there are a handful a day.
+//
+// Speeding used to be sticky on the same reasoning, and was, at nine
+// alerts a MONTH, while it only fired for trucks on a dispatched run.
+// It is now checked fleet-wide, and the snapshot history says that is
+// about 111 crossings a day across 36 vehicles. Sticky at that rate is
+// not an interruption but an obstruction: four undismissable toasts
+// (MAX_VISIBLE) permanently covering the screen, and the arrivals a
+// dispatcher actually acts on falling off the stack behind them.
+//
+// So it auto-dismisses like an arrival. It still shows and still sounds
+// — a speeding driver is worth telling someone about — but the durable
+// record is the notifications tab and the dashboard leaderboard, not a
+// toast nobody can clear.
 const DISMISS_AFTER_MS = 8000;
-const STICKY_KINDS = new Set(["off_route", "speeding"]);
+const STICKY_KINDS = new Set(["off_route"]);
 
 // A busy minute can insert a dozen arrivals at once. Showing all of them
 // would cover the screen, so the stack is capped and the oldest fall off

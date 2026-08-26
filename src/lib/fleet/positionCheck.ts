@@ -156,7 +156,6 @@ export async function runPositionCheck(
   // ── Notifications: fire only on a false → true transition ──
   const siteName = site?.name || "destination";
   const wasOffRoute = dispatch.is_off_route === true;
-  const wasSpeeding = dispatch.is_speeding === true;
   const nowOffRoute = deviationBasis === "route" && onRoute === false;
   const nowSpeeding = isSpeeding;
 
@@ -177,15 +176,16 @@ export async function runPositionCheck(
       message: `${dispatch.truck_id} has deviated from its route to ${siteName} (${(deviationMeters! / 1000).toFixed(1)}km off).`,
     });
   }
-  if (nowSpeeding && !wasSpeeding) {
-    notificationsToInsert.push({
-      dispatch_id: dispatch.id,
-      truck_id: dispatch.truck_id,
-      kind: "speeding",
-      title: "Speed limit exceeded",
-      message: `${dispatch.truck_id} is going ${Math.round(speed)}km/h on the run to ${siteName} (limit ${SPEED_LIMIT_KMH}km/h).`,
-    });
-  }
+  // No speeding notification here any more, on the same reasoning that
+  // moved factory_arrival out: speeding is now detected fleet-wide by
+  // runFleetSpeedingCheck, which sees every truck rather than only
+  // dispatched ones, and emitting from both places would alert twice for
+  // one crossing — once against the run and once against the fleet.
+  //
+  // nowSpeeding is still computed and still persisted below. It is not
+  // dead: dispatches.is_speeding is this run's live state, and
+  // ever_speeding is what driver_ratings() reads to score a run as
+  // clean, so dropping it would quietly change every driver's rating.
   if (nowSiteArrived) {
     notificationsToInsert.push({
       dispatch_id: dispatch.id,
@@ -331,29 +331,44 @@ export interface ZoneTruck {
   lng: number | null;
   driverName?: string | null;
   age_minutes?: number | null;
+  /** km/h from the unit's last message. Needed by the speeding check,
+   *  which is a fleet-wide transition like the zones but tests the
+   *  truck's speed rather than where it is. */
+  speed?: number;
 }
 
+/** A truck that survived the position filter, so its fix is real. */
+type PositionedTruck = ZoneTruck & { lat: number; lng: number };
+
 /**
- * What separates one fleet-wide zone from another: how to test a point
- * against it, which per-truck flag records presence, and what to say on
- * arrival.
+ * One fleet-wide condition a truck is either in or out of: how to test
+ * it, which per-truck flag remembers the last answer, and what to say
+ * when it becomes true.
  *
- * Both the parc and the factory are checked this way — for every cargo
- * truck, every tick, regardless of dispatch — because a truck reaches
- * either whether or not anyone opened a dispatch for the trip. That is
- * the whole point of the factory alert in particular: arriving there to
- * load is the moment a dispatch gets *created*, so it cannot be
- * conditional on one already existing.
+ * The parc and the factory are checked this way — for every cargo truck,
+ * every tick, regardless of dispatch — because a truck reaches either
+ * whether or not anyone opened a dispatch for the trip. That is the
+ * whole point of the factory alert in particular: arriving there to load
+ * is the moment a dispatch gets *created*, so it cannot be conditional
+ * on one already existing.
+ *
+ * Speeding is now checked the same way, and the test is deliberately a
+ * predicate over the whole truck rather than a point-in-zone: the
+ * condition is "over the limit", which has nothing to do with where the
+ * truck is. Everything else — the duplicate-unit-name defence, the
+ * compare-and-set, the refusal to notify on a write that did not
+ * persist — is the same machinery, and reusing it is what stops a second
+ * implementation drifting away from those fixes.
  */
 interface ZoneTarget {
   /** For log lines only. */
   label: string;
-  isInside(lat: number, lng: number): boolean;
-  /** Column on fleet_trucks holding the last known presence. */
-  flagColumn: "at_hq" | "at_factory";
-  rpcName: "mark_trucks_hq_state" | "mark_trucks_factory_state";
-  /** The RPC's boolean argument name, which differs per zone. */
-  rpcFlagArg: "p_at_hq" | "p_at_factory";
+  matches(truck: PositionedTruck): boolean;
+  /** Column on fleet_trucks holding the last known answer. */
+  flagColumn: "at_hq" | "at_factory" | "is_speeding";
+  rpcName: "mark_trucks_hq_state" | "mark_trucks_factory_state" | "mark_trucks_speeding_state";
+  /** The RPC's boolean argument name, which differs per target. */
+  rpcFlagArg: "p_at_hq" | "p_at_factory" | "p_is_speeding";
   notification(truckId: string): { kind: string; title: string; message: string };
   /** Extra durable record written from the same transition result — the
    *  parc log, for Rapport Parc. Runs only for trucks that actually
@@ -375,7 +390,7 @@ export async function runHqArrivalCheck(
   const radius = hq.radiusMeters + HQ_EDGE_BUFFER_METERS;
   await runZoneArrivalCheck(supabase, trucks, {
     label: "hq",
-    isInside: (lat, lng) => haversineMeters(lat, lng, hq.centerLat, hq.centerLng) <= radius,
+    matches: (t) => haversineMeters(t.lat, t.lng, hq.centerLat, hq.centerLng) <= radius,
     flagColumn: "at_hq",
     rpcName: "mark_trucks_hq_state",
     rpcFlagArg: "p_at_hq",
@@ -435,7 +450,7 @@ export async function runFactoryArrivalCheck(
 
   await runZoneArrivalCheck(supabase, trucks, {
     label: "factory",
-    isInside,
+    matches: (t) => isInside(t.lat, t.lng),
     flagColumn: "at_factory",
     rpcName: "mark_trucks_factory_state",
     rpcFlagArg: "p_at_factory",
@@ -447,19 +462,75 @@ export async function runFactoryArrivalCheck(
   });
 }
 
+/**
+ * Speeding, for every truck the fleet reports — dispatched or not.
+ *
+ * This used to live only inside runPositionCheck, which walks active
+ * dispatches, so the limit was enforced on delivery runs and nowhere
+ * else. A driver doing 110km/h on the way back from the parc with no run
+ * open raised nothing. The tick already pulls every unit's speed each
+ * minute for the snapshot, so the reading was always there — only the
+ * check was scoped to dispatches.
+ *
+ * Two things the caller must get right, both about which trucks to pass:
+ *
+ * OFFLINE UNITS ARE EXCLUDED, and that is not the same as treating them
+ * as under the limit. A truck that stops reporting keeps whatever flag
+ * it had: excluded from the list, it lands in neither `arrived` nor
+ * `departed`, so its flag freezes until it reports again. Passing them
+ * through instead would clear the flag on every truck that went quiet
+ * and re-alert the moment it came back, turning a flapping tracker into
+ * a stream of duplicate alerts.
+ *
+ * STAFF VEHICLES ARE INCLUDED. The parc and factory checks take cargo
+ * trucks only, because their arrivals are noise; a speed limit is a
+ * safety rule and applies to whoever is behind the wheel.
+ */
+export async function runFleetSpeedingCheck(
+  supabase: SupabaseClient,
+  trucks: ZoneTruck[]
+): Promise<void> {
+  // The alert should say how fast, not just that it happened. Built on
+  // the freshest fix per id for the same reason the helper de-duplicates
+  // internally: with two Wialon units under one name, the stale one must
+  // not be the number the message quotes.
+  const speedOf = new Map<string, number>();
+  const ageOf = new Map<string, number>();
+  for (const t of trucks) {
+    const age = t.age_minutes ?? Number.POSITIVE_INFINITY;
+    if (!speedOf.has(t.truck_id) || age < (ageOf.get(t.truck_id) ?? Number.POSITIVE_INFINITY)) {
+      speedOf.set(t.truck_id, t.speed ?? 0);
+      ageOf.set(t.truck_id, age);
+    }
+  }
+
+  await runZoneArrivalCheck(supabase, trucks, {
+    label: "speeding",
+    // Strictly greater than, matching the dispatch-scoped test this
+    // replaces — 90 exactly is at the limit, not over it.
+    matches: (t) => (t.speed ?? 0) > SPEED_LIMIT_KMH,
+    flagColumn: "is_speeding",
+    rpcName: "mark_trucks_speeding_state",
+    rpcFlagArg: "p_is_speeding",
+    notification: (truck_id) => ({
+      kind: "speeding",
+      title: "Speed limit exceeded",
+      message: `${truck_id} is going ${Math.round(speedOf.get(truck_id) ?? 0)}km/h (limit ${SPEED_LIMIT_KMH}km/h).`,
+    }),
+  });
+}
+
 async function runZoneArrivalCheck(
   supabase: SupabaseClient,
   trucks: ZoneTruck[],
   target: ZoneTarget
 ): Promise<void> {
+  // Narrowed to PositionedTruck rather than an inline shape: an inline
+  // list has to be updated by hand every time ZoneTruck gains a field,
+  // and a field it forgets (speed, for the speeding check) silently
+  // disappears from the type while still being there at runtime.
   const withPosition = trucks.filter(
-    (t): t is {
-      truck_id: string;
-      lat: number;
-      lng: number;
-      driverName?: string | null;
-      age_minutes?: number | null;
-    } => t.lat != null && t.lng != null
+    (t): t is PositionedTruck => t.lat != null && t.lng != null
   );
   if (withPosition.length === 0) return;
 
@@ -511,7 +582,7 @@ async function runZoneArrivalCheck(
   const departed: string[] = [];
 
   for (const t of positioned) {
-    const within = target.isInside(t.lat, t.lng);
+    const within = target.matches(t);
     const was = wasInside.get(t.truck_id) ?? false;
     if (within && !was) arrived.push(t.truck_id);
     else if (!within && was) departed.push(t.truck_id);
@@ -560,8 +631,17 @@ async function runZoneArrivalCheck(
       // notification() to remember: the column is NOT NULL, so omitting
       // it fails the insert outright, and building the row in one place
       // means a new zone cannot forget it.
+      //
+      // driver_name is stamped from this moment's fleet data for the same
+      // reason hq_entries stamps it: a fleet-wide alert has no dispatch
+      // to join to, and resolving the name at read time would let a
+      // change of driver quietly rewrite who was speeding last week.
       const { error: notifyError } = await supabase.from("notifications").insert(
-        toNotify.map((truck_id) => ({ truck_id, ...target.notification(truck_id) }))
+        toNotify.map((truck_id) => ({
+          truck_id,
+          driver_name: driverOf.get(truck_id) ?? null,
+          ...target.notification(truck_id),
+        }))
       );
       // Checked, not fire-and-forget. An unchecked insert here is what
       // hid this exact bug: the flag write succeeded, so every truck was

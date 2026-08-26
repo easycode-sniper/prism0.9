@@ -248,8 +248,9 @@ export interface DriverSpeeding {
    *  not separable in this data. */
   trucks: string | null;
   truckCount: number;
-  /** Crossings of the limit this month — one per false->true transition
-   *  of is_speeding, so slowing down and speeding up again counts twice. */
+  /** Crossings of the limit this month, anywhere in the fleet — one per
+   *  false->true transition of fleet_trucks.is_speeding, so slowing down
+   *  and speeding up again counts twice. Not scoped to dispatched runs. */
   times: number;
   lastAt: string | null;
 }

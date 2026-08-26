@@ -224,7 +224,7 @@ function SpeedingPanel({ rows }: { rows: DriverSpeeding[] | null }) {
         <div>
           <div className="dash-panel__title">Over the limit, by driver</div>
           <div className="dash-panel__sub">
-            Times above {SPEED_LIMIT_KMH} km/h this month, on a dispatched run.
+            Times above {SPEED_LIMIT_KMH} km/h this month, anywhere in the fleet.
           </div>
         </div>
       </header>

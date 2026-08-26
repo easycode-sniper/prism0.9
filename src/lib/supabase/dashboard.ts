@@ -172,7 +172,11 @@ export interface DriverVariance {
 }
 
 export async function getDriverVariance(
-  limit = 6
+  // The whole roster, not a top N. One row per driver — 92 today — grows
+  // with headcount rather than with fills, so it is small enough to hand
+  // over whole and sort in the browser, where changing the sort costs
+  // nothing. The cap is a guard, not a page size.
+  limit = 500
 ): Promise<{ drivers?: DriverVariance[]; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();

@@ -9,10 +9,12 @@
 -- TOTAL are two different people in the current data.
 --
 -- Aggregated in Postgres for the reason migration 028 exists: 1077 fills
--- carry a variance today and that grows every day, while this returns
--- six rows forever.
+-- carry a variance today and that number grows every day, while this
+-- returns one row per driver — 92 of them — which grows with headcount
+-- instead. That is small enough to hand over whole and sort in the
+-- browser, so changing the sort costs no round trip.
 
-CREATE OR REPLACE FUNCTION public.driver_variance_leaders(p_limit INT DEFAULT 6)
+CREATE OR REPLACE FUNCTION public.driver_variance_leaders(p_limit INT DEFAULT 500)
 RETURNS TABLE (
   driver_name        TEXT,
   fills              BIGINT,
@@ -41,11 +43,13 @@ AS $$
   WHERE f.variance_da IS NOT NULL
     AND f.driver_name IS NOT NULL
   GROUP BY f.driver_name
-  -- Overspend only. A driver who came in under the assumed rate belongs
-  -- on a different list, not at the bottom of this one.
-  HAVING sum(f.variance_da) > 0
+  -- Every driver, not just the ones over the rate. The table is sorted
+  -- in the browser and can be read from either end, and the good end is
+  -- the more useful half: 21 of the 92 drivers come in at or under the
+  -- assumed rate, the best of them 13,351 DA to the good. Filtering them
+  -- out would have left "best first" with nothing to show.
   ORDER BY sum(f.variance_da) DESC
-  LIMIT LEAST(GREATEST(p_limit, 1), 50);
+  LIMIT LEAST(GREATEST(p_limit, 1), 2000);
 $$;
 
 GRANT EXECUTE ON FUNCTION public.driver_variance_leaders(INT) TO authenticated;

@@ -9,7 +9,7 @@ import {
 import { useFleet } from "@/components/providers/FleetProvider";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { formatDateTime } from "@/lib/format";
-import { NOTIFICATION_FEED_HOURS } from "@/lib/supabase/history";
+import { NOTIFICATION_FEED_HOURS } from "@/lib/constants";
 import {
   metaFor,
   groupFor,

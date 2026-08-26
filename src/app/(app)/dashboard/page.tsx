@@ -141,13 +141,15 @@ export default function DashboardPage() {
 
   const litresChart = {
     labels: (series?.litres ?? []).map((p) => axisLabel(p.day)),
-    datasets: [{ data: (series?.litres ?? []).map((p) => Math.round(p.value)), ...BAR_SERIES }],
+    datasets: [{ data: (series?.litres ?? []).map((p) => (p.value == null ? null : Math.round(p.value))), ...BAR_SERIES }],
   };
 
   const consumptionChart = {
     labels: (series?.consumption ?? []).map((p) => axisLabel(p.day)),
     datasets: [
-      { data: (series?.consumption ?? []).map((p) => Number(p.value.toFixed(2))), ...LINE_SERIES },
+      // A day with no fill yet has no consumption to plot. Passed through
+      // as null so the line breaks there instead of diving to the origin.
+      { data: (series?.consumption ?? []).map((p) => (p.value == null ? null : Number(p.value.toFixed(2)))), ...LINE_SERIES },
     ],
   };
 
@@ -213,7 +215,12 @@ export default function DashboardPage() {
             <div style={{ minWidth: 0 }}>
               <div className="dash-panel__title">Distance per day</div>
               <div className="dash-panel__sub">
-                Fleet kilometres, staff cars included.
+                {/* The last point is always today, and today is always
+                    partial — at 02:00 it is a hundredth of a day's
+                    distance, which draws as a dive to the floor. Said
+                    plainly rather than hidden by dropping the point:
+                    the current day is the one people look for. */}
+                Fleet kilometres, staff cars included. Today is still counting.
                 {series && series.daysAvailable < range ? ` ${series.daysAvailable} days recorded so far.` : ""}
               </div>
             </div>

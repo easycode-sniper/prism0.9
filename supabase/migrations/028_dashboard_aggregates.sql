@@ -105,7 +105,12 @@ AS $$
     days.day,
     COALESCE(m.km, 0)                                                          AS km,
     COALESCE(fuel.litres, 0)                                                   AS litres,
-    COALESCE(round(fuel.paired_litres * 100 / NULLIF(fuel.paired_km, 0), 2), 0) AS consumption,
+    -- NOT coalesced to zero, unlike the two above. Zero litres bought on
+    -- a day is a fact; zero litres per 100km is not — it is a day with no
+    -- fill to measure against, which is unknown, and a chart that plots
+    -- unknown as zero draws a cliff to the origin every midnight before
+    -- the first fill lands. Null leaves a gap in the line instead.
+    round(fuel.paired_litres * 100 / NULLIF(fuel.paired_km, 0), 2) AS consumption,
     COALESCE(alert.alerts, 0)                                                  AS alerts
   FROM days
   LEFT JOIN public.fleet_day_metrics m ON m.ops_day = days.day

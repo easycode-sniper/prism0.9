@@ -98,7 +98,10 @@ export async function getFuelPeriodStats(): Promise<{ stats?: FuelPeriodStats; e
 export interface DayPoint {
   /** ISO date, YYYY-MM-DD, in the operations day. */
   day: string;
-  value: number;
+  /** Null where the day has no value to report, which is not the same as
+   *  zero. Consumption on a day with no fill yet is unknown; litres
+   *  bought on that day really is zero. Charts draw a gap for null. */
+  value: number | null;
 }
 
 export interface DashboardSeries {
@@ -134,10 +137,11 @@ export async function getDashboardSeries(
   if (error) return { error: error.message };
 
   const rows = (data ?? []) as { day: string; km: string | number; litres: string | number;
-                                 consumption: string | number; alerts: string | number }[];
+                                 consumption: string | number | null; alerts: string | number }[];
   const point = (r: typeof rows[number], field: "km" | "litres" | "consumption" | "alerts") => ({
     day: r.day,
-    value: Number(r[field] ?? 0),
+    // Null is carried through rather than floored to zero — see DayPoint.
+    value: r[field] == null ? null : Number(r[field]),
   });
 
   return {

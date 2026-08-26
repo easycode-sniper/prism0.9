@@ -117,6 +117,30 @@ interface MapViewProps {
 const SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const SATELLITE_LABELS_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 
+/**
+ * CARTO started requiring a key on its basemaps, and without one every
+ * tile comes back stamped "API KEY REQUIRED" — which is what put that
+ * watermark across the dispatch map.
+ *
+ * The key comes from the environment and is NOT committed. It has to be
+ * NEXT_PUBLIC_, because Leaflet assembles these URLs in the browser, so
+ * the key is readable from the network tab whatever we do — that is what
+ * a basemap key is, and CARTO issues it on that understanding. The env
+ * var is not hiding it from users; it is keeping it out of a PUBLIC git
+ * repository, where a committed key gets scraped and its quota spent by
+ * strangers, and it means rotating the key is a Vercel setting rather
+ * than a commit.
+ *
+ * Missing key degrades rather than breaks: the URL is simply built
+ * without the parameter, and the map still draws, watermarked. Only the
+ * two CARTO layers need this — satellite is Esri and is unaffected.
+ */
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_BASEMAP_KEY;
+
+const cartoTiles = (style: "dark_all" | "light_all") =>
+  `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png` +
+  (CARTO_KEY ? `?key=${encodeURIComponent(CARTO_KEY)}` : "");
+
 // Marker fill, painted over map tiles. Saturated on purpose — these have
 // to hold up against both the dark and light basemaps, so they are not
 // theme tokens and should not become them.
@@ -304,7 +328,7 @@ function getOrCreateMapCore(): MapCore {
 
   const map = L.map(container, { center: [35.25, 3.0], zoom: 7, zoomControl: true });
 
-  const dark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  const dark = L.tileLayer(cartoTiles("dark_all"), {
     attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
     maxZoom: 19,
   }).addTo(map);
@@ -312,7 +336,7 @@ function getOrCreateMapCore(): MapCore {
   // CARTO's light sibling of the dark basemap — same cartography and
   // label placement, so switching theme changes the value of the map
   // rather than its shape.
-  const light = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+  const light = L.tileLayer(cartoTiles("light_all"), {
     attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
     maxZoom: 19,
   });

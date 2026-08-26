@@ -37,6 +37,8 @@ import {
   BAR_SERIES,
   LINE_SERIES,
   areaFill,
+  crosshairPlugin,
+  doughnutCentrePlugin,
 } from "@/lib/chartTheme";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
@@ -287,6 +289,16 @@ export default function DashboardPage() {
 
   const labels = (series?.km ?? []).map((p) => axisLabel(p.day));
 
+  // The ISO days behind each series, handed to the tooltip so it can name
+  // the day in full where the axis only has room to abbreviate it. The
+  // RPC returns every series dense over the same range, so these are the
+  // same list four times — kept per series anyway, so that a series which
+  // one day stops being dense cannot silently mislabel its own points.
+  const kmDays = (series?.km ?? []).map((p) => p.day);
+  const alertDays = (series?.alerts ?? []).map((p) => p.day);
+  const litreDays = (series?.litres ?? []).map((p) => p.day);
+  const consumptionDays = (series?.consumption ?? []).map((p) => p.day);
+
   const kmChart = {
     labels,
     datasets: [
@@ -405,7 +417,15 @@ export default function DashboardPage() {
           </header>
           <div className="dash-panel__body">
             <div className="dash-chart dash-chart--tall">
-              {series ? <Line data={kmChart} options={timeSeriesOptions({ unit: " km" })} /> : <ChartWaiting />}
+              {series ? (
+                <Line
+                  data={kmChart}
+                  options={timeSeriesOptions({ unit: " km", days: kmDays })}
+                  plugins={[crosshairPlugin]}
+                />
+              ) : (
+                <ChartWaiting />
+              )}
             </div>
           </div>
         </section>
@@ -431,7 +451,11 @@ export default function DashboardPage() {
               </p>
             ) : (
               <div className="dash-chart dash-chart--donut">
-                <Doughnut data={statusChart} options={doughnutOptions} />
+                <Doughnut
+                  data={statusChart}
+                  options={doughnutOptions}
+                  plugins={[doughnutCentrePlugin]}
+                />
               </div>
             )}
           </div>
@@ -449,7 +473,15 @@ export default function DashboardPage() {
           </header>
           <div className="dash-panel__body">
             <div className="dash-chart">
-              {series ? <Bar data={litresChart} options={timeSeriesOptions({ unit: " L" })} /> : <ChartWaiting />}
+              {series ? (
+                <Bar
+                  data={litresChart}
+                  options={timeSeriesOptions({ unit: " L", days: litreDays })}
+                  plugins={[crosshairPlugin]}
+                />
+              ) : (
+                <ChartWaiting />
+              )}
             </div>
           </div>
         </section>
@@ -466,7 +498,15 @@ export default function DashboardPage() {
           <div className="dash-panel__body">
             <div className="dash-chart">
               {series ? (
-                <Line data={consumptionChart} options={timeSeriesOptions({ unit: " L/100km", beginAtZero: false })} />
+                <Line
+                  data={consumptionChart}
+                  options={timeSeriesOptions({
+                    unit: " L/100km",
+                    beginAtZero: false,
+                    days: consumptionDays,
+                  })}
+                  plugins={[crosshairPlugin]}
+                />
               ) : (
                 <ChartWaiting />
               )}
@@ -483,7 +523,15 @@ export default function DashboardPage() {
           </header>
           <div className="dash-panel__body">
             <div className="dash-chart">
-              {series ? <Bar data={alertsChart} options={timeSeriesOptions()} /> : <ChartWaiting />}
+              {series ? (
+                <Bar
+                  data={alertsChart}
+                  options={timeSeriesOptions({ days: alertDays })}
+                  plugins={[crosshairPlugin]}
+                />
+              ) : (
+                <ChartWaiting />
+              )}
             </div>
           </div>
         </section>

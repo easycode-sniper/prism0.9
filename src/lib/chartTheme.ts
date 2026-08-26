@@ -1,4 +1,4 @@
-import { Chart as ChartJS } from "chart.js";
+import { Chart as ChartJS, type Plugin } from "chart.js";
 
 /**
  * Chart.js paints to a canvas, so it cannot read the CSS custom properties
@@ -29,7 +29,27 @@ export function installChartDefaults() {
   ChartJS.defaults.color = CHART_COLORS.dim;
   // Long chart animations are the kind of motion that reads as lag on a
   // dashboard someone keeps open all shift.
-  ChartJS.defaults.animation = { duration: 220, easing: "easeOutQuart" };
+  //
+  // Set KEY BY KEY, never `defaults.animation = {...}`. Chart.js resolves
+  // every per-property animation through
+  //
+  //     const animationOptions = Object.keys(defaults.animation);
+  //
+  // and copies only those keys out of each entry in `defaults.animations`.
+  // The stock object carries delay/duration/easing/fn/from/loop/to/TYPE;
+  // replacing it with a two-key literal drops `type`, so the built-in
+  // `colors` entry loses its `type: "color"` and Chart.js falls back to
+  // `interpolators[typeof from]` — `interpolators["string"]`, which does
+  // not exist. Every colour animation then throws "this._fn is not a
+  // function" out of the shared rAF loop, and any chart that had not
+  // finished its first frame is left blank on a black panel.
+  // Typed `false | AnimationSpec`: a `false` here would mean animation had
+  // been switched off outright, which is not ours to undo.
+  const animation = ChartJS.defaults.animation;
+  if (animation) {
+    animation.duration = 220;
+    animation.easing = "easeOutQuart";
+  }
 }
 
 /**
@@ -99,8 +119,15 @@ export function timeSeriesOptions(opts?: {
   unit?: string;
   /** Y axis starts at zero unless a series never approaches it. */
   beginAtZero?: boolean;
+  /**
+   * The ISO days behind the points, parallel to the labels. The axis is
+   * abbreviated to fit ("26 Aug"); given these, the tooltip can name the
+   * day in full instead of repeating that abbreviation back.
+   */
+  days?: string[];
 }) {
   const unit = opts?.unit ?? "";
+  const days = opts?.days;
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -125,8 +152,27 @@ export function timeSeriesOptions(opts?: {
         ...doughnutOptions.plugins.tooltip,
         displayColors: false,
         callbacks: {
+          title: (items: { dataIndex: number; label: string }[]) => {
+            const iso = days?.[items[0]?.dataIndex ?? -1];
+            if (!iso) return items[0]?.label ?? "";
+            // Noon UTC, and formatted in UTC, so the day cannot slip a
+            // date either side of midnight — these are calendar days from
+            // the RPC, already bucketed to the Algiers operations day.
+            return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
+              weekday: "short",
+              day: "numeric",
+              month: "long",
+              timeZone: "UTC",
+            });
+          },
+          // A null is a day the series has nothing for — no fill logged,
+          // so no consumption. Saying so is the point of plotting it as a
+          // break rather than a zero; the tooltip has to agree with the
+          // line, or hovering quietly reinstates the zero.
           label: (ctx: { parsed: { y: number | null } }) =>
-            `${(ctx.parsed.y ?? 0).toLocaleString("en-GB")}${unit}`,
+            ctx.parsed.y == null
+              ? "no fill logged"
+              : `${ctx.parsed.y.toLocaleString("en-GB")}${unit}`,
         },
       },
     },
@@ -167,6 +213,104 @@ export const LINE_SERIES = {
   fill: false,
   tension: 0.3,
 } as const;
+
+/**
+ * A vertical hairline through the hovered day, drawn on the time series.
+ *
+ * `interaction.mode` is "index", so hovering anywhere in a column already
+ * reads that whole day — but with nothing drawn, there is no sign of
+ * which column the tooltip is speaking for. The rule is the missing half
+ * of that gesture.
+ *
+ * Achromatic cream, because a guide the cursor drags around is chrome,
+ * not a vehicle state. It is drawn BEFORE the datasets so a bar sits on
+ * top of it rather than being cut in two; under the area chart's wash
+ * (0.16 alpha at its densest) it still reads through.
+ *
+ * Passed per chart via react-chartjs-2's `plugins` prop rather than
+ * registered globally: the doughnut has active elements too, and would
+ * otherwise get a vertical line ruled across it.
+ */
+export const crosshairPlugin: Plugin<"line" | "bar"> = {
+  id: "prismCrosshair",
+  beforeDatasetsDraw(chart) {
+    const active = chart.getActiveElements();
+    if (active.length === 0) return;
+
+    const { x } = active[0].element;
+    const { top, bottom } = chart.chartArea;
+    const ctx = chart.ctx;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255, 252, 225, 0.18)";
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+
+/**
+ * The count in the middle of the status doughnut: the fleet total at
+ * rest, the hovered slice while the cursor is on one.
+ *
+ * The 62% cutout leaves a hole the size of a readout, and a doughnut
+ * whose legend sits below is otherwise a shape you have to trace back to
+ * a label to read. Hovering a slice puts that slice's own hue on the
+ * number, which is the taxonomy doing its job — green really is the
+ * count of moving trucks — and never spends a hue on anything else.
+ */
+export const doughnutCentrePlugin: Plugin<"doughnut"> = {
+  id: "prismDoughnutCentre",
+  afterDatasetsDraw(chart) {
+    const dataset = chart.data.datasets[0];
+    if (!dataset) return;
+
+    const values = (dataset.data as (number | null)[]).map((n) => Number(n) || 0);
+    const total = values.reduce((sum, n) => sum + n, 0);
+    if (total === 0) return;
+
+    // The arc's own centre, not the chart area's: the legend below is
+    // laid out inside chartArea, so its midpoint sits low of the ring.
+    const arc = chart.getDatasetMeta(0).data[0] as { x?: number; y?: number } | undefined;
+    if (arc?.x == null || arc?.y == null) return;
+
+    const active = chart.getActiveElements();
+    const hovered = active.length > 0 ? active[0].index : -1;
+    const value = hovered >= 0 ? values[hovered] : total;
+
+    const palette = dataset.backgroundColor;
+    const sliceColour =
+      hovered >= 0 && Array.isArray(palette) ? String(palette[hovered] ?? TEXT) : TEXT;
+    // The hovered slice lends the readout its hue — but "offline" is
+    // painted in the no-data grey precisely because it is the absence of
+    // a state, and a number in --line on --panel is barely legible. A
+    // slice with no hue to lend gets the chrome cream instead.
+    const colour = sliceColour === CHART_COLORS.empty ? TEXT : sliceColour;
+    const caption =
+      hovered >= 0
+        ? `${String(chart.data.labels?.[hovered] ?? "")} · ${Math.round((value / total) * 100)}%`
+        : "vehicles";
+
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.textAlign = "center";
+
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = colour;
+    ctx.font = "600 26px 'IBM Plex Mono', ui-monospace, monospace";
+    ctx.fillText(String(value), arc.x, arc.y + 4);
+
+    ctx.textBaseline = "top";
+    ctx.fillStyle = CHART_COLORS.dim;
+    ctx.font = "11px 'IBM Plex Sans', system-ui, sans-serif";
+    ctx.fillText(caption, arc.x, arc.y + 11);
+
+    ctx.restore();
+  },
+};
 
 /** The vertical wash under the headline series. Chart.js needs a canvas
  *  context to build a gradient, so this is a function rather than a

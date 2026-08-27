@@ -70,5 +70,16 @@ export function playAlertTone(kind: string) {
       beep(540, 200, 0);
       beep(380, 240, 0.16);
       break;
+    case "station_stop":
+      // Same silence hq_arrival used to have: the kind shipped without a
+      // case here, so a truck stopped at a station known to take money
+      // from drivers arrived in the feed without a sound. Low and
+      // repeated — it shares off_route's urgency but not its pitch, so
+      // "he is off the road" and "he is at that station" don't sound
+      // like the same alarm.
+      beep(300, 170, 0);
+      beep(300, 170, 0.22);
+      beep(300, 240, 0.44);
+      break;
   }
 }

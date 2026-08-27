@@ -1790,8 +1790,15 @@ hr {
    simply stack. Each list keeps a bounded height — 101 trucks and 125
    sites have to scroll somewhere — and the body becomes the one scroll
    that walks you from trucks to destination, with the action bar
-   pinned under it the whole way. */
-@media (max-height: 840px) {
+   pinned under it the whole way.
+
+   940px, not 840px. At 841 this tier used to drop out, .psection--grow
+   reverted to its 268px minimum, and two of those plus gaps and padding
+   forced 580px into a 503px body — so a viewport ONE PIXEL TALLER
+   showed four trucks instead of two and overflowed by 77px. That band,
+   841 to 924, is a maximised window on a 1080p monitor, which is not a
+   corner case. The tier now covers it. */
+@media (max-height: 940px) {
   .dispatch-panel__head { padding: 10px 12px 8px; }
   .dispatch-sub { display: none; }
   .dispatch-panel__body { padding: 10px 12px; gap: 12px; }
@@ -1862,7 +1869,18 @@ hr {
   .site-picker { max-height: clamp(96px, 17.5vh, 170px); }
 
   .dispatch-panel .psection__head { margin-bottom: 3px; }
-  .dispatch-panel .psection .field { padding: 4px 9px; font-size: 0.75rem; line-height: 1.3; }
+  .dispatch-panel .psection .field { padding: 3px 9px; font-size: 0.75rem; line-height: 1.3; }
+
+  /* The truck rows were trimmed above and the site options were not, so
+     a 59px option sat inside the same clamp() box as a 39px truck row:
+     with the scroll padding and the 22px fade, ONE destination of 125
+     was readable at 617px, at every height in this tier. Trimmed to
+     match, which is what makes "see the trucks and the sites at the
+     same time" true rather than nominal. */
+  .dispatch-panel .site-option { padding: 5px 10px; gap: 8px; }
+  .dispatch-panel .site-option__name { font-size: 0.74rem; line-height: 1.25; }
+  .dispatch-panel .site-option__client { font-size: 0.66rem; line-height: 1.25; }
+  .dispatch-panel .site-picker__scroll { padding-bottom: 8px; }
 
   /* The status filter is the row's worth of height that buys a row of
      trucks. Search still narrows the list, and the four states it drops
@@ -2140,12 +2158,20 @@ hr {
 /* Three actions and a manual-entry toggle in a sidebar this narrow will
    not always fit on one line — wrapping beats a row that overflows or
    squeezes its labels into ellipses. */
+/* 5px, not 6px, and the single pixel is the whole point. At 1366 — the
+   target laptop — the panel is clamp(300px, 26vw, 384px) = 355.16px,
+   which after borders and padding leaves 306.16px of action row for
+   children that need 306.64px. Short by 0.48px, so the manual-entry
+   icon wrapped onto its own line and EVERY run card was 32px taller:
+   with twelve runs that is 384px of extra scrolling in a 417px window.
+   Three 5px gaps buy back 3px and clear it. Wrapping still happens
+   below ~1280px, where it is genuinely needed. */
 .run-card__actions {
   margin-top: 8px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 
 .run-card__actions .btn-sm {

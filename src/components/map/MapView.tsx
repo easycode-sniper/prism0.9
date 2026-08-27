@@ -545,7 +545,16 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
         icon: buildStationIcon(!!s.truckHere, s.blacklisted),
       });
 
-      const canToggle = !!toggleBlacklistRef.current;
+      // Read from the PROP, not the ref, and the prop is in this
+      // effect's dependency array. Read from the ref it was baked into
+      // the popup HTML at whatever value the ref held when the markers
+      // were last built — and on this page `admin` starts false while
+      // canBlacklistStations() resolves, so every popup was built with
+      // no button and stayed that way until the next fleet poll changed
+      // stationMarkers' identity, up to a minute later. Same shape as
+      // the drift this file already warns about: a control that exists
+      // in the code and not on the screen.
+      const canToggle = !!onToggleStationBlacklist;
       const label = s.blacklisted ? "Remove from blacklist" : "Blacklist this station";
       marker.bindPopup(
         `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text); min-width: 190px;">
@@ -553,10 +562,19 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           ${s.blacklisted ? `<div style="margin-top:4px;color:var(--red);font-size:11px;">Blacklisted · watched to ${watch}m</div>` : `<div style="margin-top:4px;color:var(--text-dim);font-size:11px;">Watched to ${watch}m</div>`}
           ${s.blacklisted && s.blacklistNote ? `<div style="margin-top:3px;color:var(--text-dim);font-size:11px;">${escapeHtml(s.blacklistNote)}</div>` : ""}
           ${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${escapeHtml(s.truckHere)} fueling</div>` : ""}
-          ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:9px 10px;min-height:34px;font:inherit;font-size:12px;cursor:pointer;border-radius:6px;border:1px solid ${s.blacklisted ? "var(--line)" : "var(--red)"};background:transparent;color:${s.blacklisted ? "var(--text-dim)" : "var(--red)"};">${label}</button>` : ""}
+          ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:9px 10px;min-height:34px;font:inherit;font-size:12px;cursor:pointer;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--text-dim);">${label}</button>` : ""}
         </div>`
       );
 
+      // The button above is achromatic in BOTH states, matching
+      // .btn-sm.danger (the Stop button on a run card), which is
+      // --line/--text-dim at rest and only turns red on hover. It used
+      // to be red at rest when the station was not yet blacklisted:
+      // that spent a taxonomy hue — --red means off-route or speeding —
+      // on a control, and its 6px radius contradicted the outlined pill
+      // at --r-pill. The station's own state is already carried by the
+      // marker, the ring and the line above it.
+      //
       // Leaflet popups are HTML strings, not React, so the button is
       // wired on open rather than with onClick. Bound per open and torn
       // down with the popup, so it cannot accumulate listeners.
@@ -577,7 +595,11 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
 
       stationLayer.addLayer(marker);
     }
-  }, [stationMarkers, showStations]);
+    // onToggleStationBlacklist belongs here because whether the button
+    // is RENDERED depends on it. The ref above still exists so the click
+    // handler always calls the current one, but the ref alone cannot
+    // rebuild markup that was already written.
+  }, [stationMarkers, showStations, onToggleStationBlacklist]);
 
   // Zone polygons/circles
   useEffect(() => {

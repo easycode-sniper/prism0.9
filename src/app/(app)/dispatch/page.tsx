@@ -265,6 +265,14 @@ export default function DispatchPage() {
   async function handleStop(dispatchId: string) {
     setError(null);
     if (routeRunId === dispatchId) setRouteRunId(null);
+    // Stopping a run IS the dispatcher picking a side, so stop
+    // auto-following. Since the hide below is optimistic, stopping the
+    // LAST run takes dispatches.length to 0 in the same frame, and the
+    // auto-follow effect would flip the panel to New run underneath the
+    // cursor — putting a truck checkbox exactly where the Stop button
+    // was a moment earlier. Pinning leaves them on the now-empty list
+    // to switch themselves.
+    setModePinned(true);
     optimistic.hideDispatch(dispatchId);
 
     const result = await stopDispatch(dispatchId);

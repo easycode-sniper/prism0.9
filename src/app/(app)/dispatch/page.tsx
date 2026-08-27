@@ -344,6 +344,22 @@ export default function DispatchPage() {
     };
   }, [dispatches, routeRunId]);
 
+  // Both MapView call sites below (sidebar collapsed, sidebar open) take
+  // exactly the same props. Spread from here rather than written twice:
+  // they HAD drifted — onToggleStationBlacklist was added to the
+  // collapsed branch only, which hid the blacklist button in the default
+  // view, where nearly everyone actually is.
+  const mapProps = {
+    truckMarkers: allTruckMarkers,
+    siteMarkers,
+    stationMarkers,
+    zones: geofences,
+    route: routeOverlay,
+    onRouteClear: () => setRouteRunId(null),
+    focusPoint,
+    onToggleStationBlacklist: admin ? handleToggleBlacklist : undefined,
+  };
+
   async function handleToggleRoute(dispatchId: string) {
     if (routeRunId === dispatchId) { setRouteRunId(null); return; }
     setError(null);
@@ -375,16 +391,7 @@ export default function DispatchPage() {
           <ChevronRight size={14} strokeWidth={2.5} />
         </button>
         <div className="dispatch-layout__map">
-          <MapView
-            truckMarkers={allTruckMarkers}
-            siteMarkers={siteMarkers}
-            stationMarkers={stationMarkers}
-            zones={geofences}
-            route={routeOverlay}
-            onRouteClear={() => setRouteRunId(null)}
-            focusPoint={focusPoint}
-            onToggleStationBlacklist={admin ? handleToggleBlacklist : undefined}
-          />
+          <MapView {...mapProps} />
         </div>
       </div>
     );
@@ -672,15 +679,7 @@ export default function DispatchPage() {
 
       {/* Map */}
       <div className="dispatch-layout__map">
-        <MapView
-          truckMarkers={allTruckMarkers}
-          siteMarkers={siteMarkers}
-          stationMarkers={stationMarkers}
-          zones={geofences}
-          route={routeOverlay}
-          onRouteClear={() => setRouteRunId(null)}
-          focusPoint={focusPoint}
-        />
+        <MapView {...mapProps} />
       </div>
     </div>
   );

@@ -553,7 +553,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           ${s.blacklisted ? `<div style="margin-top:4px;color:var(--red);font-size:11px;">Blacklisted · watched to ${watch}m</div>` : `<div style="margin-top:4px;color:var(--text-dim);font-size:11px;">Watched to ${watch}m</div>`}
           ${s.blacklisted && s.blacklistNote ? `<div style="margin-top:3px;color:var(--text-dim);font-size:11px;">${escapeHtml(s.blacklistNote)}</div>` : ""}
           ${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${escapeHtml(s.truckHere)} fueling</div>` : ""}
-          ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:5px 8px;font:inherit;font-size:11px;cursor:pointer;border-radius:6px;border:1px solid ${s.blacklisted ? "var(--line)" : "var(--red)"};background:transparent;color:${s.blacklisted ? "var(--text-dim)" : "var(--red)"};">${label}</button>` : ""}
+          ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:9px 10px;min-height:34px;font:inherit;font-size:12px;cursor:pointer;border-radius:6px;border:1px solid ${s.blacklisted ? "var(--line)" : "var(--red)"};background:transparent;color:${s.blacklisted ? "var(--text-dim)" : "var(--red)"};">${label}</button>` : ""}
         </div>`
       );
 

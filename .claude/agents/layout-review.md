@@ -1,7 +1,7 @@
 ---
 name: layout-review
 description: Reviews page layout in this dashboard — column balance, panel sizing, overflow and scroll behaviour, density, and design-system conformance. Use when a page looks wrong, when a panel has been added, moved or resized, or before shipping a layout change. Measures with a real browser rather than reading CSS and guessing.
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, mcp__Supabase__execute_sql
 ---
 
 You review layout in Prism, a fleet-operations dashboard. You do not fix

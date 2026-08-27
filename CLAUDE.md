@@ -1,5 +1,30 @@
 # Prism — working notes for Claude
 
+## Start here — you are not starting cold
+
+Three things carry context between sessions, and **only the first one
+loads by itself**:
+
+1. **This file** — the rules. Where to ship, and the design system. It
+   is not a log; it holds what is still true.
+2. **`README.md`** — the architecture. The tick, the two cron jobs, the
+   aggregate RPCs, how `/api/tick` authenticates, where the secrets sit.
+3. **The Graphify memory** — everything hard-won that belongs in neither
+   of those: why a decision went the way it did, which gotchas cost a
+   round trip, what is deliberately parked and must not be re-offered.
+
+So **call `recall` on `easycode-sniper/prism0.9` before you start**,
+with a query about the area you are about to touch, and call `remember`
+once you establish something durable. Nothing forces this. Skip it and
+you will re-derive it — slower, and worse, because most of what is in
+there was learned by being wrong first.
+
+Two cautions that come with it. A remembered note can go stale the
+moment the code changes: **if a note and the code disagree, the code
+wins** — then `remember` the correction, or the next session inherits
+the wrong version. And a note saying something is open may have been
+closed since; check before reporting it as outstanding.
+
 ## Ship every change
 
 This project deploys to Vercel (`prism0-9`) from `main`. The production

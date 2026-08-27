@@ -179,6 +179,110 @@ export function timeSeriesOptions(opts?: {
   };
 }
 
+/**
+ * Two series of different magnitudes on one time axis — what was paid
+ * per day (hundreds of thousands of dinars) against what a kilometre
+ * cost (about fifteen). On one axis the rate is a flat wire along the
+ * floor, so it gets its own scale on the right.
+ *
+ * Still achromatic, and that is the harder half of this chart: two
+ * series usually get told apart by hue, and every hue here is owned by a
+ * vehicle state. They are told apart by SHAPE instead — a translucent
+ * bar wash for the money, a solid stroke with points for the rate — plus
+ * a legend, which the single-series charts do not need and this one
+ * does.
+ *
+ * The right axis draws no grid. Two grids at different intervals
+ * cross-hatch the panel, and the reader cannot tell which line belongs
+ * to which scale anyway; the ticks and the legend say it instead.
+ */
+export function dualAxisTimeSeriesOptions(opts: {
+  /** Tooltip suffix per dataset, in dataset order. */
+  units: [string, string];
+  /** ISO days behind the points, for the full-date tooltip title. */
+  days?: string[];
+  /** Compact the left axis ticks ("386k"). A six-digit dinar figure
+   *  eats a third of a 954px panel in axis labels alone. */
+  compactLeft?: boolean;
+  /** The right axis carries a rate that lives in a narrow band well
+   *  above zero, so it is not zero-based by default — anchoring it would
+   *  flatten the only movement it has. */
+  rightBeginAtZero?: boolean;
+}) {
+  const base = timeSeriesOptions({ days: opts.days });
+  const compact = (v: number) =>
+    Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v);
+
+  return {
+    ...base,
+    scales: {
+      x: base.scales.x,
+      y: {
+        ...base.scales.y,
+        position: "left" as const,
+        ticks: {
+          ...base.scales.y.ticks,
+          callback: (v: string | number) =>
+            opts.compactLeft ? compact(Number(v)) : Number(v).toLocaleString("en-GB"),
+        },
+      },
+      y1: {
+        position: "right" as const,
+        beginAtZero: opts.rightBeginAtZero ?? false,
+        grid: { display: false },
+        border: { display: false },
+        ticks: { color: CHART_COLORS.dim, maxTicksLimit: 5, padding: 8, font: { size: 10 } },
+      },
+    },
+    plugins: {
+      ...base.plugins,
+      legend: {
+        display: true,
+        position: "top" as const,
+        align: "end" as const,
+        labels: {
+          color: CHART_COLORS.dim,
+          usePointStyle: true,
+          pointStyle: "circle" as const,
+          boxWidth: 7,
+          boxHeight: 7,
+          padding: 12,
+          font: { size: 10 },
+          // Chart.js orders legend items by DRAW order, and the line has
+          // to be drawn last to sit on top of the bars — which would
+          // otherwise list the secondary series first. Sorted back to
+          // authoring order so the legend reads in the order the panel
+          // describes them.
+          // datasetIndex is optional on a LegendItem — a legend entry
+          // need not come from a dataset at all — so an absent one sorts
+          // last rather than turning the comparison into NaN.
+          sort: (a: { datasetIndex?: number }, b: { datasetIndex?: number }) =>
+            (a.datasetIndex ?? Number.MAX_SAFE_INTEGER) - (b.datasetIndex ?? Number.MAX_SAFE_INTEGER),
+        },
+      },
+      tooltip: {
+        ...base.plugins.tooltip,
+        // displayColors returns: with two series in the box, the reader
+        // needs to know which row is which, and the label alone does not
+        // carry it once the names are this close in meaning.
+        displayColors: true,
+        usePointStyle: true,
+        boxWidth: 7,
+        boxHeight: 7,
+        boxPadding: 5,
+        callbacks: {
+          ...base.plugins.tooltip.callbacks,
+          label: (ctx: { parsed: { y: number | null }; datasetIndex: number; dataset: { label?: string } }) => {
+            const name = ctx.dataset.label ?? "";
+            if (ctx.parsed.y == null) return `${name}: no priced fill`;
+            return `${name}: ${ctx.parsed.y.toLocaleString("en-GB")}${opts.units[ctx.datasetIndex] ?? ""}`;
+          },
+        },
+      },
+    },
+  };
+}
+
 /** The filled area line — the dashboard's headline series. */
 export const AREA_SERIES = {
   borderColor: TEXT,

@@ -116,6 +116,16 @@ export interface DashboardSeries {
    *  had no distance logged against it. A day with no such fill has no
    *  consumption to report and comes back as 0. */
   consumption: DayPoint[];
+  /** Dinars paid at the pump per day, every fill — the same population
+   *  as the "Amount filled" headline tile, which the 30-day series sums
+   *  to exactly. */
+  amountDa: DayPoint[];
+  /** The montant kilométrique: dinars per kilometre, on fills that
+   *  logged a distance. Deliberately a NARROWER population than amountDa
+   *  above — a fill with no distance is money that bought no measured
+   *  kilometres, and counting it would inflate the rate. Same subset as
+   *  consumption, so the two rates describe the same fills. */
+  daPerKm: DayPoint[];
   /** How many days of history actually exist behind the longest series,
    *  so the page can show a range control that does not promise more
    *  than it has. */
@@ -137,8 +147,12 @@ export async function getDashboardSeries(
   if (error) return { error: error.message };
 
   const rows = (data ?? []) as { day: string; km: string | number; litres: string | number;
-                                 consumption: string | number | null; alerts: string | number }[];
-  const point = (r: typeof rows[number], field: "km" | "litres" | "consumption" | "alerts") => ({
+                                 consumption: string | number | null; alerts: string | number;
+                                 amount_da: string | number; da_per_km: string | number | null }[];
+  const point = (
+    r: typeof rows[number],
+    field: "km" | "litres" | "consumption" | "alerts" | "amount_da" | "da_per_km"
+  ) => ({
     day: r.day,
     // Null is carried through rather than floored to zero — see DayPoint.
     value: r[field] == null ? null : Number(r[field]),
@@ -150,6 +164,8 @@ export async function getDashboardSeries(
       alerts: rows.map((r) => point(r, "alerts")),
       litres: rows.map((r) => point(r, "litres")),
       consumption: rows.map((r) => point(r, "consumption")),
+      amountDa: rows.map((r) => point(r, "amount_da")),
+      daPerKm: rows.map((r) => point(r, "da_per_km")),
       // Days that actually carry a distance reading, so the panel can say
       // how much history is really behind a 30-day frame.
       daysAvailable: rows.filter((r) => Number(r.km ?? 0) > 0).length,

@@ -5,16 +5,21 @@ import Link from "next/link";
 import {
   Chart as ChartJS,
   ArcElement,
+  BarController,
   BarElement,
   CategoryScale,
   Filler,
   Legend,
+  LineController,
   LineElement,
   LinearScale,
   PointElement,
   Tooltip,
 } from "chart.js";
-import { Bar, Doughnut, Line } from "react-chartjs-2";
+import type { ChartData } from "chart.js";
+// <Chart>, not <Bar>, for the mixed cost chart: <Bar> is typed to "bar"
+// datasets only, and that one carries a line dataset on a second axis.
+import { Bar, Chart, Doughnut, Line } from "react-chartjs-2";
 import { ArrowRight, Gauge, MapPinOff, Route, ShieldAlert } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import {
@@ -35,6 +40,7 @@ import {
   doughnutOptions,
   installChartDefaults,
   timeSeriesOptions,
+  dualAxisTimeSeriesOptions,
   AREA_SERIES,
   BAR_SERIES,
   LINE_SERIES,
@@ -47,7 +53,26 @@ import { formatDuration } from "@/lib/geometry";
 import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
 import { SPEED_LIMIT_KMH } from "@/lib/constants";
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip);
+// BarController and LineController are registered EXPLICITLY, not left to
+// react-chartjs-2's per-component auto-registration. The cost chart is a
+// mixed dataset — bars on one axis, a line on the other — rendered
+// through <Bar>, so it needs the line controller too; that arrives for
+// free today only because this page also renders a <Line> elsewhere.
+// Naming both here means dropping that other chart cannot silently break
+// this one.
+ChartJS.register(
+  ArcElement,
+  BarController,
+  BarElement,
+  CategoryScale,
+  Filler,
+  Legend,
+  LineController,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Tooltip
+);
 installChartDefaults();
 
 const RANGES = [7, 14, 30] as const;
@@ -375,6 +400,7 @@ export default function DashboardPage() {
   const alertDays = (series?.alerts ?? []).map((p) => p.day);
   const litreDays = (series?.litres ?? []).map((p) => p.day);
   const consumptionDays = (series?.consumption ?? []).map((p) => p.day);
+  const costDays = (series?.amountDa ?? []).map((p) => p.day);
 
   const kmChart = {
     labels,
@@ -404,6 +430,36 @@ export default function DashboardPage() {
       // A day with no fill yet has no consumption to plot. Passed through
       // as null so the line breaks there instead of diving to the origin.
       { data: (series?.consumption ?? []).map((p) => (p.value == null ? null : Number(p.value.toFixed(2)))), ...LINE_SERIES },
+    ],
+  };
+
+  // What the day cost, and what a kilometre of it cost. Two magnitudes
+  // that cannot share a scale — hundreds of thousands of dinars against
+  // about fifteen — so the rate rides the right-hand axis. Bars for the
+  // spend and a line for the rate, both cream: money is a quantity, not
+  // a vehicle state, and shape is what tells them apart here.
+  const costChart: ChartData<"bar" | "line", (number | null)[], string> = {
+    labels: (series?.amountDa ?? []).map((p) => axisLabel(p.day)),
+    datasets: [
+      {
+        label: "Amount filled",
+        data: (series?.amountDa ?? []).map((p) => (p.value == null ? null : Math.round(p.value))),
+        type: "bar" as const,
+        yAxisID: "y",
+        order: 2,
+        ...BAR_SERIES,
+      },
+      {
+        label: "Cost per km",
+        // Null on a day with no priced fill, so the line breaks rather
+        // than dropping to a floor that would read as a free day.
+        data: (series?.daPerKm ?? []).map((p) => (p.value == null ? null : Number(p.value.toFixed(2)))),
+        type: "line" as const,
+        yAxisID: "y1",
+        // Drawn over the bars, not through them.
+        order: 1,
+        ...LINE_SERIES,
+      },
     ],
   };
 
@@ -713,6 +769,44 @@ export default function DashboardPage() {
                   ]}
                 />
               )}
+            </div>
+          </section>
+
+          {/* Last in the main column on purpose. The rail runs about
+              250px longer than the series and tables above, so the
+              bottom-left of the page was an empty band the width of the
+              whole main column. This is the panel that reads best at
+              that width — two series, a legend and two axes need room —
+              and it closes the money story the KPI strip opens: the
+              strip says what the month cost, this says which days cost
+              it and what a kilometre went for while they did. */}
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">What fuel cost per day</div>
+                <div className="dash-panel__sub">
+                  Bars are what was paid at the pump, every fill. The line is the montant
+                  kilométrique — dinars per kilometre, on the fills that logged a distance.
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              <div className="dash-chart dash-chart--tall">
+                {series ? (
+                  <Chart<"bar" | "line", (number | null)[], string>
+                    type="bar"
+                    data={costChart}
+                    options={dualAxisTimeSeriesOptions({
+                      units: [" DA", " DA/km"],
+                      days: costDays,
+                      compactLeft: true,
+                    })}
+                    plugins={[crosshairPlugin]}
+                  />
+                ) : (
+                  <ChartWaiting />
+                )}
+              </div>
             </div>
           </section>
         </main>

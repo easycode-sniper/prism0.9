@@ -205,6 +205,7 @@ editor or the CLI. There are 36; the ones worth knowing about:
 | `034` | `prune_notifications()` — 40-day retention, nightly |
 | `035` | Station blacklisting: `blacklisted`, `radius_meters`, `at_blacklisted_station_id` |
 | `036` | Closes `app_config` to an allow-list |
+| `037` | Adds `amount_da` and `da_per_km` to `dashboard_daily_series` |
 
 When adding a notification kind, update the `notifications_kind_check`
 constraint in the same migration. The insert is fire-and-forget: a rejected row
@@ -247,7 +248,7 @@ something other than an async function.
 | Route | Purpose |
 |---|---|
 | `/login` | Email/password sign-in over a live map background |
-| `/dashboard` | Fuel-sheet totals across the top; a "what has been happening" column (distance, litres, consumption and alerts per day, plus fuel variance by truck and by driver) beside a live rail (fleet status, speeding leaderboard, drivers on duty, active runs, operational signals) |
+| `/dashboard` | Fuel-sheet totals across the top; a "what has been happening" column (distance, litres, consumption and alerts per day, fuel variance by truck and by driver, and daily spend against cost per km) beside a live rail (fleet status, speeding leaderboard, drivers on duty, active runs, operational signals) |
 | `/dispatch` | Assign trucks to a site, watch the live map, stop runs, blacklist a station, manual coordinate fallback |
 | `/monitoring` | Searchable/filterable table of every truck, dispatched or not |
 | `/history` | Completed and stopped runs with duration and violation flags; CSV export and a printable daily summary |

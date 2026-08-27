@@ -345,8 +345,10 @@ English only, matching the original app's scope.
 - **`fleet_trucks.category` has no UI.** A vehicle can only be flagged `staff`
   by hand in SQL, which is why a staff car raised parc arrivals for weeks
   before anyone noticed.
-- **Dispatching a truck that is already inside its destination geofence**
-  auto-completes the run on the next tick, which reads as a failed dispatch.
+- **An already-open tab does not refresh itself.** The fuel sheet syncs
+  every 15 minutes, but `/dashboard` is a client component that fetches on
+  mount and never re-polls, so end to end is up to 15 minutes *plus a page
+  reload*. The live pages are unaffected — `FleetProvider` is on realtime.
 - **No test framework.** Two runnable check scripts exist —
   `scripts/check-fuel-dates.mts` and `scripts/check-optimistic-overlay.mts`
   (`node --experimental-strip-types scripts/<name>.mts`) — and everything

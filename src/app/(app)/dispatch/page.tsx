@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { createBatchDispatch, stopDispatch, ensureDispatchRoute } from "@/lib/supabase/actions";
@@ -15,9 +15,13 @@ import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { Radar, Check, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, ArrowRight, MapPin, Square, Route as RouteIcon } from "lucide-react";
 import { formatDateTime, formatAge } from "@/lib/format";
+import { setStationBlacklisted, canBlacklistStations } from "@/lib/supabase/stations";
+import { stationWatchRadius } from "@/lib/constants";
 
-// A truck within this distance of a station is treated as "at the pump".
-const STATION_PROXIMITY_METERS = 150;
+// "At the pump" now comes from the station's OWN watch radius rather
+// than a flat 150m held here, so the ring drawn on the map, the alert
+// the tick raises and this indicator all agree. It is stricter: 50m for
+// an ordinary station, 150m for a blacklisted one.
 
 // Shared by the live-fleet list and the truck picker so a truck reads
 // the same colour in both — they used to carry their own copies.
@@ -89,7 +93,29 @@ export default function DispatchPage() {
   );
   const [truckFocus, setTruckFocus] = useState<[number, number] | null>(null);
   const focusPoint = truckFocus ?? urlFocusPoint;
-  const { fleetData, dispatches, geofences, gasStations, sites, refreshDispatches } = useFleet();
+  const { fleetData, dispatches, geofences, gasStations, sites, refreshDispatches, refreshGasStations } = useFleet();
+
+  // Blacklisting is admin-only. This hides the control; the server
+  // action re-checks and the RLS policy on gas_stations refuses the
+  // write regardless, so this is convenience, not the boundary.
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    canBlacklistStations().then((v) => { if (!cancelled) setAdmin(v); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleToggleBlacklist = useCallback(
+    async (stationId: string, next: boolean) => {
+      const { error } = await setStationBlacklisted(stationId, next);
+      if (error) {
+        console.error("[dispatch] blacklist toggle failed:", error);
+        return;
+      }
+      await refreshGasStations();
+    },
+    [refreshGasStations]
+  );
 
   // One search and one filter now drive the single truck list. The panel
   // previously had two of each, over the same 101 trucks.
@@ -280,10 +306,20 @@ export default function DispatchPage() {
   const stationMarkers = useMemo(
     () =>
       gasStations.map((s) => {
+        const watch = stationWatchRadius(s.radiusMeters, s.blacklisted);
         const truckHere = allTruckMarkers.find(
-          (tr) => haversineMeters(tr.lat, tr.lng, s.lat, s.lng) <= STATION_PROXIMITY_METERS
+          (tr) => haversineMeters(tr.lat, tr.lng, s.lat, s.lng) <= watch
         );
-        return { lat: s.lat, lng: s.lng, name: s.name, truckHere: truckHere?.label ?? null };
+        return {
+          id: s.id,
+          lat: s.lat,
+          lng: s.lng,
+          name: s.name,
+          radiusMeters: s.radiusMeters,
+          blacklisted: s.blacklisted,
+          blacklistNote: s.blacklistNote,
+          truckHere: truckHere?.label ?? null,
+        };
       }),
     [gasStations, allTruckMarkers]
   );
@@ -347,6 +383,7 @@ export default function DispatchPage() {
             route={routeOverlay}
             onRouteClear={() => setRouteRunId(null)}
             focusPoint={focusPoint}
+            onToggleStationBlacklist={admin ? handleToggleBlacklist : undefined}
           />
         </div>
       </div>

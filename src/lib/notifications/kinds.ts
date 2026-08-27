@@ -1,4 +1,4 @@
-import { TriangleAlert, Gauge, Flag, Timer, Factory, ParkingCircle } from "lucide-react";
+import { TriangleAlert, Gauge, Flag, Timer, Factory, ParkingCircle, Ban } from "lucide-react";
 
 // One description of what each alert kind is, used by the feed, the
 // toast and the chart. These had drifted apart: the notifications page
@@ -12,16 +12,19 @@ export type NotificationKind =
   | "site_approaching"
   | "site_arrival"
   | "factory_arrival"
-  | "hq_arrival";
+  | "hq_arrival"
+  | "station_stop";
 
 /**
  * Which section of the feed a kind belongs to.
  *
  * Destination-based rather than severity-based, because that is how the
  * work is organised: a truck is either coming back to the parc, going to
- * the factory to load, or out at a client. Route and speed alerts belong
- * to none of those — they can happen anywhere on a run — so they get
- * their own section rather than being forced into one.
+ * the factory to load, or out at a client. Route, speed and
+ * blacklisted-station alerts belong to none of those — they can happen
+ * anywhere — so they share a section. It is labelled "Conduct" rather
+ * than "Route & speed" now that a third kind lives there and the label
+ * would otherwise name two of the three.
  */
 export type NotificationGroup = "parc" | "factory" | "client" | "alerts";
 
@@ -31,7 +34,7 @@ export const GROUP_LABEL: Record<NotificationGroup, string> = {
   parc: "Parc",
   factory: "Factory",
   client: "Client",
-  alerts: "Route & speed",
+  alerts: "Conduct",
 };
 
 interface KindMeta {
@@ -49,6 +52,11 @@ export const KIND_META: Record<NotificationKind, KindMeta> = {
   site_arrival: { icon: Flag, color: "var(--green)", group: "client" },
   factory_arrival: { icon: Factory, color: "var(--pink)", group: "factory" },
   hq_arrival: { icon: ParkingCircle, color: "var(--cyan)", group: "parc" },
+  // Red, not the cyan stations normally wear. Cyan is "a station is
+  // here", which is information; a truck stopped at a station known to
+  // take money from drivers is the same class of thing as off-route and
+  // speeding, and belongs in the same colour and the same group.
+  station_stop: { icon: Ban, color: "var(--red)", group: "alerts" },
 };
 
 /** Unknown kinds are possible — a row written by a newer deploy, read by

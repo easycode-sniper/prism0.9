@@ -8,6 +8,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { Moon, Satellite as SatelliteIcon, MapPin, Tag, Fuel, ArrowRight, X } from "lucide-react";
 import { formatAge } from "@/lib/format";
+import { stationWatchRadius } from "@/lib/constants";
 
 // Marker HTML is assembled as strings, so anything coming out of the
 // database — site names, client names — has to be escaped on the way in.
@@ -63,10 +64,16 @@ export interface SiteMarkerData {
 }
 
 export interface StationMarkerData {
+  id: string;
   lat: number;
   lng: number;
   name: string;
   truckHere?: string | null;
+  /** Forecourt radius. The circle is drawn at the WATCH radius, which is
+   *  wider when the station is blacklisted — see stationWatchRadius. */
+  radiusMeters: number;
+  blacklisted: boolean;
+  blacklistNote?: string | null;
 }
 
 export interface ZoneData {
@@ -112,6 +119,9 @@ interface MapViewProps {
   route?: RouteOverlayData | null;
   onRouteClear?: () => void;
   focusPoint?: [number, number] | null;
+  /** Admins only. Absent for everyone else, which is what hides the
+   *  button — the server action and the RLS policy both re-check. */
+  onToggleStationBlacklist?: (stationId: string, next: boolean) => void;
 }
 
 const SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
@@ -272,9 +282,12 @@ const STATION_CLUSTER_GRADIENT = "radial-gradient(circle at 35% 30%, #6fe3ff, #0
 // disagreed with its own cluster bubble, which has always been cyan.
 // Stations are cyan now, the hue the taxonomy already gives them; amber
 // stays as the exception that means a truck is at the pump right now.
-function buildStationIcon(occupied: boolean): L.DivIcon {
+function buildStationIcon(occupied: boolean, blacklisted = false): L.DivIcon {
+  // Blacklisted wins over occupied: a truck sitting at a station that
+  // takes money from drivers is precisely the case worth seeing in red.
+  const fill = blacklisted ? "#ff2d3f" : occupied ? "#ffb300" : "#00cfff";
   return L.divIcon({
-    html: `<div style="width:18px;height:18px;border-radius:50%;background:${occupied ? "#ffb300" : "#00cfff"};border:2px solid rgba(14,16,15,.9);box-shadow:0 0 0 1px rgba(255,252,225,.5);display:flex;align-items:center;justify-content:center;color:#0e100f;">${SVG_ICONS.fuel}</div>`,
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:${fill};border:2px solid rgba(14,16,15,.9);box-shadow:0 0 0 1px rgba(255,252,225,.5);display:flex;align-items:center;justify-content:center;color:#0e100f;">${SVG_ICONS.fuel}</div>`,
     className: "",
     iconSize: [18, 18],
     iconAnchor: [9, 9],
@@ -390,7 +403,7 @@ function getOrCreateMapCore(): MapCore {
   return core;
 }
 
-export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], route = null, onRouteClear, focusPoint = null }: MapViewProps) {
+export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], route = null, onRouteClear, focusPoint = null, onToggleStationBlacklist }: MapViewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Both route effects key off the dispatch id, not the object, so a
@@ -501,6 +514,9 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     }
   }, [siteMarkers]);
 
+  const toggleBlacklistRef = useRef(onToggleStationBlacklist);
+  toggleBlacklistRef.current = onToggleStationBlacklist;
+
   // Gas station markers — layer stays on the map; toggling just clears
   // vs. repopulates its markers (see getOrCreateMapCore for why).
   useEffect(() => {
@@ -511,12 +527,54 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     if (!showStations) return;
 
     for (const s of stationMarkers) {
-      const marker = L.marker([s.lat, s.lng], { icon: buildStationIcon(!!s.truckHere) });
+      // The watch circle, at the radius the tick actually uses — wider
+      // when blacklisted, so what is drawn is what is enforced rather
+      // than a decorative ring that means something else.
+      const watch = stationWatchRadius(s.radiusMeters, s.blacklisted);
+      stationLayer.addLayer(
+        L.circle([s.lat, s.lng], {
+          radius: watch,
+          color: s.blacklisted ? "#ff2d3f" : "#00cfff",
+          weight: 1,
+          fillOpacity: s.blacklisted ? 0.1 : 0.05,
+          interactive: false,
+        })
+      );
+
+      const marker = L.marker([s.lat, s.lng], {
+        icon: buildStationIcon(!!s.truckHere, s.blacklisted),
+      });
+
+      const canToggle = !!toggleBlacklistRef.current;
+      const label = s.blacklisted ? "Remove from blacklist" : "Blacklist this station";
       marker.bindPopup(
-        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text);">
-          <strong style="color: var(--cyan); display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${s.name}</strong>${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${s.truckHere} fueling</div>` : ""}
+        `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text); min-width: 190px;">
+          <strong style="color: ${s.blacklisted ? "var(--red)" : "var(--cyan)"}; display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${escapeHtml(s.name)}</strong>
+          ${s.blacklisted ? `<div style="margin-top:4px;color:var(--red);font-size:11px;">Blacklisted · watched to ${watch}m</div>` : `<div style="margin-top:4px;color:var(--text-dim);font-size:11px;">Watched to ${watch}m</div>`}
+          ${s.blacklisted && s.blacklistNote ? `<div style="margin-top:3px;color:var(--text-dim);font-size:11px;">${escapeHtml(s.blacklistNote)}</div>` : ""}
+          ${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${escapeHtml(s.truckHere)} fueling</div>` : ""}
+          ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:5px 8px;font:inherit;font-size:11px;cursor:pointer;border-radius:6px;border:1px solid ${s.blacklisted ? "var(--line)" : "var(--red)"};background:transparent;color:${s.blacklisted ? "var(--text-dim)" : "var(--red)"};">${label}</button>` : ""}
         </div>`
       );
+
+      // Leaflet popups are HTML strings, not React, so the button is
+      // wired on open rather than with onClick. Bound per open and torn
+      // down with the popup, so it cannot accumulate listeners.
+      marker.on("popupopen", (e) => {
+        const btn = (e.popup.getElement() as HTMLElement | undefined)?.querySelector<HTMLButtonElement>(
+          "button[data-blacklist-id]"
+        );
+        if (!btn) return;
+        btn.onclick = () => {
+          const id = btn.dataset.blacklistId;
+          if (!id) return;
+          btn.disabled = true;
+          btn.textContent = "Saving…";
+          toggleBlacklistRef.current?.(id, btn.dataset.blacklistNext === "1");
+          marker.closePopup();
+        };
+      });
+
       stationLayer.addLayer(marker);
     }
   }, [stationMarkers, showStations]);

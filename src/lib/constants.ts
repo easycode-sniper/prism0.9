@@ -36,3 +36,34 @@ export const SPEED_LIMIT_KMH = 90;
 // functions. Exporting a const from one fails the BUILD, not the
 // typecheck — tsc and eslint both pass and only `next build` catches it.
 export const NOTIFICATION_FEED_HOURS = 24;
+
+// ── Fuel stations ────────────────────────────────────────────
+//
+// The forecourt radius a station is watched at. 50m was checked against
+// 24h of snapshots before being chosen: at 50m, 29 trucks were caught
+// stopped at 13 of the 51 stations, so it is tight enough to mean "at
+// the pumps" without GPS noise losing real stops.
+export const STATION_RADIUS_METERS = 50;
+
+// A blacklisted station is watched WIDER on purpose. The alert exists so
+// the office can phone the driver before money changes hands, and 50m
+// only catches him once he is already on the forecourt; 150m picks him
+// up on the approach apron and in the queue.
+export const BLACKLIST_WATCH_RADIUS_METERS = 150;
+
+/**
+ * The radius a station is actually watched at.
+ *
+ * DERIVED, never stored: writing the wider radius back into
+ * gas_stations.radius_meters would leave a station stuck at 150m after
+ * it was un-blacklisted. GREATEST means an admin who deliberately set a
+ * wider radius keeps it rather than having it shrunk to 150.
+ *
+ * public.station_watch_radius(radius, blacklisted) in migration 035 is
+ * the same rule in SQL, for querying. If this changes, change that too —
+ * they are kept in step by hand, like chartTheme.ts and globals.css.
+ */
+export function stationWatchRadius(radiusMeters: number | null | undefined, blacklisted: boolean): number {
+  const base = radiusMeters ?? STATION_RADIUS_METERS;
+  return blacklisted ? Math.max(base, BLACKLIST_WATCH_RADIUS_METERS) : base;
+}

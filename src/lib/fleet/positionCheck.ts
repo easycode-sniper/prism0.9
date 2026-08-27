@@ -11,7 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence } from "@/lib/geometry";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
-import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH } from "@/lib/constants";
+import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH, stationWatchRadius } from "@/lib/constants";
 
 export interface PositionCheckResult {
   truckId: string;
@@ -520,6 +520,169 @@ export async function runFleetSpeedingCheck(
   });
 }
 
+/**
+ * One entry per truck id, keeping the freshest fix.
+ *
+ * Wialon can hold two units under the SAME name — a replacement tracker
+ * fitted without retiring the old record. Left as-is one vehicle
+ * produces two entries, both land in the same batch, and the single ON
+ * CONFLICT statement covering the whole fleet is rejected with 21000
+ * ("cannot affect row a second time"), which stops tracking for EVERY
+ * truck rather than the duplicated one. That ran for 28 hours unnoticed.
+ *
+ * The RPCs de-duplicate defensively too, but this is the layer that can
+ * pick WHICH of the two to believe: the freshest wins, since a stale
+ * duplicate could otherwise place a truck somewhere it left hours ago.
+ *
+ * Shared by the zone checks and the blacklisted-station check so there
+ * is one copy of that reasoning rather than two that can drift apart.
+ */
+function freshestPerTruck<T extends { truck_id: string; age_minutes?: number | null }>(rows: T[]): T[] {
+  const freshest = new Map<string, T>();
+  for (const t of rows) {
+    const existing = freshest.get(t.truck_id);
+    if (!existing) {
+      freshest.set(t.truck_id, t);
+      continue;
+    }
+    const age = t.age_minutes ?? Number.POSITIVE_INFINITY;
+    const existingAge = existing.age_minutes ?? Number.POSITIVE_INFINITY;
+    if (age < existingAge) freshest.set(t.truck_id, t);
+  }
+  return [...freshest.values()];
+}
+
+
+export interface BlacklistStation {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  blacklisted: boolean;
+}
+
+/**
+ * A truck STOPPED at a station known to take money from drivers.
+ *
+ * "Stopped", not "passed": the caller hands in only trucks the fleet
+ * feed calls idle, which in this app means a fix under 30 minutes old
+ * with speed at or below 5km/h. A truck driving past a blacklisted
+ * station therefore raises nothing, which is the whole point — the
+ * alert is about the stop, not the road.
+ *
+ * The watch radius is wider for a blacklisted station (150m rather than
+ * the 50m forecourt) so the office hears about it while there is still
+ * time to phone the driver, rather than once he is at the pump.
+ *
+ * State lives in fleet_trucks.at_blacklisted_station_id — WHICH station,
+ * not a boolean per station, because at_hq/at_factory's one-column-per-
+ * zone shape does not survive 51 stations. Moving from one blacklisted
+ * station to another is therefore a real transition and alerts again.
+ */
+export async function runBlacklistedStationCheck(
+  supabase: SupabaseClient,
+  trucks: ZoneTruck[],
+  stations: BlacklistStation[]
+): Promise<void> {
+  const watched = stations.filter((s) => s.blacklisted);
+
+  const positioned = freshestPerTruck(
+    trucks.filter((t): t is PositionedTruck => t.lat != null && t.lng != null)
+  );
+
+  // Where each truck is stopped now: the NEAREST blacklisted station
+  // whose watch radius contains it. Nearest rather than first, so two
+  // overlapping watch circles cannot make the answer depend on row
+  // order — and moving between them stays a clean transition.
+  const nowAt = new Map<string, BlacklistStation>();
+  for (const t of positioned) {
+    let best: { station: BlacklistStation; metres: number } | null = null;
+    for (const st of watched) {
+      const metres = haversineMeters(t.lat, t.lng, st.lat, st.lng);
+      if (metres > stationWatchRadius(st.radiusMeters, true)) continue;
+      if (!best || metres < best.metres) best = { station: st, metres };
+    }
+    if (best) nowAt.set(t.truck_id, best.station);
+  }
+
+  // What the database currently believes, for these trucks only.
+  const { data: rows, error: readError } = await supabase
+    .from("fleet_trucks")
+    .select("truck_id, at_blacklisted_station_id")
+    .in("truck_id", positioned.map((t) => t.truck_id));
+  if (readError) throw new Error(`station state read failed: ${readError.message}`);
+
+  const wasAt = new Map(
+    (rows ?? []).map((r) => [r.truck_id as string, (r.at_blacklisted_station_id as string | null) ?? null])
+  );
+
+  // Grouped by destination station, because the RPC sets one station for
+  // a batch of trucks — and one call per station keeps that contract.
+  const arrivedByStation = new Map<string, string[]>();
+  const left: string[] = [];
+
+  for (const t of positioned) {
+    const now = nowAt.get(t.truck_id) ?? null;
+    const before = wasAt.get(t.truck_id) ?? null;
+    if (now?.id === before) continue;
+    if (now) {
+      const list = arrivedByStation.get(now.id) ?? [];
+      list.push(t.truck_id);
+      arrivedByStation.set(now.id, list);
+    } else if (before) {
+      left.push(t.truck_id);
+    }
+  }
+
+  const nameOf = new Map(watched.map((s) => [s.id, s.name]));
+  const driverOf = new Map(positioned.map((t) => [t.truck_id, t.driverName ?? null]));
+
+  for (const [stationId, truckIds] of arrivedByStation) {
+    const { data: changed, error } = await supabase.rpc("mark_trucks_station_state", {
+      p_truck_ids: truckIds,
+      p_station_id: stationId,
+    });
+    // Thrown rather than logged, for the reason the zone checks are: the
+    // flag and the alert have to agree. A written flag with no alert
+    // suppresses the alert for as long as the truck stays put.
+    if (error) throw new Error(`station state write failed, alerts skipped: ${error.message}`);
+
+    const toNotify = ((changed ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
+    if (toNotify.length === 0) continue;
+
+    const station = nameOf.get(stationId) ?? "a blacklisted station";
+    const { error: notifyError } = await supabase.from("notifications").insert(
+      toNotify.map((truck_id) => ({
+        truck_id,
+        driver_name: driverOf.get(truck_id) ?? null,
+        kind: "station_stop",
+        title: "Stopped at a blacklisted station",
+        message: `${truck_id} has stopped at ${station}.`,
+      }))
+    );
+    // Checked, never fire-and-forget: a kind the CHECK constraint does
+    // not allow comes back as 23514, and swallowing it is what left the
+    // client-approach alert dead from the day it shipped (migration 026).
+    if (notifyError) {
+      throw new Error(
+        `station stop alert insert failed (flags already set, so these will not retry): ${notifyError.message}`
+      );
+    }
+  }
+
+  if (left.length > 0) {
+    const { error } = await supabase.rpc("mark_trucks_station_state", {
+      p_truck_ids: left,
+      p_station_id: null,
+    });
+    // A departure that fails to persist leaves the truck pinned to the
+    // station forever, and a truck that never leaves can never be seen
+    // to arrive again.
+    if (error) throw new Error(`station departure write failed: ${error.message}`);
+  }
+}
+
 async function runZoneArrivalCheck(
   supabase: SupabaseClient,
   trucks: ZoneTruck[],
@@ -547,18 +710,7 @@ async function runZoneArrivalCheck(
   // layer that can pick WHICH of the two fixes to believe. The freshest
   // one wins, since a stale duplicate would otherwise be able to place a
   // truck at HQ that left hours ago.
-  const freshest = new Map<string, (typeof withPosition)[number]>();
-  for (const t of withPosition) {
-    const existing = freshest.get(t.truck_id);
-    if (!existing) {
-      freshest.set(t.truck_id, t);
-      continue;
-    }
-    const age = t.age_minutes ?? Number.POSITIVE_INFINITY;
-    const existingAge = existing.age_minutes ?? Number.POSITIVE_INFINITY;
-    if (age < existingAge) freshest.set(t.truck_id, t);
-  }
-  const positioned = [...freshest.values()];
+  const positioned = freshestPerTruck(withPosition);
 
   if (positioned.length !== withPosition.length) {
     console.warn(

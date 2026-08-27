@@ -17,6 +17,7 @@ import {
   runHqArrivalCheck,
   runFactoryArrivalCheck,
   runFleetSpeedingCheck,
+  runBlacklistedStationCheck,
 } from "@/lib/fleet/positionCheck";
 
 export interface TickResult {
@@ -206,6 +207,41 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     );
   } catch (err) {
     warnings.push(`speeding: ${(err as Error).message}`);
+  }
+
+  // Trucks stopped at a station known to take money from drivers.
+  //
+  // IDLE ONLY, and that filter is the feature: the fleet feed calls a
+  // truck idle when its fix is under 30 minutes old and its speed is at
+  // or below 5km/h, so a truck driving PAST a blacklisted station raises
+  // nothing. The alert is about the stop.
+  //
+  // Every vehicle, not just cargo — a station that shorts a driver does
+  // it whatever he is driving.
+  try {
+    const { data: stationRows, error: stationError } = await supabase
+      .from("gas_stations")
+      .select("id, name, lat, lng, radius_meters, blacklisted")
+      .eq("blacklisted", true);
+
+    if (stationError) {
+      warnings.push(`stations: ${stationError.message}`);
+    } else if ((stationRows ?? []).length > 0) {
+      await runBlacklistedStationCheck(
+        supabase,
+        trucks.filter((t) => t.status === "idle"),
+        (stationRows ?? []).map((r) => ({
+          id: r.id as string,
+          name: r.name as string,
+          lat: r.lat as number,
+          lng: r.lng as number,
+          radiusMeters: (r.radius_meters as number) ?? 50,
+          blacklisted: true,
+        }))
+      );
+    }
+  } catch (err) {
+    warnings.push(`stations: ${(err as Error).message}`);
   }
 
   return {

@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Copy, Check, Phone, MapPin, Download, Pencil, X } from "lucide-react";
 import { listDrivers, saveDriverContact, type DriverCard } from "@/lib/supabase/drivers";
 import { normalizeName } from "@/lib/drivers/match";
+import { formatPhones, telHref } from "@/lib/drivers/phone";
 import { formatDate } from "@/lib/format";
 
 type Filter = "all" | "reachable" | "missing";
@@ -28,6 +29,23 @@ export default function DriversPage() {
     setDrivers(res.drivers ?? []);
     setFilteredOut(res.filteredOut ?? 0);
     setCanEdit(Boolean(res.canEdit));
+  }
+
+  /** Show a saved edit on the card straight away.
+   *
+   *  reload() is the slowest refresh in the app — listDrivers() does a
+   *  full Wialon login, unit fetch and driver-library fetch through the
+   *  Cloudflare relay — so waiting for it left the operator staring at
+   *  the old phone number for seconds after saving. It still runs, just
+   *  behind this, and it is what reconciles the fuzzy name match.
+   *
+   *  Safe because the edited fields are NOT the ones the match keys on:
+   *  matchDirectory joins on the name, and phone, address and hire date
+   *  cannot move a card to a different driver. */
+  function patchDriver(name: string, patch: Partial<DriverCard>) {
+    setDrivers((prev) =>
+      prev === null ? prev : prev.map((d) => (d.name === name ? { ...d, ...patch } : d))
+    );
   }
 
   useEffect(() => {
@@ -224,7 +242,14 @@ export default function DriversPage() {
                 driver={d}
                 error={saveError}
                 onCancel={() => { setEditing(null); setSaveError(null); }}
-                onSaved={async () => { setEditing(null); setSaveError(null); await reload(); }}
+                onSaved={(patch) => {
+                  setEditing(null);
+                  setSaveError(null);
+                  patchDriver(d.name, patch);
+                  // Unawaited on purpose: the card is already correct,
+                  // and this only re-derives the Wialon-side join.
+                  void reload();
+                }}
                 onError={setSaveError}
               />
             ) : (
@@ -274,7 +299,7 @@ function DriverEditor({
   driver: DriverCard;
   error: string | null;
   onCancel: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (patch: Partial<DriverCard>) => void;
   onError: (message: string) => void;
 }) {
   const [phone, setPhone] = useState(driver.phoneRaw ?? "");
@@ -294,7 +319,26 @@ function DriverEditor({
     });
     setSaving(false);
     if (res.error) { onError(res.error); return; }
-    await onSaved();
+
+    // The card the server will build on its next read, built here from
+    // the same rules saveDriverContact just applied: blanks become null
+    // (the has-phone filter counts an empty string as reachable), and
+    // the upserted row is named directoryName ?? wialonName. No rollback
+    // path is needed — this only runs once the write has succeeded.
+    const clean = (v: string) => {
+      const t = v.trim().replace(/\s+/g, " ");
+      return t === "" ? null : t;
+    };
+    const phoneClean = clean(phone);
+    onSaved({
+      phone: formatPhones(phoneClean),
+      phoneHref: telHref(phoneClean),
+      phoneRaw: phoneClean,
+      address: clean(address),
+      hiredOn: hiredOn.trim() === "" ? null : hiredOn.trim(),
+      directoryName: driver.directoryName ?? driver.name.trim(),
+      inDirectory: true,
+    });
   }
 
   return (

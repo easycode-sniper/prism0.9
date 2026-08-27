@@ -11,6 +11,7 @@ import type { GasStation } from "@/lib/supabase/stations";
 import { getNotifications } from "@/lib/supabase/history";
 import type { NotificationRecord } from "@/lib/supabase/history";
 import { createClient } from "@/lib/supabase/client";
+import { applyFieldOverlay, applyRemovalOverlay } from "@/lib/optimisticOverlay";
 
 interface FleetContextType {
   fleetData: FleetData;
@@ -31,6 +32,25 @@ interface FleetContextType {
   refreshGasStations: () => Promise<void>;
   refreshDispatches: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
+  /**
+   * Show the result of a write before the server has confirmed it.
+   *
+   * Call the method, fire the write, and call the paired undo if it
+   * fails. Every method is safe to call for a row that is already in
+   * that state.
+   */
+  optimistic: OptimisticPatches;
+}
+
+interface OptimisticPatches {
+  /** Flip a notification's unread dot now. `unmark` is the rollback. */
+  markNotificationsRead: (ids: string[]) => void;
+  unmarkNotificationsRead: (ids: string[]) => void;
+  /** Drop a stopped run out of the active list now. */
+  hideDispatch: (id: string) => void;
+  unhideDispatch: (id: string) => void;
+  /** Repaint a station's marker, watch circle and popup now. */
+  setStationBlacklisted: (id: string, blacklisted: boolean) => void;
 }
 
 const FleetContext = createContext<FleetContextType>({
@@ -48,6 +68,13 @@ const FleetContext = createContext<FleetContextType>({
   refreshGasStations: async () => {},
   refreshDispatches: async () => {},
   refreshNotifications: async () => {},
+  optimistic: {
+    markNotificationsRead: () => {},
+    unmarkNotificationsRead: () => {},
+    hideDispatch: () => {},
+    unhideDispatch: () => {},
+    setStationBlacklisted: () => {},
+  },
 });
 
 export function useFleet() {
@@ -73,13 +100,52 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
   // and every channel subscription on each re-render.
   const [supabase] = useState(() => createClient());
 
+  // ── Optimistic overlays ──────────────────────────────────────
+  //
+  // Patching state locally is only HALF of an optimistic update, and the
+  // missing half is the one that bites. These lists are refetched by
+  // realtime and by interval polls, and a refetch that was already in
+  // flight when the write went out lands carrying the OLD row and
+  // silently undoes the patch — the unread dot comes back, the stopped
+  // run reappears, and the user clicks again.
+  //
+  // So a patch is not just written to state; it is recorded here and
+  // re-applied to every subsequent load until the server's own copy
+  // agrees, at which point the entry is dropped. An overlay that never
+  // settles is not a leak either: it only ever holds a change the server
+  // already accepted, so it is showing the truth.
+  //
+  // Refs, not state: these must be readable by a load that is already
+  // running, and changing one must not itself trigger a render.
+  const readOverlay = useRef<Map<string, boolean>>(new Map());
+  const stoppedOverlay = useRef<Set<string>>(new Set());
+  const blacklistOverlay = useRef<Map<string, boolean>>(new Map());
+
+  const applyReadOverlay = useCallback(
+    (rows: NotificationRecord[]) =>
+      applyFieldOverlay(rows, readOverlay.current, "read", (r) => r.id),
+    []
+  );
+
+  const applyStoppedOverlay = useCallback(
+    (rows: DispatchRecord[]) =>
+      applyRemovalOverlay(rows, stoppedOverlay.current, (r) => r.id),
+    []
+  );
+
+  const applyBlacklistOverlay = useCallback(
+    (rows: GasStation[]) =>
+      applyFieldOverlay(rows, blacklistOverlay.current, "blacklisted", (r) => r.id),
+    []
+  );
+
   const activeRuns = dispatches.length;
   const offRouteCount = dispatches.filter((d) => d.last_on_route === false).length;
 
   const loadDispatches = useCallback(async () => {
     const result = await listActiveDispatches();
-    if (result.data) setDispatches(result.data);
-  }, []);
+    if (result.data) setDispatches(applyStoppedOverlay(result.data));
+  }, [applyStoppedOverlay]);
 
   const loadGeofences = useCallback(async () => {
     // `if (result.data)` was always true — an error path returns an empty
@@ -97,13 +163,56 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
 
   const loadGasStations = useCallback(async () => {
     const result = await listGasStations();
-    if (result.data) setGasStations(result.data);
-  }, []);
+    if (result.data) setGasStations(applyBlacklistOverlay(result.data));
+  }, [applyBlacklistOverlay]);
 
   const loadNotifications = useCallback(async () => {
     const result = await getNotifications();
-    if (result.data) setNotifications(result.data);
-  }, []);
+    if (result.data) setNotifications(applyReadOverlay(result.data));
+  }, [applyReadOverlay]);
+
+  // hideDispatch's rollback needs to refetch, and the ref below is built
+  // once on the first render — so it reads loadDispatches through this
+  // rather than capturing whichever identity existed at that moment.
+  const loadDispatchesRef = useRef<(() => Promise<void>) | null>(null);
+  loadDispatchesRef.current = loadDispatches;
+
+  // The write half of the overlays above: record the intent, then patch
+  // what is on screen. Stable identity, so a page can list one of these
+  // in a useCallback dependency array without re-creating its handler.
+  const optimistic = useRef<OptimisticPatches>({
+    markNotificationsRead: (ids) => {
+      for (const id of ids) readOverlay.current.set(id, true);
+      const wanted = new Set(ids);
+      setNotifications((prev) =>
+        prev.map((n) => (wanted.has(n.id) && !n.read ? { ...n, read: true } : n))
+      );
+    },
+    unmarkNotificationsRead: (ids) => {
+      for (const id of ids) readOverlay.current.delete(id);
+      const wanted = new Set(ids);
+      setNotifications((prev) =>
+        prev.map((n) => (wanted.has(n.id) && n.read ? { ...n, read: false } : n))
+      );
+    },
+    hideDispatch: (id) => {
+      stoppedOverlay.current.add(id);
+      setDispatches((prev) => prev.filter((d) => d.id !== id));
+    },
+    unhideDispatch: (id) => {
+      stoppedOverlay.current.delete(id);
+      // The row is gone from state, so it cannot be put back from here —
+      // a refetch is the only way to recover it, and the caller is
+      // rolling back an error, so one extra read is the right cost.
+      loadDispatchesRef.current?.();
+    },
+    setStationBlacklisted: (id, blacklisted) => {
+      blacklistOverlay.current.set(id, blacklisted);
+      setGasStations((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, blacklisted } : s))
+      );
+    },
+  }).current;
 
   // Realtime delivers one event per row, but a poll writes rows in
   // batches — one dispatch update per active run, one notification per
@@ -272,6 +381,7 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
         refreshGasStations: loadGasStations,
         refreshDispatches: loadDispatches,
         refreshNotifications: loadNotifications,
+        optimistic,
       }}
     >
       {children}

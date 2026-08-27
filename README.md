@@ -298,7 +298,8 @@ src/
 │   ├── chartTheme.ts routing.ts sound.ts format.ts fleetJoin.ts
 │   └── i18n/                  # EN / FR / AR chrome translations
 ├── middleware.ts              # Auth gate
-scripts/check-fuel-dates.mts   # Runnable checks for the sheet date parser
+scripts/                       # Runnable checks: sheet date parser,
+│                              #   optimistic-overlay settling
 supabase/migrations/           # Numbered SQL migrations
 index.html                     # Legacy single-file prototype, kept for reference only
 ```
@@ -346,9 +347,10 @@ English only, matching the original app's scope.
   before anyone noticed.
 - **Dispatching a truck that is already inside its destination geofence**
   auto-completes the run on the next tick, which reads as a failed dispatch.
-- **No test framework.** `scripts/check-fuel-dates.mts` is the one runnable
-  check (`node --experimental-strip-types scripts/check-fuel-dates.mts`);
-  everything else is verified by hand.
+- **No test framework.** Two runnable check scripts exist —
+  `scripts/check-fuel-dates.mts` and `scripts/check-optimistic-overlay.mts`
+  (`node --experimental-strip-types scripts/<name>.mts`) — and everything
+  else is verified by hand.
 
 ## License
 

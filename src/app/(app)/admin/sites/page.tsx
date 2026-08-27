@@ -62,6 +62,9 @@ export default function AdminSitesPage() {
     const result = await deleteClientSite(id);
     if (result.error) { setError(result.error); setRemoving(null); return; }
 
+    // This page owns its own copy of the list, so the row can just go.
+    // The reload still runs to pick up anything else that changed.
+    setSites((prev) => prev.filter((s) => s.id !== id));
     setRemoving(null);
     await reload();
   }

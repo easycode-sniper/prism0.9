@@ -41,6 +41,14 @@ export interface AdminUser {
   full_name: string | null;
   role: "operator" | "admin";
   created_at: string;
+  /** Whether the account is currently banned in auth.users.
+   *
+   *  This did not exist, and its absence made adminDisableUser a button
+   *  with no visible effect: the ban was written, the list re-read
+   *  `profiles` — which has no ban column — and the row came back
+   *  looking exactly the same. adminEnableUser was consequently
+   *  unreachable from the UI. */
+  disabled: boolean;
 }
 
 export async function adminListUsers(): Promise<{ data: AdminUser[]; error: string | null }> {
@@ -54,7 +62,44 @@ export async function adminListUsers(): Promise<{ data: AdminUser[]; error: stri
     .order("created_at", { ascending: false });
 
   if (error) return { data: [], error: error.message };
-  return { data: (data ?? []) as AdminUser[], error: null };
+
+  // Typed once here: the service-role client is generic, so the rows
+  // come back untyped and every .map() below would be implicitly any.
+  type ProfileRow = Omit<AdminUser, "disabled">;
+  const profiles = (data ?? []) as ProfileRow[];
+
+  // The ban state lives in auth.users, which is not reachable through
+  // PostgREST — it needs the admin auth API, and that API pages. Walked
+  // to exhaustion rather than trusting one call: a short page is the
+  // only reliable end marker, and silently listing the first 50 users of
+  // a larger org is the same class of bug as the PostgREST 1000-row cap.
+  const banned = new Set<string>();
+  try {
+    for (let page = 1; page <= 20; page++) {
+      const { data: authPage, error: authError } = await admin.auth.admin.listUsers({
+        page,
+        perPage: 200,
+      });
+      if (authError) throw new Error(authError.message);
+      for (const u of authPage.users) {
+        const until = (u as { banned_until?: string | null }).banned_until;
+        if (until && new Date(until).getTime() > Date.now()) banned.add(u.id);
+      }
+      if (authPage.users.length < 200) break;
+    }
+  } catch (err) {
+    // The roster is still worth showing without the ban column; saying
+    // nothing and rendering every account as enabled would be worse.
+    return {
+      data: profiles.map((r) => ({ ...r, disabled: false })),
+      error: `Roles loaded, but account status could not be read: ${(err as Error).message}`,
+    };
+  }
+
+  return {
+    data: profiles.map((r) => ({ ...r, disabled: banned.has(r.id) })),
+    error: null,
+  };
 }
 
 export async function adminInviteUser(email: string, fullName: string, role: "operator" | "admin"): Promise<{ error: string | null }> {

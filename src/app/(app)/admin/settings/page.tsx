@@ -18,8 +18,11 @@ export default function AdminSettingsPage() {
     loadSettings();
   }, []);
 
-  async function loadSettings() {
-    setLoading(true);
+  // Same trap as the users page: the component early-returns a skeleton
+  // while `loading`, so re-reading after a save blanked the form the
+  // operator had just filled in. The skeleton is for the first load.
+  async function loadSettings(silent = false) {
+    if (!silent) setLoading(true);
     const result = await adminGetSettings();
     if (result.data) {
       setSettings(result.data);
@@ -28,7 +31,7 @@ export default function AdminSettingsPage() {
       setToken(result.data.wialon_token_set ? "••••••••••••" : "");
     }
     setError(result.error);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -45,7 +48,7 @@ export default function AdminSettingsPage() {
       setError(result.error);
     } else {
       setSuccess("Settings saved");
-      await loadSettings();
+      await loadSettings(true);
     }
     setSaving(false);
   }

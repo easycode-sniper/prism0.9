@@ -93,7 +93,7 @@ export default function DispatchPage() {
   );
   const [truckFocus, setTruckFocus] = useState<[number, number] | null>(null);
   const focusPoint = truckFocus ?? urlFocusPoint;
-  const { fleetData, dispatches, geofences, gasStations, sites, refreshDispatches, refreshGasStations } = useFleet();
+  const { fleetData, dispatches, geofences, gasStations, sites, refreshDispatches, refreshGasStations, optimistic } = useFleet();
 
   // Blacklisting is admin-only. This hides the control; the server
   // action re-checks and the RLS policy on gas_stations refuses the
@@ -104,18 +104,6 @@ export default function DispatchPage() {
     canBlacklistStations().then((v) => { if (!cancelled) setAdmin(v); });
     return () => { cancelled = true; };
   }, []);
-
-  const handleToggleBlacklist = useCallback(
-    async (stationId: string, next: boolean) => {
-      const { error } = await setStationBlacklisted(stationId, next);
-      if (error) {
-        console.error("[dispatch] blacklist toggle failed:", error);
-        return;
-      }
-      await refreshGasStations();
-    },
-    [refreshGasStations]
-  );
 
   // One search and one filter now drive the single truck list. The panel
   // previously had two of each, over the same 101 trucks.
@@ -145,6 +133,31 @@ export default function DispatchPage() {
   const [checkResults, setCheckResults] = useState<Map<string, PositionCheckResult>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // The marker turns red, its watch circle widens and the popup label
+  // flips on the click. That matters more here than anywhere else in the
+  // app: the control lives inside a Leaflet popup built from an HTML
+  // string, so there is no React re-render to give any other feedback —
+  // before this, clicking it did nothing visible for two round trips.
+  //
+  // The refresh afterwards stays. Unlike dispatches and notifications,
+  // `gas_stations` is NOT in the realtime publication, so nothing else
+  // would ever reconcile the overlay.
+  const handleToggleBlacklist = useCallback(
+    async (stationId: string, next: boolean) => {
+      optimistic.setStationBlacklisted(stationId, next);
+
+      const { error } = await setStationBlacklisted(stationId, next);
+      if (error) {
+        console.error("[dispatch] blacklist toggle failed:", error);
+        optimistic.setStationBlacklisted(stationId, !next);
+        setError(error);
+        return;
+      }
+      await refreshGasStations();
+    },
+    [refreshGasStations, optimistic]
+  );
 
   // Fleet positions come from the app-wide FleetProvider context
   // (already polling Wialon in the background), joined with the
@@ -245,11 +258,20 @@ export default function DispatchPage() {
     await refreshDispatches();
   }
 
+  // The run leaves the list on the click, not two round trips later.
+  // No refreshDispatches() afterwards: the realtime channel on
+  // `dispatches` already refetches, and the provider's overlay holds the
+  // row out of the list until that refetch confirms it is really gone.
   async function handleStop(dispatchId: string) {
-    const result = await stopDispatch(dispatchId);
-    if (result.error) { setError(result.error); return; }
+    setError(null);
     if (routeRunId === dispatchId) setRouteRunId(null);
-    await refreshDispatches();
+    optimistic.hideDispatch(dispatchId);
+
+    const result = await stopDispatch(dispatchId);
+    if (result.error) {
+      optimistic.unhideDispatch(dispatchId);
+      setError(result.error);
+    }
   }
 
   async function handleCheckPosition(dispatchId: string, truckId: string) {

@@ -23,15 +23,39 @@ export default function AdminUsersPage() {
   const [inviteRole, setInviteRole] = useState<"operator" | "admin">("operator");
   const [inviting, setInviting] = useState(false);
 
-  async function loadUsers() {
-    setLoading(true);
+  // `silent` is the whole point of this parameter. loadUsers() used to
+  // set loading on every call, and the component early-returns a
+  // skeleton while loading — so changing ONE user's role blanked the
+  // entire table for a round trip. The skeleton belongs to the first
+  // load, when there is genuinely nothing to show; a refresh behind an
+  // optimistic edit must leave the table on screen.
+  async function loadUsers(silent = false) {
+    if (!silent) setLoading(true);
     const result = await adminListUsers();
     setUsers(result.data);
     setError(result.error);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
   useEffect(() => { loadUsers(); }, []);
+
+  /** Patch one row now; the returned function puts it back if the write
+   *  fails. Rows are matched by id, so a refresh landing in between
+   *  cannot make the rollback restore the wrong user. */
+  function patchUser(userId: string, patch: Partial<AdminUser>): () => void {
+    let previous: AdminUser | undefined;
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== userId) return u;
+        previous = u;
+        return { ...u, ...patch };
+      })
+    );
+    return () => {
+      if (!previous) return;
+      setUsers((prev) => prev.map((u) => (u.id === userId ? previous! : u)));
+    };
+  }
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -51,25 +75,34 @@ export default function AdminUsersPage() {
     setInviting(false);
   }
 
+  // The select is controlled on server state, so without the local patch
+  // it snapped back to the old role the moment React re-rendered and
+  // only committed when the refetch landed.
   async function handleRoleChange(userId: string, role: "operator" | "admin") {
     setError(null);
+    const rollback = patchUser(userId, { role });
+
     const result = await adminSetUserRole(userId, role);
-    if (result.error) { setError(result.error); return; }
-    await loadUsers();
+    if (result.error) { rollback(); setError(result.error); return; }
+    await loadUsers(true);
   }
 
   async function handleDisable(userId: string) {
     setError(null);
+    const rollback = patchUser(userId, { disabled: true });
+
     const result = await adminDisableUser(userId);
-    if (result.error) { setError(result.error); return; }
-    await loadUsers();
+    if (result.error) { rollback(); setError(result.error); return; }
+    await loadUsers(true);
   }
 
   async function handleEnable(userId: string) {
     setError(null);
+    const rollback = patchUser(userId, { disabled: false });
+
     const result = await adminEnableUser(userId);
-    if (result.error) { setError(result.error); return; }
-    await loadUsers();
+    if (result.error) { rollback(); setError(result.error); return; }
+    await loadUsers(true);
   }
 
   if (loading) {
@@ -143,8 +176,21 @@ export default function AdminUsersPage() {
             {users.map((u) => (
               <tr key={u.id} className="bg-panel/50">
                 <td className="px-4 py-3">
-                  <div className="t-primary">{u.full_name || "—"}</div>
-                  <div className="text-xs t-dim">{u.email}</div>
+                  <div className="t-primary" style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                    <span style={{ opacity: u.disabled ? 0.55 : 1 }}>{u.full_name || "—"}</span>
+                    {/* Amber, not red: a disabled account is a stale
+                        state, not an alert — the same reading amber
+                        carries for an idle truck. */}
+                    {u.disabled && (
+                      <span
+                        className="status-pill"
+                        style={{ background: "rgba(255, 179, 0, 0.15)", color: "var(--amber)" }}
+                      >
+                        Disabled
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs t-dim" style={{ opacity: u.disabled ? 0.55 : 1 }}>{u.email}</div>
                 </td>
                 <td className="px-4 py-3">
                   <select value={u.role}
@@ -158,11 +204,21 @@ export default function AdminUsersPage() {
                   {formatDate(u.created_at)}
                 </td>
                 <td className="px-4 py-3">
+                  {/* Enable was written but never reachable: nothing
+                      rendered it, because nothing knew an account could
+                      be disabled. */}
                   {u.role !== "admin" && (
-                    <button onClick={() => handleDisable(u.id)}
-                      className="text-xs c-red hover:opacity-80">
-                      Disable
-                    </button>
+                    u.disabled ? (
+                      <button onClick={() => handleEnable(u.id)}
+                        className="text-xs c-green hover:opacity-80">
+                        Enable
+                      </button>
+                    ) : (
+                      <button onClick={() => handleDisable(u.id)}
+                        className="text-xs c-red hover:opacity-80">
+                        Disable
+                      </button>
+                    )
                   )}
                 </td>
               </tr>

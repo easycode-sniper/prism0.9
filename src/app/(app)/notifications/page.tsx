@@ -34,7 +34,8 @@ export default function NotificationsPage() {
   const { t } = useTranslation();
   // Shared app-wide (already realtime-subscribed by FleetProvider)
   // instead of this page fetching its own copy on every visit.
-  const { notifications, refreshNotifications } = useFleet();
+  const { notifications, optimistic } = useFleet();
+  const [markError, setMarkError] = useState<string | null>(null);
   const [only, setOnly] = useState<NotificationGroup | "all">("all");
   const [expanded, setExpanded] = useState<Set<NotificationGroup>>(new Set());
 
@@ -46,14 +47,33 @@ export default function NotificationsPage() {
       return next;
     });
 
+  // Optimistic, and deliberately WITHOUT a refresh afterwards. This used
+  // to cost three server round trips to flip one boolean: the write, an
+  // explicit refetch, and then a third when the realtime channel on
+  // `notifications` saw the same row change and refetched again 400ms
+  // later. The dot now clears on the click; realtime reconciles, and the
+  // provider's overlay keeps the patch from being undone by a refetch
+  // that was already in flight.
   async function handleMarkRead(id: string) {
-    await markNotificationRead(id);
-    refreshNotifications();
+    setMarkError(null);
+    optimistic.markNotificationsRead([id]);
+    const { error } = await markNotificationRead(id);
+    if (error) {
+      optimistic.unmarkNotificationsRead([id]);
+      setMarkError(error);
+    }
   }
 
   async function handleMarkAllRead() {
-    await markAllNotificationsRead();
-    refreshNotifications();
+    setMarkError(null);
+    const ids = notifications.filter((n) => !n.read).map((n) => n.id);
+    if (ids.length === 0) return;
+    optimistic.markNotificationsRead(ids);
+    const { error } = await markAllNotificationsRead();
+    if (error) {
+      optimistic.unmarkNotificationsRead(ids);
+      setMarkError(error);
+    }
   }
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -95,6 +115,19 @@ export default function NotificationsPage() {
           </button>
         )}
       </div>
+
+      {/* Only appears when a write was rolled back. Without it an
+          optimistic update that failed would put the dot back with no
+          explanation, which reads as the click not registering. */}
+      {markError && (
+        <div
+          className="mt-3 rounded-md p-3 text-sm"
+          style={{ background: "rgba(255,45,63,0.08)", border: "1px solid rgba(255,45,63,0.35)", color: "var(--red)" }}
+          role="status"
+        >
+          Could not mark as read — {markError}
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <GroupChip label="All" active={only === "all"} count={notifications.length} onClick={() => setOnly("all")} />

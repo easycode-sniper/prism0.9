@@ -17,12 +17,17 @@ export default function AdminStationsPage() {
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Ids deleted on the server but possibly still in the provider's copy,
+  // which this page does not own. Entries stay harmlessly once the
+  // refresh drops the row for real — the filter simply stops matching.
+  const [locallyRemoved, setLocallyRemoved] = useState<Set<string>>(new Set());
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return gasStations;
-    return gasStations.filter((s) => s.name.toLowerCase().includes(q));
-  }, [gasStations, search]);
+    const rows = gasStations.filter((s) => !locallyRemoved.has(s.id));
+    if (!q) return rows;
+    return rows.filter((s) => s.name.toLowerCase().includes(q));
+  }, [gasStations, search, locallyRemoved]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -46,6 +51,11 @@ export default function AdminStationsPage() {
     const result = await deleteGasStation(id);
     if (result.error) { setError(result.error); setRemoving(null); return; }
 
+    // The row goes now rather than after the refetch. Nothing to roll
+    // back: the delete has already succeeded by this point, and the
+    // refresh below is what puts the provider's copy — which the map and
+    // the dashboard also read — back in step.
+    setLocallyRemoved((prev) => new Set(prev).add(id));
     setRemoving(null);
     await refreshGasStations();
   }

@@ -8,8 +8,9 @@ it — nothing else does.
 
 So: **finish every change by committing and pushing to `main`.** A change
 sitting in the working tree, or on a feature branch, is invisible to the
-person who asked for it. Work on `claude/website-redesign-gtkcxj`, then
-merge to `main` and push, unless told otherwise.
+person who asked for it. Work on `main` directly unless a session says
+otherwise; if one assigns you a feature branch, it is not shipped until
+you have merged it to `main` and pushed.
 
 Verify before pushing, because a red build means the site keeps serving
 the previous version and the change silently does not appear:
@@ -36,11 +37,18 @@ means something about a truck:
 
 | token | value | meaning |
 |---|---|---|
-| `--green` | `#0ae448` | moving, on-route |
-| `--amber` | `#ff8709` | idle, stale |
-| `--cyan` | `#00bae2` | parking, stations, informational |
-| `--pink` | `#fec5fb` | destinations — sites, the factory |
-| `--red` | `#ff4d3d` | off-route, speeding |
+| `--green` | `#00ff7b` | moving, on-route |
+| `--amber` | `#ffb300` | idle, stale |
+| `--cyan` | `#00cfff` | parking, stations, informational |
+| `--pink` | `#ff2fd0` | destinations — sites, the factory |
+| `--red` | `#ff2d3f` | off-route, speeding |
+
+Those five hexes are the ones in `globals.css`, which is the source of
+truth — copy from there rather than from here if the two ever disagree
+again. Every value in this table was wrong until 2026-08-27: the
+meanings had held, but the doc still carried the pre-overhaul palette,
+so a hex pasted out of it produced a sixth colour that looked almost
+right.
 
 Do not spend one of these on chrome, and do not introduce a sixth. There
 is no purple anywhere — that was the point of the overhaul.
@@ -68,10 +76,13 @@ Other rules that are easy to break by accident:
   cannot and are noted in the source: Leaflet marker HTML, which Leaflet
   injects as strings, and Chart.js, which paints to canvas. Both repeat
   the taxonomy as literals and must be kept in step by hand.
-- Keep this app's density. Table type at ~0.72rem is deliberate —
-  dispatch needs forty trucks on one screen.
+- Keep this app's density. Table type at 0.87rem is deliberate —
+  dispatch needs forty trucks on one screen. `.table-wrap--capped`
+  derives its row height from that figure, so the two move together.
 - `.glass` and `.panel` are the same rule; `.glass` survives only because
-  26 call sites use it. Prefer `.panel` in new markup.
+  10 call sites still use it, across six files. Prefer `.panel` in new
+  markup, and if you are already touching one of those files, converting
+  it is cheap.
 
 ## Agent skills
 

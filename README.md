@@ -248,7 +248,7 @@ something other than an async function.
 | Route | Purpose |
 |---|---|
 | `/login` | Email/password sign-in over a live map background |
-| `/dashboard` | Fuel-sheet totals across the top; a "what has been happening" column (distance, litres, consumption and alerts per day, fuel variance by truck and by driver, and daily spend against cost per km) beside a live rail (fleet status, speeding leaderboard, drivers on duty, active runs, operational signals) |
+| `/dashboard` | Fuel-sheet totals across the top; a "what has been happening" column (distance per day, daily spend against cost per km, then litres, consumption and alerts per day, then fuel variance by truck and by driver) beside a live rail (fleet status, speeding leaderboard, drivers on duty, active runs, operational signals) |
 | `/dispatch` | Assign trucks to a site, watch the live map, stop runs, blacklist a station, manual coordinate fallback |
 | `/monitoring` | Searchable/filterable table of every truck, dispatched or not |
 | `/history` | Completed and stopped runs with duration and violation flags; CSV export and a printable daily summary |

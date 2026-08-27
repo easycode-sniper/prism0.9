@@ -574,6 +574,45 @@ export default function DashboardPage() {
             </div>
           </section>
 
+          {/* Second, directly under the headline series — not at the
+              bottom of the column. The KPI strip opens with what the
+              month cost; this is the panel that answers it, so it reads
+              before the per-truck and per-driver tables that break the
+              same money down. It is full width because two series, two
+              axes and a legend need the room the trio's thirds cannot
+              give. Position does not change how the column ends: the
+              same panels in any order still close the band the rail used
+              to overhang by. */}
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">What fuel cost per day</div>
+                <div className="dash-panel__sub">
+                  Bars are what was paid at the pump, every fill. The line is the montant
+                  kilométrique — dinars per kilometre, on the fills that logged a distance.
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              <div className="dash-chart dash-chart--tall">
+                {series ? (
+                  <Chart<"bar" | "line", (number | null)[], string>
+                    type="bar"
+                    data={costChart}
+                    options={dualAxisTimeSeriesOptions({
+                      units: [" DA", " DA/km"],
+                      days: costDays,
+                      compactLeft: true,
+                    })}
+                    plugins={[crosshairPlugin]}
+                  />
+                ) : (
+                  <ChartWaiting />
+                )}
+              </div>
+            </div>
+          </section>
+
         <div className="dash-row dash-row--trio">
           <section className="panel dash-panel">
             <header className="dash-panel__head">
@@ -772,43 +811,6 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* Last in the main column on purpose. The rail runs about
-              250px longer than the series and tables above, so the
-              bottom-left of the page was an empty band the width of the
-              whole main column. This is the panel that reads best at
-              that width — two series, a legend and two axes need room —
-              and it closes the money story the KPI strip opens: the
-              strip says what the month cost, this says which days cost
-              it and what a kilometre went for while they did. */}
-          <section className="panel dash-panel">
-            <header className="dash-panel__head">
-              <div>
-                <div className="dash-panel__title">What fuel cost per day</div>
-                <div className="dash-panel__sub">
-                  Bars are what was paid at the pump, every fill. The line is the montant
-                  kilométrique — dinars per kilometre, on the fills that logged a distance.
-                </div>
-              </div>
-            </header>
-            <div className="dash-panel__body">
-              <div className="dash-chart dash-chart--tall">
-                {series ? (
-                  <Chart<"bar" | "line", (number | null)[], string>
-                    type="bar"
-                    data={costChart}
-                    options={dualAxisTimeSeriesOptions({
-                      units: [" DA", " DA/km"],
-                      days: costDays,
-                      compactLeft: true,
-                    })}
-                    plugins={[crosshairPlugin]}
-                  />
-                ) : (
-                  <ChartWaiting />
-                )}
-              </div>
-            </div>
-          </section>
         </main>
 
         <aside className="dash-rail">

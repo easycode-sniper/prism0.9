@@ -530,7 +530,12 @@ export default function DashboardPage() {
           tables in particular were reading five columns across a width
           they never needed. */}
       <div className="dash-grid">
-        <main className="dash-main">
+        {/* A div, not a <main>. The shell already provides the page's
+            single main landmark, so a second one here was an
+            accessibility fault — and it also collected the bare `main`
+            overscroll rule in globals.css, which is written for the
+            outermost scroller only. */}
+        <div className="dash-main">
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div style={{ minWidth: 0 }}>
@@ -590,6 +595,13 @@ export default function DashboardPage() {
                 <div className="dash-panel__sub">
                   Bars are what was paid at the pump, every fill. The line is the montant
                   kilométrique — dinars per kilometre, on the fills that logged a distance.
+                  {/* Today's column is empty until the first fill of the
+                      day syncs: the bar is 0 and the rate has no priced
+                      fill to divide, so the newest slot draws nothing at
+                      all. Said here for the same reason the distance
+                      panel says it — a blank column reads as a day that
+                      cost nothing rather than a day still counting. */}
+                  {" "}Today fills in as the sheet syncs.
                 </div>
               </div>
             </header>
@@ -811,7 +823,7 @@ export default function DashboardPage() {
             </div>
           </section>
 
-        </main>
+        </div>
 
         <aside className="dash-rail">
           <section className="panel dash-panel">

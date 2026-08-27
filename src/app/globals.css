@@ -237,8 +237,16 @@ a.btn-primary:active, a.btn-secondary:active, a.btn-sm:active {
    On `main` the property is doing the job it was written for: main is the
    top of the chain (body is overflow: hidden), so there is nothing above
    to chain into and all `contain` does here is stop the browser's
-   rubber-band overscroll. Keep it here; do not put it back on a list. */
-main {
+   rubber-band overscroll. Keep it here; do not put it back on a list.
+
+   SCOPED to the shell's own main, not every `main` on the page. A bare
+   `main` selector also matched `<main className="dash-main">` inside the
+   dashboard grid — inert there only because that column has visible
+   overflow, and the exact bug described above the moment anyone gave it
+   an `overflow`. The dashboard's inner `<main>` is now a `<div>` (two
+   `<main>` landmarks was also an accessibility fault), and this selector
+   stops the rule reaching the next one. */
+#app-shell > main {
   overscroll-behavior: contain;
 }
 

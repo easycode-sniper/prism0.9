@@ -1,7 +1,9 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { loadWialonConfig, fetchWialonDrivers } from "@/lib/fleet/wialon";
+import { fetchWialonDrivers } from "@/lib/fleet/wialon";
+import { loadWialonConfig } from "@/lib/fleet/wialon";
+import { createServiceClient } from "@/lib/supabase/service";
 import { isJunkDriverName } from "@/lib/drivers/filter";
 import { matchDirectory, type DirectoryEntry } from "@/lib/drivers/match";
 import { formatPhones, telHref } from "@/lib/drivers/phone";
@@ -47,7 +49,12 @@ export async function listDrivers(): Promise<DriversResult> {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
 
-  const config = await loadWialonConfig(supabase);
+  // Service role for the CREDENTIAL only; everything else on this page
+  // still goes through the caller's session and its RLS. Reading it with
+  // the user's client is what required app_config to grant SELECT on the
+  // Wialon token to every authenticated user — this is what lets that
+  // grant go away without breaking the Drivers page for operators.
+  const config = await loadWialonConfig(createServiceClient());
   if (!config) return { error: "Wialon is not configured" };
 
   const [wialonDrivers, directoryRows] = await Promise.all([

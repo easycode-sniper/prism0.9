@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { findWialonUnit, getWialonConfig } from "@/lib/wialon/config";
+import { findWialonUnit, isWialonConfigured } from "@/lib/wialon/config";
 import { listGeofences } from "@/lib/supabase/geofences";
 import { loadDispatchAndSite, runPositionCheck } from "@/lib/fleet/positionCheck";
 import type { PositionCheckResult } from "@/lib/fleet/positionCheck";
@@ -29,8 +29,9 @@ export async function checkPositionForDispatch(
   if ("error" in loaded) return { error: loaded.error };
   const { dispatch, site } = loaded;
 
-  const config = await getWialonConfig();
-  if (!config?.token) return { error: "Wialon not configured" };
+  // A boolean, not the config: this only ever needed to know whether
+  // Wialon is set up, and findWialonUnit resolves the credentials itself.
+  if (!(await isWialonConfigured())) return { error: "Wialon not configured" };
 
   const unit = await findWialonUnit(truckId);
   if (!unit) return { error: `Truck ${truckId} not found in Wialon` };

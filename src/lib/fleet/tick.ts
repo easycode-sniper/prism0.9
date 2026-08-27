@@ -64,9 +64,16 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   // Staff cars are tracked and mapped like everything else, but they
   // shuttle in and out of HQ all day and their arrivals aren't
   // actionable — they buried the real ones. Classification is per
-  // vehicle in fleet_trucks, not a rule about ID shape: one real cargo
-  // truck (00031-115-35) sits inside the staff-looking ID range, and
-  // muting a real truck by accident is the failure nobody notices.
+  // vehicle in fleet_trucks, never a rule about ID shape, because the ID
+  // range does not reliably say which is which and muting a real truck
+  // by accident is the failure nobody notices.
+  //
+  // This comment used to cite 00031-115-35 as a cargo truck inside the
+  // staff-looking range. It is NOT one: the owner reclassified it on
+  // 2026-08-27, and the data agreed — zero dispatches and zero fuel
+  // transactions in the whole sheet, which no working cargo truck has.
+  // It is now category 'staff'. Left recorded here so the example is not
+  // reinstated from the old note.
   const { data: categoryRows, error: categoryError } = await supabase
     .from("fleet_trucks")
     .select("truck_id, category");

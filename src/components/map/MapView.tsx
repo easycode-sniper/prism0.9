@@ -187,19 +187,35 @@ function buildTruckIcon(
   status: TruckMarkerData["status"],
   offRoute: boolean | undefined,
   course: number | null | undefined,
-  labelText: string | null
+  truckId: string,
+  driverName: string | null | undefined
 ): L.DivIcon {
   const color = statusColor(status, offRoute);
+
+  // THE ARROW STAYS. It is the only thing on the map that says which way
+  // a truck is pointing, and at country zoom — where the labels are now
+  // gone — it is carrying the whole picture on its own. Same rotated
+  // triangle as before; it just takes its fill from currentColor now, so
+  // the status hue is set once on the wrapper instead of twice here.
   const shape =
     course != null
-      ? `<svg width="22" height="22" viewBox="0 0 24 24" style="transform:rotate(${course}deg); filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));"><path d="M12 1.5 L20 21 L12 16 L4 21 Z" fill="${color}" stroke="#0e100f" stroke-width="1.75" stroke-linejoin="round"/></svg>`
-      : `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:${offRoute ? 3 : 1}px solid ${offRoute ? "#ff2d3f" : "rgba(255,252,225,.85)"};box-shadow:0 0 6px ${color};"></div>`;
+      ? `<svg width="22" height="22" viewBox="0 0 24 24" style="transform:rotate(${course}deg)"><path d="M12 1.5 L20 21 L12 16 L4 21 Z" fill="currentColor" stroke="#0e100f" stroke-width="1.75" stroke-linejoin="round"/></svg>`
+      : // No heading reported: a dot, because an arrow pointing north
+        // that means "unknown" is a lie a dispatcher would act on.
+        `<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4.5" fill="currentColor" stroke="#0e100f" stroke-width="1.75"/></svg>`;
 
-  const label = labelText
-    ? `<div style="position:absolute; bottom:26px; left:50%; transform:translateX(-50%); white-space:nowrap; background:#fff; color:#222; font-size:11px; font-weight:600; padding:2px 6px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.5); pointer-events:none;">${labelText}</div>`
-    : "";
+  // Split, not concatenated, so the zoom tiers can drop the driver and
+  // keep the id — the id is what a dispatcher matches against a run.
+  const chip =
+    `<div class="tmk-chip"><span class="tmk-id">${escapeHtml(truckId)}</span>` +
+    (driverName ? `<span class="tmk-name">${escapeHtml(driverName)}</span>` : "") +
+    `</div><div class="tmk-stem"></div>`;
 
-  const html = `<div style="position:relative; width:22px; height:22px; display:flex; align-items:center; justify-content:center;">${label}${shape}</div>`;
+  const state = offRoute ? "offroute" : status;
+  const html =
+    `<div class="tmk" data-st="${state}" style="--tmk-c:${color}">` +
+    `${chip}<div class="tmk-glyph">${shape}</div></div>`;
+
   return L.divIcon({ html, className: "", iconSize: [22, 22], iconAnchor: [11, 11] });
 }
 
@@ -466,6 +482,30 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     }
   }, [showZones]);
 
+  // Zoom tiers for the truck labels, as a class on the map container so
+  // the CSS in globals.css decides what a tier hides. Done here rather
+  // than by rebuilding markers on every zoom: 101 divIcons re-rendered
+  // per wheel notch is the kind of work that makes a map feel broken,
+  // and the labels are already in the DOM — they only need hiding.
+  //
+  // Thresholds: below 8 the country is on screen and a driver's name is
+  // unreadable noise, so only the arrows remain (plus any off-route
+  // truck, which keeps its label at every zoom). 8 to 10 is a wilaya —
+  // the truck id is enough to tell one from another. From 11 the trucks
+  // are genuinely separated and the full label fits.
+  useEffect(() => {
+    const { map } = getOrCreateMapCore();
+    const el = map.getContainer();
+    const applyTier = () => {
+      const z = map.getZoom();
+      el.classList.toggle("tmk-far", z < 8);
+      el.classList.toggle("tmk-mid", z >= 8 && z < 11);
+    };
+    applyTier();
+    map.on("zoomend", applyTier);
+    return () => { map.off("zoomend", applyTier); };
+  }, []);
+
   // Truck markers — the Units toggle adds and removes this whole layer,
   // markers included, not just their labels. It was called Names, which
   // is why that button never sounded like the one that shows vehicles.
@@ -477,8 +517,9 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     if (!showUnits) return;
 
     for (const m of truckMarkers) {
-      const labelText = m.driverName ? `${m.driverName} · ${m.label}` : m.label;
-      const marker = L.marker([m.lat, m.lng], { icon: buildTruckIcon(m.status, m.offRoute, m.course, labelText) });
+      const marker = L.marker([m.lat, m.lng], {
+        icon: buildTruckIcon(m.status, m.offRoute, m.course, m.label, m.driverName),
+      });
 
       const eta = formatEta(m.etaSeconds);
       marker.bindPopup(

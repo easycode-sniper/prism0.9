@@ -3033,3 +3033,96 @@ select option {
   background: var(--accent);
   flex: none;
 }
+
+/* ── Truck markers on the dispatch map ────────────────────────
+   The label used to be a solid white chip on every truck at every
+   zoom. Two problems, and the second is the one that matters: white is
+   the only surface on this map that is not part of the system, and a
+   permanent label per vehicle means 101 chips overlapping into an
+   unreadable mat the moment trucks bunch up — which is most of the
+   time, because they bunch at the factory and the parc.
+
+   The chip is now the same dark surface as .glass--float, for the same
+   reason that rule exists: a panel over live tiles cannot be separated
+   from imagery by a surface step, so it gets a translucent ground and a
+   hairline. Status is carried by the left edge, so the chip itself
+   stays achromatic and the hue still means exactly what it means
+   everywhere else.
+
+   Colour comes in as --tmk-c from the marker HTML, because Leaflet
+   builds these as strings. Everything else resolves through tokens
+   here rather than being repeated as a literal in MapView.tsx — which
+   is the half of that "kept in step by hand" problem this removes. */
+.tmk {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tmk-c);
+}
+
+/* Drop shadows are banned as decoration; this is the .glass--float
+   exception — separation from moving imagery, which no surface step can
+   provide. A green arrow on pale desert is otherwise unreadable. */
+.tmk-glyph {
+  display: flex;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75));
+}
+
+.tmk-chip {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  background: rgba(25, 25, 25, 0.88);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  border: 1px solid var(--line);
+  border-left: 2px solid currentColor;
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+/* The id is the thing a dispatcher matches against a run, so it leads
+   and it is monospace — these are fixed-width plate numbers and they
+   compare by column. */
+.tmk-id { font-family: var(--font-mono); font-weight: 600; color: var(--text); }
+.tmk-name { color: var(--text-dim); }
+
+/* Ties the chip to its own truck when several are close. Without it a
+   floating chip belongs to whichever marker you assume. */
+.tmk-stem {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  width: 1px;
+  height: 12px;
+  transform: translateX(-50%);
+  background: var(--line);
+  pointer-events: none;
+}
+
+/* ── Zoom tiers ───────────────────────────────────────────────
+   The real fix for crowding. At country zoom the labels are noise —
+   nobody reads a driver's name across 800km — so they go entirely and
+   the arrows carry the picture. Mid zoom keeps the id. Only close in,
+   where trucks are actually separated, is the full label affordable. */
+.tmk-far .tmk-chip,
+.tmk-far .tmk-stem { display: none; }
+.tmk-mid .tmk-name { display: none; }
+
+/* An off-route truck keeps its label at every zoom. It is the one alert
+   on this map you must not have to hunt for, and the whole point of
+   dropping the others is to leave room for it. */
+.tmk-far .tmk[data-st="offroute"] .tmk-chip { display: flex; }
+.tmk-far .tmk[data-st="offroute"] .tmk-stem { display: block; }
+.tmk-mid .tmk[data-st="offroute"] .tmk-name { display: inline; }

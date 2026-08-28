@@ -715,8 +715,14 @@ input::placeholder, textarea::placeholder {
 #tabs::-webkit-scrollbar { display: none; }
 
 /* A short viewport is the other half of a zoomed-in window, and the
-   shell's own margins are the cheapest height to give back. */
-@media (max-height: 840px) {
+   shell's own margins are the cheapest height to give back.
+
+   Kept in step with the dispatch panel's tier below — when this one was
+   840 and that one was not, a viewport one pixel taller than 840 lost
+   22px of panel body, because these margins grew back while the panel
+   was still stacked. Two tiers that describe the same "short viewport"
+   have to switch at the same pixel. */
+@media (max-height: 917px) {
   .topbar { margin: 8px 12px 0; padding: 8px 14px; }
   #operations-strip { margin: 9px 12px 10px; gap: 8px; }
   .ops-pill { padding: 5px 12px; }
@@ -1759,7 +1765,13 @@ hr {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px;
+  /* Horizontal 12px, not 14px, and matched by the short-viewport tier
+     below so it does not change with height. It used to: the tier set
+     12px and this set 14px, so a window taller than the tier gave the
+     run-card action row 4px less width — which put it 1.48px short of
+     its children and wrapped every card 32px taller again, the same
+     failure the 5px gap was fixing at the other size. */
+  padding: 14px 12px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1792,13 +1804,20 @@ hr {
    that walks you from trucks to destination, with the action bar
    pinned under it the whole way.
 
-   940px, not 840px. At 841 this tier used to drop out, .psection--grow
+   917px, not 840px. At 841 this tier used to drop out, .psection--grow
    reverted to its 268px minimum, and two of those plus gaps and padding
    forced 580px into a 503px body — so a viewport ONE PIXEL TALLER
-   showed four trucks instead of two and overflowed by 77px. That band,
-   841 to 924, is a maximised window on a 1080p monitor, which is not a
-   corner case. The tier now covers it. */
-@media (max-height: 940px) {
+   showed four trucks instead of two and overflowed by 77px. That band
+   is a maximised window on a 1080p monitor, which is not a corner case.
+
+   917 IS ARITHMETIC, not a guess, and the first attempt at 940 was the
+   guess: it overshot into 918-940, a band that had been scrolling zero
+   with the destination list fully in view, and gave it 54-65px of
+   scroll. The flexible layout needs 2x268 + 16 gap + 28 padding = 580px
+   of body, and above this tier body is viewport - 361, so it genuinely
+   fits from 941 up. Handing it 918-940 was taking a band that worked
+   and stacking it for no reason. */
+@media (max-height: 917px) {
   .dispatch-panel__head { padding: 10px 12px 8px; }
   .dispatch-sub { display: none; }
   .dispatch-panel__body { padding: 10px 12px; gap: 12px; }
@@ -1880,7 +1899,17 @@ hr {
   .dispatch-panel .site-option { padding: 5px 10px; gap: 8px; }
   .dispatch-panel .site-option__name { font-size: 0.74rem; line-height: 1.25; }
   .dispatch-panel .site-option__client { font-size: 0.66rem; line-height: 1.25; }
-  .dispatch-panel .site-picker__scroll { padding-bottom: 8px; }
+  /* THIS is the line that does the work, and the one above it is nearly
+     inert without it. .site-option__client is a span with no display
+     rule, so it computes to display:inline — an inline box does not
+     govern its own line box, the parent's strut does, and that strut
+     inherits line-height 1.5 on a 16px root: 24px per line for 14px of
+     text. Setting 1.25 on the child alone bought about 1px; setting it
+     on the body buys ~11px per option, which is the whole difference
+     between one destination on screen and two.
+     .fleet-row__meta escapes this by being display:flex, which is why
+     the truck rows trimmed cleanly and the site options did not. */
+  .dispatch-panel .site-option__body { line-height: 1.25; }
 
   /* The status filter is the row's worth of height that buys a row of
      trucks. Search still narrows the list, and the four states it drops

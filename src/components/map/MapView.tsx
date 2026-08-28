@@ -562,18 +562,23 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           ${s.blacklisted ? `<div style="margin-top:4px;color:var(--red);font-size:11px;">Blacklisted · watched to ${watch}m</div>` : `<div style="margin-top:4px;color:var(--text-dim);font-size:11px;">Watched to ${watch}m</div>`}
           ${s.blacklisted && s.blacklistNote ? `<div style="margin-top:3px;color:var(--text-dim);font-size:11px;">${escapeHtml(s.blacklistNote)}</div>` : ""}
           ${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${escapeHtml(s.truckHere)} fueling</div>` : ""}
-          ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:9px 10px;min-height:34px;font:inherit;font-size:12px;cursor:pointer;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--text-dim);">${label}</button>` : ""}
+          ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:7px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--text-dim);">${label}</button>` : ""}
         </div>`
       );
 
-      // The button above is achromatic in BOTH states, matching
-      // .btn-sm.danger (the Stop button on a run card), which is
-      // --line/--text-dim at rest and only turns red on hover. It used
-      // to be red at rest when the station was not yet blacklisted:
-      // that spent a taxonomy hue — --red means off-route or speeding —
-      // on a control, and its 6px radius contradicted the outlined pill
-      // at --r-pill. The station's own state is already carried by the
-      // marker, the ring and the line above it.
+      // The button above is achromatic in BOTH states, and matches
+      // .btn-sm.danger's RESTING values — --line border, --text-dim
+      // text, 100px radius, 600 weight. It used to be red at rest when
+      // the station was not yet blacklisted: that spent a taxonomy hue
+      // (--red means off-route or speeding) on a control, and its 6px
+      // radius contradicted the outlined pill at --r-pill. The
+      // station's own state is already carried by the marker, the ring
+      // and the line above the button.
+      //
+      // It matches at rest only. .btn-sm.danger reddens on hover; this
+      // one cannot, because an inline style attribute has no :hover.
+      // Living with that rather than injecting a stylesheet for one
+      // button — but do not read this as "same as .btn-sm.danger".
       //
       // Leaflet popups are HTML strings, not React, so the button is
       // wired on open rather than with onClick. Bound per open and torn

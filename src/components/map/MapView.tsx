@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { Moon, Satellite as SatelliteIcon, MapPin, Tag, Fuel, ArrowRight, X } from "lucide-react";
+import { Moon, Satellite as SatelliteIcon, MapPin, Truck, Fuel, ArrowRight, X } from "lucide-react";
 import { formatAge } from "@/lib/format";
 import { stationWatchRadius } from "@/lib/constants";
 
@@ -298,7 +298,7 @@ function buildStationIcon(occupied: boolean, blacklisted = false): L.DivIcon {
 // The Dispatch page (the only consumer of MapView) gets unmounted by
 // Next.js every time you navigate away and remounted when you come
 // back — that used to mean a brand new Leaflet map every visit: fresh
-// tile fetches, rebuilt marker layers, and Dark/Zones/Names/Stations
+// tile fetches, rebuilt marker layers, and Dark/Zones/Units/Stations
 // toggles reset to their defaults, even though nothing about the map
 // actually needed to change. The map (and its container DOM node) now
 // live in this module-level singleton instead of component state, so
@@ -316,7 +316,7 @@ interface MapCore {
   landmarksLayer: L.LayerGroup;
   routeLayer: L.LayerGroup;
   tileLayers: { dark: L.TileLayer; light: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer };
-  ui: { baseLayer: "dark" | "satellite"; showZones: boolean; showNames: boolean; showStations: boolean };
+  ui: { baseLayer: "dark" | "satellite"; showZones: boolean; showUnits: boolean; showStations: boolean };
 }
 
 let core: MapCore | null = null;
@@ -398,7 +398,7 @@ function getOrCreateMapCore(): MapCore {
     landmarksLayer,
     routeLayer,
     tileLayers: { dark, light, satellite, satelliteLabels },
-    ui: { baseLayer: "dark", showZones: true, showNames: true, showStations: true },
+    ui: { baseLayer: "dark", showZones: true, showUnits: true, showStations: true },
   };
   return core;
 }
@@ -415,7 +415,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
 
   const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">(() => getOrCreateMapCore().ui.baseLayer);
   const [showZones, setShowZones] = useState(() => getOrCreateMapCore().ui.showZones);
-  const [showNames, setShowNames] = useState(() => getOrCreateMapCore().ui.showNames);
+  const [showUnits, setShowUnits] = useState(() => getOrCreateMapCore().ui.showUnits);
   const [showStations, setShowStations] = useState(() => getOrCreateMapCore().ui.showStations);
 
   // Re-parent the persistent map container into this mount point; on
@@ -466,14 +466,15 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     }
   }, [showZones]);
 
-  // Truck markers — hidden entirely until Names is on, not just their
-  // labels (Names is the master toggle for the truck layer).
+  // Truck markers — the Units toggle adds and removes this whole layer,
+  // markers included, not just their labels. It was called Names, which
+  // is why that button never sounded like the one that shows vehicles.
   useEffect(() => {
     const { truckLayer } = getOrCreateMapCore();
-    core!.ui.showNames = showNames;
+    core!.ui.showUnits = showUnits;
     truckLayer.clearLayers();
 
-    if (!showNames) return;
+    if (!showUnits) return;
 
     for (const m of truckMarkers) {
       const labelText = m.driverName ? `${m.driverName} · ${m.label}` : m.label;
@@ -496,7 +497,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
 
       truckLayer.addLayer(marker);
     }
-  }, [truckMarkers, showNames]);
+  }, [truckMarkers, showUnits]);
 
   // Site markers
   useEffect(() => {
@@ -700,7 +701,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
 
   function toggleBaseLayer(v: "dark" | "satellite") { setBaseLayer(v); }
   function toggleZones() { setShowZones((v) => !v); }
-  function toggleNames() { setShowNames((v) => !v); }
+  function toggleUnits() { setShowUnits((v) => !v); }
   function toggleStations() { setShowStations((v) => !v); }
 
   return (
@@ -726,7 +727,13 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
         <ToggleButton active={baseLayer === "satellite"} onClick={() => toggleBaseLayer("satellite")} label="Satellite" icon={SatelliteIcon} />
         <span aria-hidden style={{ width: 1, alignSelf: "stretch", background: "var(--line)", margin: "0 4px" }} />
         <ToggleButton active={showZones} onClick={toggleZones} label="Zones" icon={MapPin} />
-        <ToggleButton active={showNames} onClick={toggleNames} label="Names" icon={Tag} />
+        {/* "Units", not "Names". This toggle has never controlled
+            labels — it adds and removes the whole truck layer, markers
+            included (see the effect it drives). "Names" described a
+            thing it does not do, and left the actual question — where
+            are the vehicles — with no control that sounded like it.
+            "Units" is also what Wialon calls them upstream. */}
+        <ToggleButton active={showUnits} onClick={toggleUnits} label="Units" icon={Truck} />
         <ToggleButton active={showStations} onClick={toggleStations} label="Stations" icon={Fuel} />
       </div>
 

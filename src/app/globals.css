@@ -3112,10 +3112,13 @@ select option {
 }
 
 /* ── Zoom tiers ───────────────────────────────────────────────
-   The real fix for crowding. At country zoom the labels are noise —
-   nobody reads a driver's name across 800km — so they go entirely and
-   the arrows carry the picture. Mid zoom keeps the id. Only close in,
-   where trucks are actually separated, is the full label affordable. */
+   Below the cluster group's disableClusteringAtZoom the labels are
+   noise — nobody reads a driver's name across 800km — so they go and
+   the arrows carry the picture. The band just above it, where a crowded
+   bubble has just opened, keeps the id only. Full labels wait until
+   trucks are genuinely separated. MapView sets these classes and pins
+   the numbers to the clustering threshold; see the comment there before
+   changing either. */
 .tmk-far .tmk-chip,
 .tmk-far .tmk-stem { display: none; }
 .tmk-mid .tmk-name { display: none; }

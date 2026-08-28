@@ -488,18 +488,30 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
   // per wheel notch is the kind of work that makes a map feel broken,
   // and the labels are already in the DOM — they only need hiding.
   //
-  // Thresholds: below 8 the country is on screen and a driver's name is
-  // unreadable noise, so only the arrows remain (plus any off-route
-  // truck, which keeps its label at every zoom). 8 to 10 is a wilaya —
-  // the truck id is enough to tell one from another. From 11 the trucks
-  // are genuinely separated and the full label fits.
+  // THRESHOLDS ARE PINNED TO disableClusteringAtZoom (11), not chosen
+  // from how a map "feels" at a given zoom. They were 8 and 11, which
+  // put both label-hiding tiers entirely inside the range where the
+  // cluster group had already replaced crowded trucks with a single
+  // bubble — so they only ever acted on trucks that were geographically
+  // isolated, i.e. the ones that were never crowded. Measured at the
+  // parc, where 32 of 101 trucks sit inside 220m: below z11 there were
+  // ZERO individual markers in the DOM for the tiers to act on, and at
+  // z11 all 32 arrived at once carrying full labels — 35 of 38 chips
+  // buried under a neighbour.
+  //
+  // So the terse tier now starts exactly where clustering stops. 11 to
+  // 13 is the crowded band the moment the bubble opens: id only, which
+  // measured 39% narrower chips (109px against 180px). Full labels wait
+  // for 14, where trucks are genuinely separated. Below 11 the class is
+  // still applied — harmless where clustering already hid the labels,
+  // and it keeps isolated long-haul trucks terse at country zoom.
   useEffect(() => {
     const { map } = getOrCreateMapCore();
     const el = map.getContainer();
     const applyTier = () => {
       const z = map.getZoom();
-      el.classList.toggle("tmk-far", z < 8);
-      el.classList.toggle("tmk-mid", z >= 8 && z < 11);
+      el.classList.toggle("tmk-far", z < 11);
+      el.classList.toggle("tmk-mid", z >= 11 && z < 14);
     };
     applyTier();
     map.on("zoomend", applyTier);
@@ -519,6 +531,15 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     for (const m of truckMarkers) {
       const marker = L.marker([m.lat, m.lng], {
         icon: buildTruckIcon(m.status, m.offRoute, m.course, m.label, m.driverName),
+        // The off-route chip has to be ON TOP, not merely displayed.
+        // The CSS keeps it visible at every zoom tier, but `display` says
+        // nothing about painter order, and Leaflet's default is by
+        // latitude — so in the parc cluster (32 trucks inside 220m)
+        // thirty ordinary chips painted over the one alert, which
+        // measured 0% visible at z11 and never above half at any zoom.
+        // Lifting it makes the guarantee the CSS comment states actually
+        // true: measured 0% -> 100% at parc density.
+        zIndexOffset: m.offRoute ? 1000 : 0,
       });
 
       const eta = formatEta(m.etaSeconds);

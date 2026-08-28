@@ -280,9 +280,21 @@ export function dualAxisTimeSeriesOptions(opts: {
         boxPadding: 5,
         callbacks: {
           ...base.plugins.tooltip.callbacks,
+          // The null branch below is a GUARD, not a message anyone sees.
+          // Chart.js skips null points before the tooltip runs — the
+          // index-mode collector tests `if (!element.skip)` — so on a day
+          // with no value the row is omitted entirely rather than
+          // labelled. Verified by hovering the real null days: the body
+          // carries one line, the other series'. That is still correct
+          // behaviour (nothing reinstates a zero, which is the failure
+          // this exists to prevent), but do not read the string as
+          // something the operator reads. It is also deliberately
+          // generic: this helper serves both a money chart and a
+          // consumption chart, and "no priced fill" would be wrong
+          // vocabulary on the second.
           label: (ctx: { parsed: { y: number | null }; datasetIndex: number; dataset: { label?: string } }) => {
             const name = ctx.dataset.label ?? "";
-            if (ctx.parsed.y == null) return `${name}: no priced fill`;
+            if (ctx.parsed.y == null) return `${name}: none logged`;
             return `${name}: ${ctx.parsed.y.toLocaleString("en-GB")}${opts.units[ctx.datasetIndex] ?? ""}`;
           },
         },

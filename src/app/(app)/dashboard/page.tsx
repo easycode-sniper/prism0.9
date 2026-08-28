@@ -419,9 +419,40 @@ export default function DashboardPage() {
     datasets: [{ data: (series?.alerts ?? []).map((p) => p.value), ...BAR_SERIES }],
   };
 
-  const litresChart = {
+  // Litres bought against what they bought — the same bars-plus-rate
+  // shape as the cost panel. The rate is L/100km, NOT litres per
+  // kilometre: every other consumption figure in this app is per 100km
+  // (the KPI tile, the variance tables, the sheet's own assumed 45), and
+  // a truck reads 0.48 in the raw unit against 48 everywhere else, which
+  // is the kind of mismatch that gets a number misread once and
+  // distrusted after.
+  //
+  // Reuses series.consumption, so this needed no new query: it is
+  // already the same subset rule — only fills that logged a distance.
+  const litresChart: ChartData<"bar" | "line", (number | null)[], string> = {
     labels: (series?.litres ?? []).map((p) => axisLabel(p.day)),
-    datasets: [{ data: (series?.litres ?? []).map((p) => (p.value == null ? null : Math.round(p.value))), ...BAR_SERIES }],
+    datasets: [
+      {
+        label: "Litres",
+        data: (series?.litres ?? []).map((p) => (p.value == null ? null : Math.round(p.value))),
+        type: "bar" as const,
+        yAxisID: "y",
+        order: 2,
+        ...BAR_SERIES,
+      },
+      {
+        label: "L/100km",
+        data: (series?.consumption ?? []).map((p) => (p.value == null ? null : Number(p.value.toFixed(2)))),
+        type: "line" as const,
+        yAxisID: "y1",
+        order: 1,
+        ...LINE_SERIES,
+        // Smaller points than the cost chart's: this plot is a third the
+        // width, so 30 days of 3px dots merge into a bead chain.
+        pointRadius: 2,
+        pointHoverRadius: 4,
+      },
+    ],
   };
 
   const consumptionChart = {
@@ -636,15 +667,29 @@ export default function DashboardPage() {
             <header className="dash-panel__head">
               <div>
                 <div className="dash-panel__title">Litres bought per day</div>
-                <div className="dash-panel__sub">Every fill, staff vehicles included.</div>
+                {/* Names both series, which is why this chart carries no
+                    legend — 32px of legend is a fifth of a 150px plot. */}
+                <div className="dash-panel__sub">
+                  Bars: every fill, staff vehicles included. Line: L/100km, on the fills that
+                  logged a distance.
+                </div>
               </div>
             </header>
             <div className="dash-panel__body">
               <div className="dash-chart">
                 {series ? (
-                  <Bar
+                  <Chart<"bar" | "line", (number | null)[], string>
+                    type="bar"
                     data={litresChart}
-                    options={timeSeriesOptions({ unit: " L", days: litreDays })}
+                    options={dualAxisTimeSeriesOptions({
+                      units: [" L", " L/100km"],
+                      days: litreDays,
+                      // 8,503 to 16,214 litres a day, so the raw ticks
+                      // are five digits in a 300px panel. "15k" says the
+                      // same thing in a third of the width.
+                      compactLeft: true,
+                      legend: false,
+                    })}
                     plugins={[crosshairPlugin]}
                   />
                 ) : (

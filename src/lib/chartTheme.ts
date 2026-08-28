@@ -208,6 +208,14 @@ export function dualAxisTimeSeriesOptions(opts: {
    *  above zero, so it is not zero-based by default — anchoring it would
    *  flatten the only movement it has. */
   rightBeginAtZero?: boolean;
+  /**
+   * Legend on by default. Turn it OFF in a narrow panel and name the two
+   * series in the panel's own sub-line instead: the legend band measures
+   * 32px, which is a fifth of a 150px trio chart and comes straight out
+   * of the plot. In the full-width cost panel it is affordable and the
+   * chart is busy enough to need it; in a third-width one it is not.
+   */
+  legend?: boolean;
 }) {
   const base = timeSeriesOptions({ days: opts.days });
   const compact = (v: number) =>
@@ -237,7 +245,7 @@ export function dualAxisTimeSeriesOptions(opts: {
     plugins: {
       ...base.plugins,
       legend: {
-        display: true,
+        display: opts.legend ?? true,
         position: "top" as const,
         align: "end" as const,
         labels: {

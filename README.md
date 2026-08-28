@@ -46,11 +46,13 @@ which uses `pg_net` to POST to `/api/tick` on this app. That handler
    dispatch — reaching the factory to load is what *prompts* a dispatch, so
    it can't be conditional on one already existing. Both skip vehicles
    flagged `category = 'staff'`.
-5. Checks every non-offline vehicle against the 90 km/h limit (`speeding`),
-   fleet-wide. Staff cars are **not** excluded here: a speed limit applies
-   to whoever is driving. Offline units are dropped rather than treated as
-   under the limit, so a truck that stops reporting freezes its flag
-   instead of re-alerting when it comes back.
+5. Checks every non-offline **cargo** truck against the 90 km/h limit
+   (`speeding`). Staff cars are excluded, like the two checks above:
+   this ran fleet-wide until 2026-08-28, when 7 staff vehicles turned out
+   to be raising 65 of 171 alerts — a light car keeps up with traffic, and
+   an alert nobody acts on buries the ones they do. Offline units are
+   dropped rather than treated as under the limit, so a truck that stops
+   reporting freezes its flag instead of re-alerting when it comes back.
 6. Checks every **idle** vehicle against blacklisted fuel stations
    (`station_stop`). Idle-only is the feature, not an optimisation: the
    fleet feed calls a truck idle at ≤ 5 km/h on a fix under 30 minutes old,
@@ -206,6 +208,7 @@ editor or the CLI. There are 36; the ones worth knowing about:
 | `035` | Station blacklisting: `blacklisted`, `radius_meters`, `at_blacklisted_station_id` |
 | `036` | Closes `app_config` to an allow-list |
 | `037` | Adds `amount_da` and `da_per_km` to `dashboard_daily_series` |
+| `038` | Drops staff vehicles from the speeding leaderboard |
 
 When adding a notification kind, update the `notifications_kind_check`
 constraint in the same migration. The insert is fire-and-forget: a rejected row

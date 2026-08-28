@@ -192,14 +192,18 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     warnings.push("factory: no factory geofence found; factory arrivals not checked");
   }
 
-  // Speeding, fleet-wide and last, because it is the one check that must
-  // not be able to cost the others: a truck over the limit is worth
-  // knowing about, but not at the price of a missed arrival.
+  // Speeding, last, because it is the one check that must not be able to
+  // cost the others: a truck over the limit is worth knowing about, but
+  // not at the price of a missed arrival.
   //
-  // EVERY vehicle, not just cargo — `trucks`, not `cargoTrucks`. The parc
-  // and factory checks drop staff cars because their arrivals are noise;
-  // a speed limit is a safety rule and does not care what the vehicle is
-  // for.
+  // CARGO ONLY. This used to run on every vehicle, on the reasoning that
+  // a speed limit is a safety rule and does not care what a vehicle is
+  // for. That reasoning was sound and the result was still wrong: a
+  // light car keeps up with traffic, so 7 staff vehicles raised 65 of
+  // the fleet's 171 speeding alerts — 63 of them in a single day, 44% of
+  // the total — and the alert the owner actually acts on is a laden
+  // cement truck over the limit. An alert nobody acts on is not a safety
+  // net, it is what buries the ones they do. The owner's call, 2026-08-28.
   //
   // Offline units are filtered out rather than passed through as "not
   // speeding". Excluded, a truck that stopped reporting appears in
@@ -210,7 +214,7 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   try {
     await runFleetSpeedingCheck(
       supabase,
-      trucks.filter((t) => t.status !== "offline")
+      cargoTrucks.filter((t) => t.status !== "offline")
     );
   } catch (err) {
     warnings.push(`speeding: ${(err as Error).message}`);

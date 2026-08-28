@@ -28,11 +28,35 @@ export async function getParcEntries(
     return { data: [], truncated: false, error: "The start time is after the end time" };
   }
 
-  const { data, error } = await supabase
+  // Staff vehicles are left out, and the filter has to be in the QUERY
+  // rather than applied to the result: MAX_ROWS is a cap on rows coming
+  // back, so filtering afterwards would truncate against a count that
+  // includes rows the report never shows.
+  //
+  // The tick stopped writing parc entries for staff cars when they were
+  // dropped from runHqArrivalCheck, so nothing new arrives — but 21 rows
+  // were already on record, and a report that lists them while never
+  // gaining another is inconsistent with itself across time. This is a
+  // display filter over a true log, not a deletion: the rows stay.
+  //
+  // Read as a list rather than joined because hq_entries has no foreign
+  // key to fleet_trucks — 011 dropped that relationship deliberately,
+  // since Wialon is the roster. Ten staff vehicles is a small `in`.
+  const { data: staffRows, error: staffError } = await supabase
+    .from("fleet_trucks")
+    .select("truck_id")
+    .eq("category", "staff");
+  if (staffError) return { data: [], truncated: false, error: staffError.message };
+  const staffIds = (staffRows ?? []).map((r) => r.truck_id as string);
+
+  let query = supabase
     .from("hq_entries")
     .select("id, truck_id, driver_name, entered_at")
     .gte("entered_at", fromIso)
-    .lte("entered_at", toIso)
+    .lte("entered_at", toIso);
+  if (staffIds.length > 0) query = query.not("truck_id", "in", `(${staffIds.join(",")})`);
+
+  const { data, error } = await query
     .order("entered_at", { ascending: true })
     .limit(MAX_ROWS + 1);
 

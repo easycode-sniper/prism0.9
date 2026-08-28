@@ -468,6 +468,12 @@ export default function DashboardPage() {
     const rank = { moving: 0, idle: 1, offline: 2 } as const;
     const onRun = new Set(dispatches.map((d) => d.truck_id));
     return trucks
+      // Staff cars are not on duty in the sense this panel means, and
+      // today they carry no driver name so the filter below already
+      // excluded them by accident. Naming the category makes it
+      // deliberate: assign a driver to a staff car in Wialon and the
+      // accident stops working.
+      .filter((tr) => tr.category !== "staff")
       .filter((tr) => tr.driverName)
       .sort((a, b) => (rank[a.status] ?? 3) - (rank[b.status] ?? 3))
       .slice(0, 6)
@@ -831,8 +837,15 @@ export default function DashboardPage() {
               <div>
                 <div className="dash-panel__title">What the fleet is doing</div>
                 <div className="dash-panel__sub">
+                  {/* Says which population it counts, like the distance
+                      chart does. This one DOES include staff cars —
+                      they are vehicles that report, and where the fleet
+                      is right now is the one question they belong in —
+                      but the alert panels beside it exclude them, and a
+                      reader comparing the two should not have to guess
+                      which is which. */}
                   {trucks.length > 0
-                    ? `${trucks.length} vehicles reporting.`
+                    ? `${trucks.length} vehicles reporting, staff cars included.`
                     : "Waiting for the first fleet snapshot."}
                 </div>
               </div>

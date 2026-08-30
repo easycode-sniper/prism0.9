@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { playAlertTone } from "@/lib/sound";
+import { playAlertTone, primeAlertAudio } from "@/lib/sound";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatTime } from "@/lib/format";
 
@@ -53,6 +53,33 @@ export function AlertToaster() {
 
   const dismiss = useCallback((id: string) => {
     setToasts((cur) => cur.filter((t) => t.id !== id));
+  }, []);
+
+  // Unlock the alert tones on the operator's first interaction with the
+  // page, whatever it is. Without this they never sound: the browser
+  // starts an AudioContext suspended until a user gesture, and a
+  // realtime message is not one — so every beep was scheduled into a
+  // context that never ran, silently. See src/lib/sound.ts.
+  //
+  // Listens for the gestures a dispatcher actually makes and keeps
+  // listening until one takes, because the first pointerdown can land
+  // before the browser is willing. Capture phase, so a handler that
+  // stops propagation cannot swallow it.
+  useEffect(() => {
+    const EVENTS = ["pointerdown", "keydown", "touchstart"] as const;
+    const stop = () => EVENTS.forEach((e) => window.removeEventListener(e, onGesture, true));
+    function onGesture() {
+      if (primeAlertAudio()) stop();
+    }
+    EVENTS.forEach((e) => window.addEventListener(e, onGesture, true));
+
+    // A tab left in the background can have its context suspended by the
+    // browser rather than by the autoplay policy, and that one does
+    // resume without a gesture — so coming back to the tab re-arms it.
+    const onVisible = () => { if (document.visibilityState === "visible") primeAlertAudio(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => { stop(); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
   useEffect(() => {

@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
+import { loadWialonConfig, probeWialonZones, type WialonResourceShape } from "@/lib/fleet/wialon";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 let adminClient: any = null;
@@ -198,4 +200,28 @@ export async function adminSaveSettings(relay: string, server: string, token: st
     .eq("config_key", "wialon");
 
   return { error: error?.message ?? null };
+}
+
+// ── Wialon zone probe ────────────────────────────────────────
+//
+// Admin-only, read-only, and it writes nothing. It answers one
+// question before any geofence import gets built: do the Wialon zones
+// already arrive in the resource search the Drivers page runs, and what
+// shape are they? See probeWialonZones for why this is a probe rather
+// than an importer.
+//
+// The credential is resolved with the SERVICE role, like every other
+// Wialon path — app_config's SELECT policy is an allow-list that does
+// not include 'wialon', so a session-scoped read would find nothing.
+export async function adminProbeWialonZones(): Promise<{
+  resources: WialonResourceShape[];
+  error: string | null;
+}> {
+  const check = await requireAdmin();
+  if (check.error) return { resources: [], error: check.error };
+
+  const config = await loadWialonConfig(createServiceClient());
+  if (!config) return { resources: [], error: "Wialon is not configured" };
+
+  return probeWialonZones(config);
 }

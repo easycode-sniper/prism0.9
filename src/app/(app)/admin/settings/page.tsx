@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { adminGetSettings, adminSaveSettings } from "@/lib/supabase/admin-actions";
+import { adminGetSettings, adminSaveSettings, adminProbeWialonZones } from "@/lib/supabase/admin-actions";
 import type { AppSettings } from "@/lib/supabase/admin-actions";
+import type { WialonResourceShape } from "@/lib/fleet/wialon";
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -13,6 +14,18 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [probe, setProbe] = useState<WialonResourceShape[] | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
+
+  async function runProbe() {
+    setProbing(true);
+    setProbeError(null);
+    const res = await adminProbeWialonZones();
+    setProbing(false);
+    if (res.error) { setProbeError(res.error); return; }
+    setProbe(res.resources);
+  }
 
   useEffect(() => {
     loadSettings();
@@ -121,6 +134,48 @@ export default function AdminSettingsPage() {
           {saving ? "Saving..." : "Save Settings"}
         </button>
       </form>
+
+      {/* Read-only diagnostic. Answers whether Wialon's geofences already
+          arrive in the resource search the Drivers page runs — the flags
+          it asks for should already include them — before any import is
+          built on the assumption. Writes nothing. */}
+      <div className="rounded-lg border bd bg-panel p-6 mt-6">
+        <h2 className="text-lg font-medium t-primary">Geofences in Wialon</h2>
+        <p className="mt-1 text-sm t-dim">
+          Reports what the account&rsquo;s resources actually carry. Nothing is imported or
+          changed — this is here so the import can be written against the real shape.
+        </p>
+
+        <button type="button" onClick={runProbe} disabled={probing}
+          className="btn-sm mt-4" style={{ width: "auto" }}>
+          {probing ? "Reading…" : "Check for zones"}
+        </button>
+
+        {probeError && <div className="mt-3 rounded-md tint-red p-3 text-sm c-red">{probeError}</div>}
+
+        {probe && (
+          <div className="mt-4 space-y-4">
+            {probe.length === 0 && <p className="text-sm t-dim">No resources came back.</p>}
+            {probe.map((r) => (
+              <div key={r.resourceName} className="rounded-md border bd p-3">
+                <div className="text-sm t-primary font-medium">{r.resourceName}</div>
+                <div className="mt-1 text-sm" style={{ color: r.zoneCount > 0 ? "var(--green)" : "var(--text-dim)" }}>
+                  {r.zoneCount > 0 ? `${r.zoneCount} zones` : "no zones in this response"}
+                  {r.sampleZoneName ? ` · e.g. ${r.sampleZoneName}` : ""}
+                </div>
+                {r.sampleZoneFields && (
+                  <div className="mt-2 text-xs t-dim font-mono">
+                    zone fields: {r.sampleZoneFields.join(", ")}
+                  </div>
+                )}
+                <div className="mt-2 text-xs t-dim font-mono">
+                  keys: {r.keys.map((k) => `${k.key}${k.entries != null ? `(${k.entries})` : ""}`).join(" ")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -351,3 +351,92 @@ export async function fetchFleetData(config: ResolvedWialonConfig): Promise<Flee
     };
   }
 }
+
+// ── Zone probe ───────────────────────────────────────────────
+//
+// Reads what an avl_resource ACTUALLY carries, rather than assuming.
+//
+// The driver-library search above already asks for flags 0x0001ffff —
+// bits 0 through 16 — and Wialon's resource flag for zones is 0x1000,
+// bit 12, which is inside that mask. So the geofences are very probably
+// already arriving in a response the Drivers page fetches on every
+// visit, under a key nothing reads. If that holds, importing them costs
+// no new API call and no new flag.
+//
+// "Very probably" is why this is a probe and not an importer. The last
+// time this codebase guessed at a Wialon parameter it cost a round trip
+// and the ignition split is still blocked on not guessing another one.
+// So this reports the SHAPE — which keys each resource has, how many
+// entries hang off each, and one sanitised sample — and the importer
+// gets written against the answer.
+//
+// Read-only, and deliberately returns no coordinates: this exists to
+// settle a question, not to move data.
+
+export interface WialonResourceShape {
+  resourceName: string;
+  /** Every key on the resource object, with a count where the value is a
+   *  collection. The zones key is `zl` if the flag came through. */
+  keys: { key: string; type: string; entries: number | null }[];
+  /** Field names of one zone, if any zone-shaped collection is present —
+   *  enough to write a parser against, without pulling 500 polygons. */
+  sampleZoneFields: string[] | null;
+  sampleZoneName: string | null;
+  zoneCount: number;
+}
+
+export async function probeWialonZones(
+  config: ResolvedWialonConfig
+): Promise<{ resources: WialonResourceShape[]; error: string | null }> {
+  try {
+    const sid = await wialonLogin(config);
+    const data = await wialonCall(
+      config,
+      "core/search_items",
+      {
+        spec: { itemsType: "avl_resource", propName: "sys_name", propValueMask: "*", sortType: "sys_name" },
+        force: 1,
+        flags: 0x0001ffff,
+        from: 0,
+        to: 0,
+      },
+      sid
+    );
+    if (data.error) return { resources: [], error: `Wialon resource search failed (code ${data.error})` };
+
+    const resources: WialonResourceShape[] = [];
+    for (const r of (data.items || []) as Record<string, unknown>[]) {
+      const keys = Object.entries(r).map(([key, value]) => ({
+        key,
+        type: Array.isArray(value) ? "array" : value === null ? "null" : typeof value,
+        entries:
+          Array.isArray(value) ? value.length
+          : value && typeof value === "object" ? Object.keys(value).length
+          : null,
+      }));
+
+      // `zl` is Wialon's zones collection. Fall back to scanning for any
+      // object whose members look like zones, so a different key name
+      // still gets reported rather than silently missed.
+      const zoneBag =
+        (r.zl as Record<string, unknown> | undefined) ??
+        (Object.entries(r).find(([k, v]) => k !== "drvrs" && v && typeof v === "object" &&
+          Object.values(v as object).some((m) => m && typeof m === "object" && "n" in (m as object) && "t" in (m as object))
+        )?.[1] as Record<string, unknown> | undefined);
+
+      const zones = zoneBag ? Object.values(zoneBag) : [];
+      const first = zones[0] as Record<string, unknown> | undefined;
+
+      resources.push({
+        resourceName: String(r.nm ?? "(unnamed)"),
+        keys,
+        sampleZoneFields: first ? Object.keys(first) : null,
+        sampleZoneName: first?.n ? String(first.n) : null,
+        zoneCount: zones.length,
+      });
+    }
+    return { resources, error: null };
+  } catch (err) {
+    return { resources: [], error: (err as Error).message };
+  }
+}

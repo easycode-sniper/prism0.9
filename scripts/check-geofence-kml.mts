@@ -11,6 +11,8 @@ import {
   parseGeofenceKml,
   matchZones,
   ringToPolygonWkt,
+  ringSelfIntersects,
+  ringCentre,
   type ClientSite,
 } from "../src/lib/kml/geofenceKml.ts";
 
@@ -69,26 +71,63 @@ check("latitude is plausible for Algeria", z.ring[0][0] > 30 && z.ring[0][0] < 4
 check("image data stripped from description", z.description?.includes("89504E47"), false);
 check("description text kept", z.description, "Route Transsaharienne, commune Boughezoul, Wilaya de Médéa, Algeria, Hassi Messaline");
 
-console.log("matchZones");
+console.log("matchZones — distance decides");
+// Real coordinates. The Boughezoul zone centroid is ~35.6755, 2.8123.
 const SITES: ClientSite[] = [
-  { id: "s1", client: "cosider ouvrage d'art pôle A 30-01 Boughezoul- Médéa .", name: "COSIDER / BOUGHEZOULA30-01" },
-  { id: "s2", client: "SARL Houria Services", name: "SIDI MOUSSA" },
+  { id: "s1", client: "cosider ouvrage d'art pôle A 30-01 Boughezoul- Médéa .",
+    name: "COSIDER / BOUGHEZOULA30-01", lat: 35.6755, lng: 2.8123 },
+  { id: "s2", client: "SARL Houria Services", name: "SIDI MOUSSA", lat: 36.6, lng: 3.2 },
+  // The real SINOSTEEL row: name matches NOTHING, coordinate matches exactly.
+  { id: "s3", client: "SOCIETE SINOSTEEL ENGIEERING DESIGN RESEARCH INSTITUTE CO, LTD/TINDOUF, GARA DJBILAT",
+    name: "TINDOUF, GARA DJBILAT", lat: 26.7364, lng: -7.4822 },
 ];
 const DRIVERS = ["BEKHOUCHE ASSAM", "BOUKEMICHE Adnan"];
 
-check("real zone matches its client exactly", matchZones(zones, SITES, DRIVERS)[0].kind, "client");
-check("and carries the site", matchZones(zones, SITES, DRIVERS)[0].site?.name, "COSIDER / BOUGHEZOULA30-01");
+const m1 = matchZones(zones, SITES, DRIVERS)[0];
+check("real zone matches by distance", m1.kind, "client");
+check("and it is the right site", m1.site?.name, "COSIDER / BOUGHEZOULA30-01");
+check("distance is sub-kilometre", (m1.km ?? 99) < 1, true);
+check("runner-up is far away, so the match is unambiguous", (m1.runnerUpKm ?? 0) > 50, true);
+check("names happen to agree here", m1.nameAgrees, true);
 
-const synth = (name: string) => ({ name, description: null, shape: "point" as const, ring: [] as [number, number][] });
-const classify = (name: string) => matchZones([synth(name)], SITES, DRIVERS)[0].kind;
+// THE CASE THAT KILLED NAME MATCHING: typos on both sides, extra words
+// on both sides, and it still has to match.
+const sinosteel = {
+  name: "CIMENTRIE AMOUDA - CLIENT SINOSTEEL ENGINEERING DESIGN ET RESEARCH UNSTITUTE CO CL-gar djebilet",
+  description: "Gar Djebilet, Tinduf, Algeria",
+  shape: "polygon" as const,
+  ring: [
+    [26.7340016012, -7.4779307717], [26.7382559175, -7.477587449],
+    [26.7340008599, -7.4778052623], [26.733809984, -7.4870300779],
+    [26.7390991188, -7.4867725858], [26.7381792646, -7.477587449],
+    [26.7340016012, -7.4779307717],
+  ] as [number, number][],
+};
+const m2 = matchZones([sinosteel], SITES, DRIVERS)[0];
+check("matches despite the names disagreeing", m2.kind, "client");
+check("to the right site", m2.site?.name, "TINDOUF, GARA DJBILAT");
+check("names do NOT agree — distance carried it", m2.nameAgrees, false);
+check("self-intersection is flagged, not imported silently", m2.selfIntersecting, true);
+
+const synth = (name: string, ring: [number, number][] = [[35.6755, 2.8123]]) =>
+  ({ name, description: null, shape: "polygon" as const, ring });
+const classify = (name: string, ring?: [number, number][]) =>
+  matchZones([synth(name, ring)], SITES, DRIVERS)[0].kind;
 
 check("driver home is labelled, not imported", classify("BEKHOUCHE ASSAM"), "driver");
 check("driver match ignores case", classify("boukemiche adnan"), "driver");
 check("another plant's zone is 'other'", classify("CIMENTERIE OGGAZ - CLIENT whoever"), "other");
-check("prefixed but unknown client goes to review", classify("CIMENTRIE AMOUDA - CLIENT Someone New"), "amouda-unknown");
-check("prefix tolerates CIMENTERIE spelling", classify("CIMENTERIE AMOUDA - CLIENT SARL Houria Services"), "client");
-check("prefix tolerates loose spacing and case", classify("cimentrie amouda-client SARL Houria Services"), "client");
-check("an unprefixed client name is NOT imported", classify("SARL Houria Services"), "other");
+check("prefixed but nowhere near a site goes to review",
+  classify("CIMENTRIE AMOUDA - CLIENT Someone New", [[20.0, 10.0]]), "amouda-far");
+check("prefix tolerates CIMENTERIE spelling", classify("CIMENTERIE AMOUDA - CLIENT anything"), "client");
+check("an unprefixed name is never imported, even sitting on a site",
+  classify("SARL Houria Services"), "other");
+
+console.log("geometry helpers");
+check("bowtie detected", ringSelfIntersects(sinosteel.ring), true);
+check("simple square is not flagged",
+  ringSelfIntersects([[0,0],[0,1],[1,1],[1,0],[0,0]]), false);
+check("centroid of the square", ringCentre([[0,0],[0,2],[2,2],[2,0],[0,0]])?.map(n=>Math.round(n*10)/10), [0.8,0.8]);
 
 console.log("ringToPolygonWkt");
 const wkt = ringToPolygonWkt(z.ring)!;

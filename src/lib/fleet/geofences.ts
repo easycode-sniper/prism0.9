@@ -3,12 +3,12 @@
 // keeps the session-scoped server action that pages call.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { GeofenceRecord } from "@/lib/supabase/geofences";
+import type { GeofenceRecord, GeofenceKind } from "@/lib/supabase/geofences";
 
 interface GeofenceRow {
   id: string;
   name: string;
-  kind: "factory" | "site";
+  kind: GeofenceKind;
   site_id: string | null;
   center_lat: number | null;
   center_lng: number | null;
@@ -77,6 +77,22 @@ export function selectFactoryGeofence(geofences: GeofenceRecord[]): {
       `arrival is being tested against "${factories[0].name}". Only the waiting area belongs here — ` +
       `the loading bay needs its own kind and flag, not a second 'factory' row.`,
   };
+}
+
+/**
+ * The loading bay, if it has been drawn.
+ *
+ * Unlike the waiting area this one raises no alert — a truck reaching
+ * the pump is not news, and at roughly one visit per truck per run it
+ * would be forty toasts a day. What it produces is a zone_visits row,
+ * which is what the owner's factory report reads: entry, exit, and the
+ * time between them.
+ */
+export function selectLoadingGeofence(geofences: GeofenceRecord[]): GeofenceRecord | null {
+  const bays = geofences
+    .filter((g) => g.kind === "factory_loading")
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return bays[0] ?? null;
 }
 
 export async function loadGeofences(

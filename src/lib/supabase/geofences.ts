@@ -2,10 +2,16 @@
 
 import { createClient } from "@/lib/supabase/server";
 
+/** 'factory' is the plant's WAITING AREA and 'factory_loading' the
+ *  loading bay inside it. They are separate kinds rather than two
+ *  'factory' rows because only the first one means "arrived at the
+ *  plant" — see selectFactoryGeofence in lib/fleet/geofences.ts. */
+export type GeofenceKind = "factory" | "factory_loading" | "site";
+
 export interface GeofenceRecord {
   id: string;
   name: string;
-  kind: "factory" | "site";
+  kind: GeofenceKind;
   siteId: string | null;
   ring: [number, number][] | null; // [lat, lng]
   centerLat: number | null;
@@ -16,7 +22,7 @@ export interface GeofenceRecord {
 interface GeofenceRow {
   id: string;
   name: string;
-  kind: "factory" | "site";
+  kind: GeofenceKind;
   site_id: string | null;
   center_lat: number | null;
   center_lng: number | null;

@@ -9,7 +9,7 @@
 // shouldn't be callable from a browser regardless.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence } from "@/lib/geometry";
+import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence, pointInPolygon } from "@/lib/geometry";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { selectFactoryGeofence } from "@/lib/fleet/geofences";
 import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH, stationWatchRadius } from "@/lib/constants";
@@ -371,15 +371,93 @@ interface ZoneTarget {
   label: string;
   matches(truck: PositionedTruck): boolean;
   /** Column on fleet_trucks holding the last known answer. */
-  flagColumn: "at_hq" | "at_factory" | "is_speeding";
-  rpcName: "mark_trucks_hq_state" | "mark_trucks_factory_state" | "mark_trucks_speeding_state";
+  flagColumn: "at_hq" | "at_factory" | "at_loading" | "is_speeding";
+  rpcName:
+    | "mark_trucks_hq_state"
+    | "mark_trucks_factory_state"
+    | "mark_trucks_loading_state"
+    | "mark_trucks_speeding_state";
   /** The RPC's boolean argument name, which differs per target. */
-  rpcFlagArg: "p_at_hq" | "p_at_factory" | "p_is_speeding";
-  notification(truckId: string): { kind: string; title: string; message: string };
+  rpcFlagArg: "p_at_hq" | "p_at_factory" | "p_at_loading" | "p_is_speeding";
+  /** Optional, because not every zone is worth interrupting someone
+   *  over. The loading bay is measured, not announced: a truck reaching
+   *  the pump on every run would be forty toasts a day, which is how
+   *  the alerts a dispatcher acts on get buried. */
+  notification?(truckId: string): { kind: string; title: string; message: string };
   /** Extra durable record written from the same transition result — the
-   *  parc log, for Rapport Parc. Runs only for trucks that actually
-   *  transitioned. */
+   *  parc log, and the factory zone_visits rows. Runs only for trucks
+   *  that actually transitioned. */
   onArrived?(truckIds: string[], driverOf: Map<string, string | null>): Promise<void>;
+  /** The other half of a visit. Same contract as onArrived and it runs
+   *  only for trucks whose flag actually flipped back, so it cannot
+   *  close a visit that was never opened. */
+  onDeparted?(truckIds: string[]): Promise<void>;
+}
+
+/**
+ * A truck's stay in one of the plant's zones, as two half-writes.
+ *
+ * The report the owner needs is heure d'entrée, heure de sortie and the
+ * time between, per truck per zone. Neither existing table can carry it:
+ * hq_entries records an entry and no exit, notifications is a feed the
+ * UI truncates to 300, and fleet_snapshots is pruned after seven days.
+ *
+ * Both halves hang off runZoneArrivalCheck's compare-and-set, so a visit
+ * is opened and closed exactly once per real crossing rather than once
+ * per tick the truck happens to be inside.
+ *
+ * ONE ASYMMETRY, deliberate. openZoneVisit closes any visit still open
+ * for that truck and zone before inserting. That is not defensive
+ * decoration: the flag is written before the log, following the ordering
+ * the rest of this file settled on, so a close that fails leaves the
+ * flag cleared and the row open. Repairing it on the next entry is what
+ * stops one failure corrupting the truck's history from then on — the
+ * partial unique index would otherwise reject every future visit.
+ */
+async function openZoneVisit(
+  supabase: SupabaseClient,
+  zoneKind: "factory" | "factory_loading",
+  zoneName: string,
+  truckIds: string[],
+  driverOf: Map<string, string | null>
+): Promise<void> {
+  const { error: repairError } = await supabase
+    .from("zone_visits")
+    .update({ exited_at: new Date().toISOString() })
+    .in("truck_id", truckIds)
+    .eq("zone_kind", zoneKind)
+    .is("exited_at", null);
+  if (repairError) throw new Error(`zone visit repair failed: ${repairError.message}`);
+
+  const enteredAt = new Date().toISOString();
+  const { error } = await supabase.from("zone_visits").insert(
+    truckIds.map((truck_id) => ({
+      truck_id,
+      driver_name: driverOf.get(truck_id) ?? null,
+      zone_kind: zoneKind,
+      zone_name: zoneName,
+      entered_at: enteredAt,
+    }))
+  );
+  if (error) throw new Error(`zone visit open failed: ${error.message}`);
+}
+
+async function closeZoneVisit(
+  supabase: SupabaseClient,
+  zoneKind: "factory" | "factory_loading",
+  truckIds: string[]
+): Promise<void> {
+  const { error } = await supabase
+    .from("zone_visits")
+    .update({ exited_at: new Date().toISOString() })
+    .in("truck_id", truckIds)
+    .eq("zone_kind", zoneKind)
+    .is("exited_at", null);
+  // Thrown rather than logged, like every other write in this file whose
+  // failure would be invisible: a visit that never closes reads as a
+  // truck still in the zone, and the report would show it as ongoing
+  // forever rather than as a gap.
+  if (error) throw new Error(`zone visit close failed: ${error.message}`);
 }
 
 // Home-base arrival isn't tied to a dispatch — a truck returns to PARC
@@ -472,6 +550,73 @@ export async function runFactoryArrivalCheck(
       title: "Arrived at the factory",
       message: `${truck_id} has arrived at ${factory.name}.`,
     }),
+    // Both halves of the stay, for the factory report. Queue time is
+    // this visit's start against the loading visit's start; the whole
+    // stay at the plant is this visit's own duration.
+    onArrived: (truckIds, driverOf) =>
+      openZoneVisit(supabase, "factory", factory.name, truckIds, driverOf),
+    onDeparted: (truckIds) => closeZoneVisit(supabase, "factory", truckIds),
+  });
+}
+
+/**
+ * Time in the loading bay — measured, never announced.
+ *
+ * The bay sits INSIDE the waiting area, so a truck at the pump is inside
+ * both zones at once and both flags are true together. That is why they
+ * are separate columns rather than one "current zone": collapsing them
+ * would make entering the bay look like leaving the plant.
+ *
+ * STRICT CONTAINMENT, no edge buffer — the one number in this feature
+ * that was arrived at by measurement rather than judgement, because
+ * every buffer I tried was wrong.
+ *
+ * A buffer exists to stop a truck on the boundary flickering, and on an
+ * arrival alert a generous one costs nothing. Here it destroys the
+ * measurement: the queue lane at Amouda runs TEN METRES outside the bay
+ * boundary, and trucks sit in it for hours. Replaying 00018-523-35's
+ * real fixes for 2026-08-31 against the owner's own Wialon report:
+ *
+ *              owner (Wialon)          strict            50m buffer
+ *   entry      09:50:11                09:51:01          06:35:02
+ *   exit       10:25:41                10:25:02          09:13:02
+ *   duration   0:35:30                 0:34:00           2:38:00
+ *   visits     1                       1                 3
+ *
+ * A 50m buffer turned a 3½-hour queue into "loading" and split the stay
+ * into three. Strict containment lands within ninety seconds of Wialon
+ * on both edges and produces exactly one visit — no flicker to defend
+ * against, because the truck is parked under the silo, not straddling
+ * the line.
+ *
+ * The waiting area keeps its 150m buffer and is validated the same way:
+ * 4:03:00 against Wialon's 4:03:28. It is four square kilometres, so
+ * the buffer is noise-sized there rather than measurement-sized.
+ */
+export async function runFactoryLoadingCheck(
+  supabase: SupabaseClient,
+  trucks: ZoneTruck[],
+  bay: { name: string; ring: [number, number][] | null }
+): Promise<void> {
+  if (!bay.ring) {
+    console.warn("[factoryLoadingCheck] loading bay has no polygon; skipped");
+    return;
+  }
+  const ring = bay.ring;
+
+  await runZoneArrivalCheck(supabase, trucks, {
+    label: "loading",
+    // pointInPolygon rather than isWithinGeofence: the buffer is not
+    // merely set to zero, it is absent, and calling the buffered helper
+    // with 0 would invite someone to "fix" the 0 later.
+    matches: (t) => pointInPolygon([t.lat, t.lng], ring),
+    flagColumn: "at_loading",
+    rpcName: "mark_trucks_loading_state",
+    rpcFlagArg: "p_at_loading",
+    // No notification on purpose — see ZoneTarget.notification.
+    onArrived: (truckIds, driverOf) =>
+      openZoneVisit(supabase, "factory_loading", bay.name, truckIds, driverOf),
+    onDeparted: (truckIds) => closeZoneVisit(supabase, "factory_loading", truckIds),
   });
 }
 
@@ -792,37 +937,45 @@ async function runZoneArrivalCheck(
 
       if (target.onArrived) await target.onArrived(toNotify, driverOf);
 
-      // truck_id is spread in here rather than left to each target's
-      // notification() to remember: the column is NOT NULL, so omitting
-      // it fails the insert outright, and building the row in one place
-      // means a new zone cannot forget it.
-      //
-      // driver_name is stamped from this moment's fleet data for the same
-      // reason hq_entries stamps it: a fleet-wide alert has no dispatch
-      // to join to, and resolving the name at read time would let a
-      // change of driver quietly rewrite who was speeding last week.
-      const { error: notifyError } = await supabase.from("notifications").insert(
-        toNotify.map((truck_id) => ({
-          truck_id,
-          driver_name: driverOf.get(truck_id) ?? null,
-          ...target.notification(truck_id),
-        }))
-      );
-      // Checked, not fire-and-forget. An unchecked insert here is what
-      // hid this exact bug: the flag write succeeded, so every truck was
-      // marked as present and would never transition again, while the
-      // notification that was the entire point never landed and nothing
-      // said so.
-      if (notifyError) {
-        throw new Error(
-          `${target.label} arrival notification insert failed (flags already set, so these will not retry): ${notifyError.message}`
+      // A zone can be worth logging without being worth interrupting
+      // anyone over — the loading bay is measured, not announced. Guarded
+      // rather than returned early: a return here would skip the
+      // departure block below, and a zone that can be entered but never
+      // left is stuck for good.
+      const notify = target.notification;
+      if (notify) {
+        // truck_id is spread in here rather than left to each target's
+        // notification() to remember: the column is NOT NULL, so omitting
+        // it fails the insert outright, and building the row in one place
+        // means a new zone cannot forget it.
+        //
+        // driver_name is stamped from this moment's fleet data for the same
+        // reason hq_entries stamps it: a fleet-wide alert has no dispatch
+        // to join to, and resolving the name at read time would let a
+        // change of driver quietly rewrite who was speeding last week.
+        const { error: notifyError } = await supabase.from("notifications").insert(
+          toNotify.map((truck_id) => ({
+            truck_id,
+            driver_name: driverOf.get(truck_id) ?? null,
+            ...notify(truck_id),
+          }))
         );
+        // Checked, not fire-and-forget. An unchecked insert here is what
+        // hid this exact bug: the flag write succeeded, so every truck was
+        // marked as present and would never transition again, while the
+        // notification that was the entire point never landed and nothing
+        // said so.
+        if (notifyError) {
+          throw new Error(
+            `${target.label} arrival notification insert failed (flags already set, so these will not retry): ${notifyError.message}`
+          );
+        }
       }
     }
   }
 
   if (departed.length > 0) {
-    const { error } = await supabase.rpc(target.rpcName, {
+    const { data: transitioned, error } = await supabase.rpc(target.rpcName, {
       p_truck_ids: departed,
       [target.rpcFlagArg]: false,
     });
@@ -834,5 +987,13 @@ async function runZoneArrivalCheck(
     if (error) {
       throw new Error(`${target.label} departure write failed: ${error.message}`);
     }
+
+    // The RPC's return value was previously discarded here. It is the
+    // same compare-and-set the arrival path relies on, so it names the
+    // trucks whose flag really flipped back — which is exactly the set
+    // whose visit should be closed. Using `departed` instead would close
+    // a visit for a truck another tab had already seen leave.
+    const left = ((transitioned ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
+    if (left.length > 0 && target.onDeparted) await target.onDeparted(left);
   }
 }

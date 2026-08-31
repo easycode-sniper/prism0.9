@@ -79,7 +79,7 @@ export interface StationMarkerData {
 export interface ZoneData {
   id: string;
   name: string;
-  kind: "factory" | "site";
+  kind: "factory" | "factory_loading" | "site";
   siteId?: string | null;
   ring: [number, number][] | null;
   centerLat: number | null;
@@ -674,16 +674,30 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     const { zonesLayer } = getOrCreateMapCore();
     zonesLayer.clearLayers();
 
-    for (const z of zones) {
-      const color = z.kind === "factory" ? "#ff2fd0" : "#00cfff";
+    // The bay is nested inside the waiting area, so it has to be added
+    // last or the larger polygon's fill paints over it. The RPC's row
+    // order is not a contract, so the order is imposed here.
+    const drawOrder = [...zones].sort(
+      (a, b) => Number(a.kind === "factory_loading") - Number(b.kind === "factory_loading")
+    );
+
+    for (const z of drawOrder) {
+      // Both plant zones are pink: the taxonomy is about what a place IS
+      // to a truck, and the loading bay is a destination exactly as the
+      // waiting area is. The bay sits INSIDE the waiting area, so it is
+      // drawn after and with a heavier stroke — two pink outlines at the
+      // same weight read as one shape with a stray line through it.
+      const isPlant = z.kind === "factory" || z.kind === "factory_loading";
+      const color = isPlant ? "#ff2fd0" : "#00cfff";
+      const weight = z.kind === "factory_loading" ? 3 : 2;
       const shape = z.ring
-        ? L.polygon(z.ring, { color, weight: 2, fillOpacity: 0.12 })
+        ? L.polygon(z.ring, { color, weight, fillOpacity: 0.12 })
         : z.centerLat != null && z.centerLng != null && z.radiusMeters != null
-          ? L.circle([z.centerLat, z.centerLng], { radius: z.radiusMeters, color, weight: 2, fillOpacity: 0.12 })
+          ? L.circle([z.centerLat, z.centerLng], { radius: z.radiusMeters, color, weight, fillOpacity: 0.12 })
           : null;
       if (!shape) continue;
       shape.bindPopup(
-        `<strong style="color:${z.kind === "factory" ? "var(--pink)" : "var(--cyan)"};">${z.name}</strong>`
+        `<strong style="color:${isPlant ? "var(--pink)" : "var(--cyan)"};">${z.name}</strong>`
       );
       zonesLayer.addLayer(shape);
     }
@@ -696,6 +710,10 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     landmarksLayer.clearLayers();
 
     for (const z of zones) {
+      // The waiting area only. The loading bay is 700m away inside it,
+      // and a second plant icon there would be two landmarks for one
+      // place — the bay is a boundary you measure, not somewhere to
+      // navigate to separately.
       const isFactory = z.kind === "factory";
       const isBase = z.kind === "site" && z.siteId == null;
       if (!isFactory && !isBase) continue;

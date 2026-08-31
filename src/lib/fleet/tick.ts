@@ -10,12 +10,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadWialonConfig, fetchFleetData, type FleetTruck, type VehicleCategory } from "@/lib/fleet/wialon";
-import { loadGeofences, selectFactoryGeofence } from "@/lib/fleet/geofences";
+import { loadGeofences, selectFactoryGeofence, selectLoadingGeofence } from "@/lib/fleet/geofences";
 import {
   loadDispatchAndSite,
   runPositionCheck,
   runHqArrivalCheck,
   runFactoryArrivalCheck,
+  runFactoryLoadingCheck,
   runFleetSpeedingCheck,
   runBlacklistedStationCheck,
 } from "@/lib/fleet/positionCheck";
@@ -195,6 +196,23 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     }
   } else {
     warnings.push("factory: no factory geofence found; factory arrivals not checked");
+  }
+
+  // The loading bay, inside the waiting area. Raises no alert — it
+  // writes the zone_visits rows the factory report reads, so queue time
+  // and loading time are measurable per truck per day. Runs after the
+  // waiting-area check so that on the tick a truck first appears at the
+  // plant, the outer visit is opened before the inner one.
+  const loadingBay = selectLoadingGeofence(geofences);
+  if (loadingBay) {
+    try {
+      await runFactoryLoadingCheck(supabase, cargoTrucks, {
+        name: loadingBay.name,
+        ring: loadingBay.ring,
+      });
+    } catch (err) {
+      warnings.push(`loading: ${(err as Error).message}`);
+    }
   }
 
   // Speeding, last, because it is the one check that must not be able to

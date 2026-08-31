@@ -96,6 +96,14 @@ export interface FactoryVisit {
   /** Null for the same reason — an open visit has no duration yet, and
    *  rendering it as zero would read as a truck that came and went. */
   seconds_in_zone: number | null;
+  /** How long the truck was at the plant before loading started:
+   *  loading entry minus the enclosing waiting entry.
+   *
+   *  On a LOADING row only. The bay sits inside the waiting area, so a
+   *  waiting visit spans the whole stay and its own duration is total
+   *  time at the plant, not waiting — this is the number that separates
+   *  the two. Null when nothing encloses the visit; see migration 040. */
+  queue_seconds: number | null;
 }
 
 export interface FactorySummaryRow {
@@ -109,6 +117,9 @@ export interface FactorySummaryRow {
   total_seconds: number;
   median_seconds: number | null;
   max_seconds: number | null;
+  /** Both on the loading row only — see FactoryVisit.queue_seconds. */
+  median_queue_seconds: number | null;
+  max_queue_seconds: number | null;
 }
 
 function validateRange(fromIso: string, toIso: string): string | null {
@@ -145,6 +156,48 @@ export async function getFactoryVisits(
     truncated: rows.length > MAX_ROWS,
     error: null,
   };
+}
+
+/** The six fleet figures the strip shows, as one row.
+ *
+ *  Aggregated in Postgres over every visit in the range rather than
+ *  derived from either list above: the detail is capped, PostgREST
+ *  truncates without erroring, and a median of the per-truck medians is
+ *  not the fleet median — it weights a truck with one visit the same as
+ *  one with twenty. One row out, so nothing can truncate it. */
+export interface FactoryTotals {
+  trucks: number;
+  plant_visits: number;
+  /** Time in the waiting zone, which contains the bay — the whole stay
+   *  at the plant, loading included. */
+  median_presence: number | null;
+  max_presence: number | null;
+  /** Arrival to the start of loading: the wait on its own. */
+  median_queue: number | null;
+  median_load: number | null;
+}
+
+export async function getFactoryTotals(
+  fromIso: string,
+  toIso: string
+): Promise<{ data: FactoryTotals | null; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: null, error: "Not authenticated" };
+
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: null, error: invalid };
+
+  const { data, error } = await supabase.rpc("factory_zone_totals", {
+    p_from: fromIso,
+    p_to: toIso,
+  });
+
+  if (error) return { data: null, error: error.message };
+  // A RETURNS TABLE function always yields exactly one row here, but an
+  // empty range still returns it with nulls — so absence means the call
+  // shape changed, not that there was no data.
+  return { data: ((data ?? []) as FactoryTotals[])[0] ?? null, error: null };
 }
 
 /** One row per truck per zone. Bounded by the size of the fleet rather

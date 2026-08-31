@@ -5,9 +5,11 @@ import {
   getParcEntries,
   getFactoryVisits,
   getFactorySummary,
+  getFactoryTotals,
   type ParcEntry,
   type FactoryVisit,
   type FactorySummaryRow,
+  type FactoryTotals,
 } from "@/lib/supabase/reports";
 import {
   formatOpsDateTime,
@@ -67,8 +69,12 @@ const ZONE_LABEL: Record<FactoryVisit["zone_kind"], string> = {
 // second hue on the distinction would say they are different kinds of
 // place rather than two parts of one.
 const PARC_COLUMNS = ["Truck ID", "Driver", "Entry date"] as const;
-const VISIT_COLUMNS = ["Truck ID", "Driver", "Zone", "Heure d'entrée", "Heure sortie", "Temps passé"] as const;
-const SUMMARY_COLUMNS = ["Truck ID", "Driver", "Zone", "Passages", "Total", "Médiane", "Max"] as const;
+const VISIT_COLUMNS = [
+  "Truck ID", "Driver", "Zone", "Heure d'entrée", "Heure sortie", "Temps passé", "Avant chargement",
+] as const;
+const SUMMARY_COLUMNS = [
+  "Truck ID", "Driver", "Zone", "Passages", "Total", "Médiane", "Max", "Avant chargement",
+] as const;
 
 function parcRows(entries: ParcEntry[]): string[][] {
   return entries.map((e) => [e.truck_id, e.driver_name || "—", formatOpsDateTime(e.entered_at)]);
@@ -82,6 +88,10 @@ function visitRows(visits: FactoryVisit[]): string[][] {
     formatOpsDateTime(v.entered_at),
     v.exited_at ? formatOpsDateTime(v.exited_at) : "encore sur place",
     hms(v.seconds_in_zone),
+    // Blank, not a dash, on an Attente row — matching the table, and
+    // because an empty spreadsheet cell reads as "not applicable" while
+    // a dash reads as a value that failed to arrive.
+    v.zone_kind === "factory_loading" ? hms(v.queue_seconds) : "",
   ]);
 }
 
@@ -94,6 +104,7 @@ function summaryRows(rows: FactorySummaryRow[]): string[][] {
     hms(r.total_seconds),
     hms(r.median_seconds),
     hms(r.max_seconds),
+    r.zone_kind === "factory_loading" ? hms(r.median_queue_seconds) : "",
   ]);
 }
 
@@ -109,16 +120,6 @@ function toCsv(columns: readonly string[], rows: string[][]): string {
   return [columns, ...rows].map((r) => r.map(escape).join(",")).join("\r\n");
 }
 
-/** Median of the values present, for the fleet-wide strip. Computed here
- *  rather than averaging the per-truck medians the RPC returns, which
- *  would weight a truck with one visit the same as one with twenty. */
-function medianOf(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const s = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
-
 export default function ReportsPage() {
   const [report, setReport] = useState<Report>("parc");
   const [usineView, setUsineView] = useState<UsineView>("detail");
@@ -128,6 +129,7 @@ export default function ReportsPage() {
   const [entries, setEntries] = useState<ParcEntry[] | null>(null);
   const [visits, setVisits] = useState<FactoryVisit[] | null>(null);
   const [summary, setSummary] = useState<FactorySummaryRow[] | null>(null);
+  const [totals, setTotals] = useState<FactoryTotals | null>(null);
 
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -149,6 +151,7 @@ export default function ReportsPage() {
     setEntries(null);
     setVisits(null);
     setSummary(null);
+    setTotals(null);
     setError(null);
     setCopied(false);
   }
@@ -176,20 +179,24 @@ export default function ReportsPage() {
         setTruncated(result.truncated);
       }
     } else {
-      // Both halves in one round trip: the strip is built from the
-      // summary and is shown above either view, so fetching it only when
-      // the Résumé tab is open would leave the strip empty on Détail.
-      const [v, s] = await Promise.all([
+      // All three together: the strip sits above both views, so fetching
+      // the totals only when Résumé is open would leave it empty on
+      // Détail, and the two tables are a tab switch apart — fetching on
+      // switch would put a spinner between two views of one answer.
+      const [v, s, t] = await Promise.all([
         getFactoryVisits(fromIso, toIso),
         getFactorySummary(fromIso, toIso),
+        getFactoryTotals(fromIso, toIso),
       ]);
-      if (v.error || s.error) {
-        setError(v.error ?? s.error);
+      if (v.error || s.error || t.error) {
+        setError(v.error ?? s.error ?? t.error);
         setVisits(null);
         setSummary(null);
+        setTotals(null);
       } else {
         setVisits(v.data);
         setSummary(s.data);
+        setTotals(t.data);
         setTruncated(v.truncated);
       }
     }
@@ -203,6 +210,7 @@ export default function ReportsPage() {
     setEntries(null);
     setVisits(null);
     setSummary(null);
+    setTotals(null);
     setError(null);
     setCopied(false);
   }
@@ -263,18 +271,6 @@ export default function ReportsPage() {
   const monoCell: React.CSSProperties = { fontFamily: "var(--font-mono)", color: "var(--text-dim)" };
   const hasRun = report === "parc" ? entries !== null : visits !== null;
 
-  // Fleet-wide figures for the strip, over closed visits only.
-  const waitSecs = (summary ?? []).filter((r) => r.zone_kind === "factory");
-  const loadSecs = (summary ?? []).filter((r) => r.zone_kind === "factory_loading");
-  const medianWait = medianOf(waitSecs.map((r) => r.median_seconds).filter((n): n is number => n != null));
-  const medianLoad = medianOf(loadSecs.map((r) => r.median_seconds).filter((n): n is number => n != null));
-  const maxWait = waitSecs.reduce<number | null>(
-    (a, r) => (r.max_seconds != null && (a == null || r.max_seconds > a) ? r.max_seconds : a),
-    null
-  );
-  const trucksSeen = new Set((summary ?? []).map((r) => r.truck_id)).size;
-  const plantVisits = waitSecs.reduce((a, r) => a + r.visits, 0);
-
   return (
     <div className="mx-auto max-w-6xl p-6">
       <h1 className="text-2xl font-semibold t-primary">
@@ -286,6 +282,18 @@ export default function ReportsPage() {
           : "Time at Usine Amouda, split between the waiting area and the loading bay."}{" "}
         Times in Algeria local time ({OPS_TIMEZONE}).
       </p>
+      {/* Said once, plainly, because the Attente figure is the one a
+          reader is most likely to take for something it is not. The bay
+          is drawn inside the waiting area, so an Attente row's duration
+          counts the loading too — "Avant chargement" is the wait on its
+          own. */}
+      {report === "usine" && (
+        <p className="mt-1 text-xs t-faint">
+          The loading bay sits inside the waiting area, so an <strong>Attente</strong> duration is the
+          whole stay at the plant, loading included. <strong>Avant chargement</strong> is arrival to
+          the start of loading — the wait on its own.
+        </p>
+      )}
 
       <div className="panel mt-5 p-4">
         <div className="seg" style={{ width: "fit-content" }}>
@@ -339,32 +347,40 @@ export default function ReportsPage() {
         <div className="mt-4 rounded-md p-3 text-sm tint-red c-red">{error}</div>
       )}
 
-      {report === "usine" && summary && (
+      {report === "usine" && totals && (
         <>
           {/* Amber is the taxonomy's idle, which is exactly what a truck
               in the waiting area is. Loading time stays achromatic: it is
               productive time, not a vehicle state, and green would claim
               a meaning the palette reserves for on-route and healthy. */}
-          <div className="kpi-strip mt-5">
+          {/* .kpi-strip is a fixed five-column grid because the
+              dashboard needs exactly five. This report has six figures
+              and the class is shared, so the extra column is an override
+              here rather than a change to the rule. */}
+          <div className="kpi-strip mt-5" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
             <div className="kpi-card">
-              <div className="kpi-value">{trucksSeen || "—"}</div>
+              <div className="kpi-value">{totals.trucks || "—"}</div>
               <div className="kpi-label">Camions</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-value">{plantVisits || "—"}</div>
-              <div className="kpi-label">Passages usine</div>
-            </div>
-            <div className="kpi-card amber">
-              <div className="kpi-value">{hms(medianWait)}</div>
-              <div className="kpi-label">Attente médiane</div>
+              <div className="kpi-value">{totals.plant_visits || "—"}</div>
+              <div className="kpi-label">Passages</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-value">{hms(medianLoad)}</div>
+              <div className="kpi-value">{hms(totals.median_presence)}</div>
+              <div className="kpi-label">Présence médiane</div>
+            </div>
+            <div className="kpi-card amber">
+              <div className="kpi-value">{hms(totals.median_queue)}</div>
+              <div className="kpi-label">Avant chargement</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-value">{hms(totals.median_load)}</div>
               <div className="kpi-label">Chargement médian</div>
             </div>
             <div className="kpi-card amber">
-              <div className="kpi-value">{hms(maxWait)}</div>
-              <div className="kpi-label">Attente la plus longue</div>
+              <div className="kpi-value">{hms(totals.max_presence)}</div>
+              <div className="kpi-label">Présence max</div>
             </div>
           </div>
 
@@ -469,6 +485,15 @@ export default function ReportsPage() {
                           {v.exited_at ? formatOpsDateTime(v.exited_at) : <span className="t-faint">encore sur place</span>}
                         </td>
                         <td style={{ fontFamily: "var(--font-mono)", ...group }}>{hms(v.seconds_in_zone)}</td>
+                        {/* Only a loading row can have one — it is the
+                            gap back to the enclosing waiting entry. On
+                            an Attente row the cell is blank rather than
+                            a dash, because a dash there would read as a
+                            missing value rather than an inapplicable
+                            one. Amber: this is queueing, which is idle. */}
+                        <td style={{ ...group, fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
+                          {v.zone_kind === "factory_loading" ? hms(v.queue_seconds) : ""}
+                        </td>
                       </tr>
                     );
                   })}
@@ -501,6 +526,9 @@ export default function ReportsPage() {
                       <td style={monoCell}>{hms(r.total_seconds)}</td>
                       <td style={{ fontFamily: "var(--font-mono)" }}>{hms(r.median_seconds)}</td>
                       <td style={monoCell}>{hms(r.max_seconds)}</td>
+                      <td style={{ fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
+                        {r.zone_kind === "factory_loading" ? hms(r.median_queue_seconds) : ""}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

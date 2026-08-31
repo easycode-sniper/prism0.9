@@ -123,6 +123,30 @@ check("prefix tolerates CIMENTERIE spelling", classify("CIMENTERIE AMOUDA - CLIE
 check("an unprefixed name is never imported, even sitting on a site",
   classify("SARL Houria Services"), "other");
 
+// Every one of these is a REAL name from the 1044-zone export that the
+// original strict prefix dropped on the floor. A filter that decides
+// what gets imported fails silently, so each gets a regression test.
+console.log("prefix — names the strict version missed");
+check("no CLIENT word at all", classify("CIMENTRIE AMOUDA -SARL ATBM BETON ET AGGLOMERES"), "client");
+check("no CLIENT, en dash inside the name",
+  classify("CIMENTRIE AMOUDA - COSIDER CANALISATION POLE L10 NT401 IN SALAH, M\u2019Guiden \u2013 Timimoun"), "client");
+check("no CLIENT, apostrophe in the name",
+  classify("CIMENTRIE AMOUDA - SPA COSIDER OUVRAGES D'ART - POLE A 90 - BECHAR"), "client");
+check("CLIENT present but no dash", classify("CIMENTRIE AMOUDA CLIENT ELBAYREK SAIDA NV CHANTIER 2"), "client");
+
+console.log("prefix — the plant's own zones are not customers");
+check("loading bay", classify("Zone chargement \u2013 Usine AMOUDA Ciment"), "factory");
+check("waiting area", classify("Zone d\u2019attente \u2013 Usine AMOUDA Ciment"), "factory");
+
+// The export spells Lafarge seven ways. Requiring the PLANT NAME rather
+// than a fixed prefix string is what makes all of them exclude
+// themselves, however mangled.
+console.log("prefix — every Lafarge misspelling still excluded");
+for (const v of ["CIMENTRIE LAFARGE", "CIMENTERIE LAFARGE", "CIMENTERIE LAFAGE",
+                 "SARLCIMENTRIE LAFARGE", "CIMENERIE LAFARGE", "CIMENETERIE LAFARGE",
+                 "CIMENTETRIE LAFARGE"])
+  check(`  ${v}`, classify(`${v} - CLIENT whoever`), "other");
+
 console.log("geometry helpers");
 check("bowtie detected", ringSelfIntersects(sinosteel.ring), true);
 check("simple square is not flagged",

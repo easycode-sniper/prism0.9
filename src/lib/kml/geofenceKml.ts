@@ -125,11 +125,30 @@ export function parseGeofenceKml(xml: string): ParsedZone[] {
 
 // ── Matching ─────────────────────────────────────────────────
 
-/** The prefix Wialon uses for this line's client zones. Matched loosely
- *  on spacing and case because it is typed by hand in their UI, but the
- *  words themselves have to be there — it is the only thing separating
- *  an Amouda client from another plant's. */
-const AMOUDA_PREFIX = /^\s*ciment(?:e)?rie\s+amouda\s*-\s*client\s*/i;
+/**
+ * The prefix Wialon uses for this line's client zones.
+ *
+ * LOOSE ON PURPOSE, and every allowance below is a real name from the
+ * 1044-zone export, not defensive guessing. A stricter version —
+ * `cimentrie amouda - client ` — silently dropped four client zones:
+ * three written without the word CLIENT at all, and one written without
+ * the dash. On a filter whose whole job is deciding what gets imported,
+ * a miss is invisible.
+ *
+ * The dash may be a hyphen or an en dash, both appear. "Amouda" itself
+ * has to be there: it is the only thing separating this plant from
+ * Lafarge, which the same export spells SEVEN different ways
+ * (CIMENERIE, CIMENETERIE, CIMENTETRIE, SARLCIMENTRIE...). Requiring
+ * the plant name rather than a fixed prefix string is what makes those
+ * exclude themselves regardless of how they are misspelt.
+ */
+const AMOUDA_PREFIX = /^\s*ciment(?:e|et)?r?ie\s+amouda\s*[-–—]?\s*(?:client\s*)?/i;
+
+/** The plant's OWN zones — loading bay, waiting area — which carry the
+ *  Amouda name but are not client sites. Two in the export. They are
+ *  worth knowing about (the factory already has a geofence) but must
+ *  not be matched to a customer. */
+const FACTORY_ZONE = /usine\s+amouda/i;
 
 export interface ClientSite {
   id: string;
@@ -146,6 +165,8 @@ export type MatchKind =
    *  import: this is where a genuinely new client lands, and also where
    *  a site whose stored coordinate is wrong would land. */
   | "amouda-far"
+  /** The plant's own loading/waiting zone, not a customer site. */
+  | "factory"
   /** Not prefixed, and the name is a known driver — a home marker. */
   | "driver"
   /** Not prefixed and not a driver. Another plant, or stale. */
@@ -262,6 +283,11 @@ export function matchZones(
   return zones.map((zone) => {
     const selfIntersecting = zone.shape === "polygon" && ringSelfIntersects(zone.ring);
     const base = { zone, site: null, km: null, runnerUpKm: null, nameAgrees: false, selfIntersecting };
+
+    // Checked before the prefix: the plant's own zones carry the Amouda
+    // name and would otherwise be matched to whichever customer happens
+    // to sit nearest the factory.
+    if (FACTORY_ZONE.test(zone.name)) return { ...base, kind: "factory" };
 
     if (!AMOUDA_PREFIX.test(zone.name)) {
       const kind: MatchKind = drivers.has(key(zone.name)) ? "driver" : "other";

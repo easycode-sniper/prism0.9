@@ -69,3 +69,102 @@ export async function getParcEntries(
     error: null,
   };
 }
+
+// ── Rapport Usine ────────────────────────────────────────────
+//
+// Time at the Amouda plant, split between its two zones: the waiting
+// area a truck queues in, and the loading bay inside it where cement
+// actually goes on. Both halves of every stay are logged by the tick
+// into zone_visits; see migration 039.
+//
+// No staff filter here, unlike the parc above. The tick only ever passes
+// cargo trucks to the zone checks, so a staff car cannot produce a
+// zone_visits row in the first place — a filter would be dead code
+// implying a class of rows that does not exist.
+
+/** 'factory' is the waiting area, 'factory_loading' the bay inside it. */
+export type FactoryZoneKind = "factory" | "factory_loading";
+
+export interface FactoryVisit {
+  truck_id: string;
+  driver_name: string | null;
+  zone_kind: FactoryZoneKind;
+  zone_name: string;
+  entered_at: string;
+  /** Null while the truck is still inside. */
+  exited_at: string | null;
+  /** Null for the same reason — an open visit has no duration yet, and
+   *  rendering it as zero would read as a truck that came and went. */
+  seconds_in_zone: number | null;
+}
+
+export interface FactorySummaryRow {
+  truck_id: string;
+  driver_name: string | null;
+  zone_kind: FactoryZoneKind;
+  visits: number;
+  /** Visits that have actually ended. The averages below are over these
+   *  only, so an open visit cannot drag a median down to zero. */
+  closed_visits: number;
+  total_seconds: number;
+  median_seconds: number | null;
+  max_seconds: number | null;
+}
+
+function validateRange(fromIso: string, toIso: string): string | null {
+  if (!fromIso || !toIso) return "Choose a start and end time";
+  if (new Date(fromIso) > new Date(toIso)) return "The start time is after the end time";
+  return null;
+}
+
+/** One row per visit — the owner's table, verbatim. */
+export async function getFactoryVisits(
+  fromIso: string,
+  toIso: string
+): Promise<{ data: FactoryVisit[]; truncated: boolean; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], truncated: false, error: "Not authenticated" };
+
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], truncated: false, error: invalid };
+
+  // Aggregated and ordered in Postgres — PostgREST caps a response at
+  // 1000 rows and does NOT error when it truncates, so a range wide
+  // enough to exceed the cap would silently show a partial report. The
+  // limit here is explicit and the UI says when it is hit.
+  const { data, error } = await supabase
+    .rpc("factory_zone_visits", { p_from: fromIso, p_to: toIso })
+    .limit(MAX_ROWS + 1);
+
+  if (error) return { data: [], truncated: false, error: error.message };
+
+  const rows = (data ?? []) as FactoryVisit[];
+  return {
+    data: rows.slice(0, MAX_ROWS),
+    truncated: rows.length > MAX_ROWS,
+    error: null,
+  };
+}
+
+/** One row per truck per zone. Bounded by the size of the fleet rather
+ *  than by the length of the range, so it stays usable over a month. */
+export async function getFactorySummary(
+  fromIso: string,
+  toIso: string
+): Promise<{ data: FactorySummaryRow[]; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], error: "Not authenticated" };
+
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], error: invalid };
+
+  const { data, error } = await supabase.rpc("factory_zone_summary", {
+    p_from: fromIso,
+    p_to: toIso,
+  });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as FactorySummaryRow[], error: null };
+}

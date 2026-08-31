@@ -10,7 +10,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadWialonConfig, fetchFleetData, type FleetTruck, type VehicleCategory } from "@/lib/fleet/wialon";
-import { loadGeofences } from "@/lib/fleet/geofences";
+import { loadGeofences, selectFactoryGeofence } from "@/lib/fleet/geofences";
 import {
   loadDispatchAndSite,
   runPositionCheck,
@@ -175,7 +175,12 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   // cannot be conditional on one already existing — which is exactly why
   // the dispatch-scoped version inside runPositionCheck had produced a
   // single notification in the app's lifetime.
-  const factory = geofences.find((g) => g.kind === "factory");
+  //
+  // Which factory geofence, specifically, is not a detail — the plant
+  // has a waiting area and a loading bay and only the first one means
+  // "arrived". See selectFactoryGeofence.
+  const { factory, warning: factoryWarning } = selectFactoryGeofence(geofences);
+  if (factoryWarning) warnings.push(`factory: ${factoryWarning}`);
   if (factory) {
     try {
       await runFactoryArrivalCheck(supabase, cargoTrucks, {

@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence } from "@/lib/geometry";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
+import { selectFactoryGeofence } from "@/lib/fleet/geofences";
 import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH, stationWatchRadius } from "@/lib/constants";
 
 export interface PositionCheckResult {
@@ -130,7 +131,12 @@ export async function runPositionCheck(
 
   // ── Geofence arrival: real polygon if uploaded, distance buffer otherwise ──
   const siteGeofence = geofences.find((g) => g.kind === "site" && g.siteId === dispatch.site_id);
-  const factoryGeofence = geofences.find((g) => g.kind === "factory");
+  // Same selector the tick uses, so this per-dispatch flag and the
+  // fleet-wide alert can never end up testing different zones — the
+  // plant has a waiting area and a loading bay, and only the waiting
+  // area means "arrived". The warning is the tick's to report; here it
+  // would be per dispatch, per minute.
+  const { factory: factoryGeofence } = selectFactoryGeofence(geofences);
 
   const wasSiteArrived = dispatch.site_arrival_notified === true;
   const wasFactoryArrived = dispatch.factory_arrival_notified === true;
@@ -422,9 +428,16 @@ export async function runHqArrivalCheck(
 /**
  * Factory arrival, on the same fleet-wide footing as the parc.
  *
- * The factory geofence is a drawn polygon rather than a circle, so the
- * test is point-in-polygon with the same edge buffer the dispatch-scoped
- * check uses — a truck sitting on the boundary shouldn't flicker.
+ * The zone is the plant's WAITING AREA, not its loading bay — arriving
+ * means reaching the plant and joining the queue, which is when a
+ * dispatch gets created. The caller picks it with selectFactoryGeofence;
+ * the distinction matters because the bay sits inside the waiting area
+ * and testing it would fire late, or never for a truck that queues and
+ * leaves.
+ *
+ * The geofence is a drawn polygon rather than a circle, so the test is
+ * point-in-polygon with the same edge buffer the dispatch-scoped check
+ * uses — a truck sitting on the boundary shouldn't flicker.
  */
 export async function runFactoryArrivalCheck(
   supabase: SupabaseClient,

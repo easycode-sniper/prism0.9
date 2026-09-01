@@ -46,14 +46,26 @@ which uses `pg_net` to POST to `/api/tick` on this app. That handler
    dispatch — reaching the factory to load is what *prompts* a dispatch, so
    it can't be conditional on one already existing. Both skip vehicles
    flagged `category = 'staff'`.
-5. Checks every non-offline **cargo** truck against the 90 km/h limit
+
+   The plant has **two** zones and only the first means "arrived". `Zone
+   d'attente` (4.2 km², `kind = 'factory'`) is the waiting area a truck
+   queues in; `Zone chargement` (0.86 km², `kind = 'factory_loading'`) is
+   the loading bay *inside* it. `selectFactoryGeofence` picks the waiting
+   area deliberately and warns if a second `factory` row ever appears,
+   because `find()` over two would silently change what the alert means.
+5. Logs both plant zones into `zone_visits` — entry, exit, and the time
+   between — which is what Rapport Usine reads. The bay raises no alert;
+   it is measured, not announced. It is tested with **strict containment
+   and no edge buffer**: the queue lane runs ten metres outside it, so any
+   buffer reports hours of queueing as loading. See `runFactoryLoadingCheck`.
+6. Checks every non-offline **cargo** truck against the 90 km/h limit
    (`speeding`). Staff cars are excluded, like the two checks above:
    this ran fleet-wide until 2026-08-28, when 7 staff vehicles turned out
    to be raising 65 of 171 alerts — a light car keeps up with traffic, and
    an alert nobody acts on buries the ones they do. Offline units are
    dropped rather than treated as under the limit, so a truck that stops
    reporting freezes its flag instead of re-alerting when it comes back.
-6. Checks every **idle** vehicle against blacklisted fuel stations
+7. Checks every **idle** vehicle against blacklisted fuel stations
    (`station_stop`). Idle-only is the feature, not an optimisation: the
    fleet feed calls a truck idle at ≤ 5 km/h on a fix under 30 minutes old,
    so driving past a blacklisted station raises nothing. The alert is about
@@ -105,12 +117,14 @@ itself as a total. Aggregations therefore live in the database as RPCs
 `fuel_period_stats()` · `dashboard_daily_series(p_days)` ·
 `driver_variance_leaders(p_limit)` · `truck_variance_leaders(p_limit)` ·
 `driver_speeding_leaders(p_limit)` · `driver_ratings()` ·
-`mark_my_notifications_read()` · `station_watch_radius(radius, blacklisted)`
+`mark_my_notifications_read()` · `station_watch_radius(radius, blacklisted)` ·
+`factory_zone_visits(from, to, truck?)` · `factory_zone_summary(from, to)` ·
+`factory_zone_totals(from, to)`
 
 The fleet-state transitions are `SECURITY DEFINER` compare-and-sets that
 return only the trucks that actually changed — `mark_trucks_hq_state`,
-`mark_trucks_factory_state`, `mark_trucks_speeding_state`,
-`mark_trucks_station_state`. Each does a `DISTINCT` on the incoming ids,
+`mark_trucks_factory_state`, `mark_trucks_loading_state`,
+`mark_trucks_speeding_state`, `mark_trucks_station_state`. Each does a `DISTINCT` on the incoming ids,
 because two Wialon units can share a name and the duplicate is what once
 raised `21000` and stopped HQ tracking for 28 hours.
 
@@ -209,6 +223,9 @@ editor or the CLI. There are 36; the ones worth knowing about:
 | `036` | Closes `app_config` to an allow-list |
 | `037` | Adds `amount_da` and `da_per_km` to `dashboard_daily_series` |
 | `038` | Drops staff vehicles from the speeding leaderboard |
+| `039` | `factory_loading` zone kind, `at_loading`, and the `zone_visits` log |
+| `040` | Queue time — pairs each loading visit with the waiting visit enclosing it |
+| `041` | `factory_zone_totals()` — the six Rapport Usine figures, in Postgres |
 
 When adding a notification kind, update the `notifications_kind_check`
 constraint in the same migration. The insert is fire-and-forget: a rejected row
@@ -342,9 +359,16 @@ English only, matching the original app's scope.
   flags `1439`, which brings sensor *definitions* but not the last message
   whose params carry ignition state. Splitting it needs the sensor's real name
   from the live account — don't guess one.
-- **Client sites have no geofences.** Only two polygons exist (the factory and
-  the PARC circle); none of the 125 client sites has one, so arrivals there
-  fall back to a 300 m radius check around the site's coordinates.
+- **14 of 125 client sites still have no geofence**, and fall back to a 300 m
+  radius around the stored coordinate. The other 111 were imported from a
+  1044-zone Wialon KML export on 2026-08-31 (`scripts/geofence-kml-import.mts`
+  re-runs it). 27 zones were held back for review — a new client, a site whose
+  stored coordinate is wrong, or two zones competing for one site.
+- **Three pairs of `construction_sites` share an identical coordinate**, which
+  makes nearest-site matching a coin toss for them: `AIN OUSSARA - WAFA 3` /
+  `Ain Sefra - NAAMA` and `ABRAJ MOSTAGANEM` / `GRANULATS SIDI BEL ABBES` are
+  data-entry errors (one of each pair is wrong); CSCEC `Equipe 1` / `Equipe 2`
+  in Boudouaou really are 12 m apart.
 - **`fleet_trucks.category` has no UI.** A vehicle can only be flagged `staff`
   by hand in SQL, which is why a staff car raised parc arrivals for weeks
   before anyone noticed.

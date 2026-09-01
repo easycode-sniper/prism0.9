@@ -83,143 +83,17 @@ export async function getParcEntries(
 // implying a class of rows that does not exist.
 
 /** 'factory' is the waiting area, 'factory_loading' the bay inside it. */
-export type FactoryZoneKind = "factory" | "factory_loading";
-
-export interface FactoryVisit {
-  truck_id: string;
-  driver_name: string | null;
-  zone_kind: FactoryZoneKind;
-  zone_name: string;
-  entered_at: string;
-  /** Null while the truck is still inside. */
-  exited_at: string | null;
-  /** Null for the same reason — an open visit has no duration yet, and
-   *  rendering it as zero would read as a truck that came and went. */
-  seconds_in_zone: number | null;
-  /** How long the truck was at the plant before loading started:
-   *  loading entry minus the enclosing waiting entry.
-   *
-   *  On a LOADING row only. The bay sits inside the waiting area, so a
-   *  waiting visit spans the whole stay and its own duration is total
-   *  time at the plant, not waiting — this is the number that separates
-   *  the two. Null when nothing encloses the visit; see migration 040. */
-  queue_seconds: number | null;
-}
-
-export interface FactorySummaryRow {
-  truck_id: string;
-  driver_name: string | null;
-  zone_kind: FactoryZoneKind;
-  visits: number;
-  /** Visits that have actually ended. The averages below are over these
-   *  only, so an open visit cannot drag a median down to zero. */
-  closed_visits: number;
-  total_seconds: number;
-  median_seconds: number | null;
-  max_seconds: number | null;
-  /** Both on the loading row only — see FactoryVisit.queue_seconds. */
-  median_queue_seconds: number | null;
-  max_queue_seconds: number | null;
-}
+// validateRange and MAX_ROWS below served Rapport Usine too, until the
+// owner dropped that report on 2026-09-01. Its three accessors
+// (getFactoryVisits, getFactorySummary, getFactoryTotals) and their
+// types went with it; the factory_zone_* RPCs they called still exist in
+// the database and are simply no longer read. The LOGGING is untouched —
+// Rapport Geo's Attente and Chargement rows are those same zone_visits.
 
 function validateRange(fromIso: string, toIso: string): string | null {
   if (!fromIso || !toIso) return "Choose a start and end time";
   if (new Date(fromIso) > new Date(toIso)) return "The start time is after the end time";
   return null;
-}
-
-/** One row per visit — the owner's table, verbatim. */
-export async function getFactoryVisits(
-  fromIso: string,
-  toIso: string
-): Promise<{ data: FactoryVisit[]; truncated: boolean; error: string | null }> {
-  const supabase = await createClient();
-  const user = await supabase.auth.getUser();
-  if (!user.data.user) return { data: [], truncated: false, error: "Not authenticated" };
-
-  const invalid = validateRange(fromIso, toIso);
-  if (invalid) return { data: [], truncated: false, error: invalid };
-
-  // Aggregated and ordered in Postgres — PostgREST caps a response at
-  // 1000 rows and does NOT error when it truncates, so a range wide
-  // enough to exceed the cap would silently show a partial report. The
-  // limit here is explicit and the UI says when it is hit.
-  const { data, error } = await supabase
-    .rpc("factory_zone_visits", { p_from: fromIso, p_to: toIso })
-    .limit(MAX_ROWS + 1);
-
-  if (error) return { data: [], truncated: false, error: error.message };
-
-  const rows = (data ?? []) as FactoryVisit[];
-  return {
-    data: rows.slice(0, MAX_ROWS),
-    truncated: rows.length > MAX_ROWS,
-    error: null,
-  };
-}
-
-/** The six fleet figures the strip shows, as one row.
- *
- *  Aggregated in Postgres over every visit in the range rather than
- *  derived from either list above: the detail is capped, PostgREST
- *  truncates without erroring, and a median of the per-truck medians is
- *  not the fleet median — it weights a truck with one visit the same as
- *  one with twenty. One row out, so nothing can truncate it. */
-export interface FactoryTotals {
-  trucks: number;
-  plant_visits: number;
-  /** Time in the waiting zone, which contains the bay — the whole stay
-   *  at the plant, loading included. */
-  median_presence: number | null;
-  max_presence: number | null;
-  /** Arrival to the start of loading: the wait on its own. */
-  median_queue: number | null;
-  median_load: number | null;
-}
-
-export async function getFactoryTotals(
-  fromIso: string,
-  toIso: string
-): Promise<{ data: FactoryTotals | null; error: string | null }> {
-  const supabase = await createClient();
-  const user = await supabase.auth.getUser();
-  if (!user.data.user) return { data: null, error: "Not authenticated" };
-
-  const invalid = validateRange(fromIso, toIso);
-  if (invalid) return { data: null, error: invalid };
-
-  const { data, error } = await supabase.rpc("factory_zone_totals", {
-    p_from: fromIso,
-    p_to: toIso,
-  });
-
-  if (error) return { data: null, error: error.message };
-  // A RETURNS TABLE function always yields exactly one row here, but an
-  // empty range still returns it with nulls — so absence means the call
-  // shape changed, not that there was no data.
-  return { data: ((data ?? []) as FactoryTotals[])[0] ?? null, error: null };
-}
-
-/** One row per truck per zone. Bounded by the size of the fleet rather
- *  than by the length of the range, so it stays usable over a month. */
-export async function getFactorySummary(
-  fromIso: string,
-  toIso: string
-): Promise<{ data: FactorySummaryRow[]; error: string | null }> {
-  const supabase = await createClient();
-  const user = await supabase.auth.getUser();
-  if (!user.data.user) return { data: [], error: "Not authenticated" };
-
-  const invalid = validateRange(fromIso, toIso);
-  if (invalid) return { data: [], error: invalid };
-
-  const { data, error } = await supabase.rpc("factory_zone_summary", {
-    p_from: fromIso,
-    p_to: toIso,
-  });
-
-  if (error) return { data: [], error: error.message };
-  return { data: (data ?? []) as FactorySummaryRow[], error: null };
 }
 
 // ── Rapport Geo ───────────────────────────────────────────────
@@ -228,10 +102,10 @@ export async function getFactorySummary(
 // and loading bay alongside the client sites, in one chronological
 // table. That is the shape of the Wialon export the owner works from.
 //
-// Distinct from getFactoryVisits, which answers "what did the whole
-// fleet do at Amouda". This answers "where did THIS truck spend its
-// time", which is why it takes a truck and why 'site' rows appear at
-// all.
+// It answers "where did THIS truck spend its time", which is why it
+// takes a truck and why 'site' rows appear at all — as opposed to the
+// retired Rapport Usine, which asked what the whole fleet did at Amouda
+// and could not see a client site.
 
 export type GeoZoneKind = "factory" | "factory_loading" | "site";
 

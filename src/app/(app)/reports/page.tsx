@@ -3,16 +3,10 @@
 import { useEffect, useState } from "react";
 import {
   getParcEntries,
-  getFactoryVisits,
-  getFactorySummary,
-  getFactoryTotals,
   getGeoVisits,
   getGeoTotals,
   getReportableTrucks,
   type ParcEntry,
-  type FactoryVisit,
-  type FactorySummaryRow,
-  type FactoryTotals,
   type GeoVisit,
   type GeoTotalRow,
 } from "@/lib/supabase/reports";
@@ -23,24 +17,31 @@ import {
   OPS_TIMEZONE,
 } from "@/lib/format";
 import { Copy, Download, Check } from "lucide-react";
+import TruckCombobox from "@/components/forms/TruckCombobox";
 
 // Wialon's report screen was the reference for the shape of this: a
 // Template selector over quick range buttons over an explicit From/To
 // with minute precision.
 //
 // That Template selector was dropped when this page shipped, on the
-// reasoning that one report needs no chooser. There are three now — the
-// parc, time at the Amouda plant fleet-wide, and one truck's own
-// movements across every zone — so it is back, and the range controls
-// below it are shared because they mean the same thing to all three.
+// reasoning that one report needs no chooser. There are two — the parc,
+// and one truck's own movements across every zone — so it is back, and
+// the range controls below it are shared because they mean the same
+// thing to both.
+//
+// Rapport Usine sat here too until the owner dropped it on 2026-09-01:
+// Geo answers the same question per truck and reads the plant's two
+// zones from the same zone_visits rows, so the fleet-wide version was
+// a second view nobody opened. The LOGGING it depended on stays — Geo's
+// Attente and Chargement rows are exactly those rows — and so do the
+// factory_zone_* RPCs, which are simply no longer called.
 //
 // Wialon's Object selector was dropped too, because there is one parc
 // and one plant and it would have been a dropdown with a single option.
 // Geo brings it back for that template alone: the whole question it
 // answers is "where did THIS truck spend its time", so the truck is not
 // a filter over the report, it is the report's subject.
-type Report = "parc" | "usine" | "geo";
-type UsineView = "detail" | "resume";
+type Report = "parc" | "geo";
 type QuickRange = "today" | "yesterday" | "week" | "month";
 
 function startOfRange(range: QuickRange): { from: string; to: string } {
@@ -68,23 +69,11 @@ function hms(seconds: number | null | undefined): string {
   return `${h}:${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-const ZONE_LABEL: Record<FactoryVisit["zone_kind"], string> = {
-  factory: "Attente",
-  factory_loading: "Chargement",
-};
-
-// The two zones are told apart by their label, not by colour. Both are
-// the factory, and the factory is one thing in the taxonomy — spending a
-// second hue on the distinction would say they are different kinds of
-// place rather than two parts of one.
+// Zones are told apart by their label, not by colour. The plant's two
+// are one thing in the taxonomy — spending a second hue on the
+// distinction would say they are different kinds of place rather than
+// two parts of one.
 const PARC_COLUMNS = ["Truck ID", "Driver", "Entry date"] as const;
-const VISIT_COLUMNS = [
-  "Truck ID", "Driver", "Zone", "Heure d'entrée", "Heure sortie", "Temps passé", "Avant chargement",
-] as const;
-const SUMMARY_COLUMNS = [
-  "Truck ID", "Driver", "Zone", "Passages", "Total", "Médiane", "Max", "Avant chargement",
-] as const;
-
 // The owner's Wialon export verbatim — zone, entrée, sortie, temps —
 // plus Type, because in this table a client site and the two plant
 // zones interleave and the zone names alone do not say which is which
@@ -114,33 +103,6 @@ function parcRows(entries: ParcEntry[]): string[][] {
   return entries.map((e) => [e.truck_id, e.driver_name || "—", formatOpsDateTime(e.entered_at)]);
 }
 
-function visitRows(visits: FactoryVisit[]): string[][] {
-  return visits.map((v) => [
-    v.truck_id,
-    v.driver_name || "—",
-    ZONE_LABEL[v.zone_kind] ?? v.zone_name,
-    formatOpsDateTime(v.entered_at),
-    v.exited_at ? formatOpsDateTime(v.exited_at) : "encore sur place",
-    hms(v.seconds_in_zone),
-    // Blank, not a dash, on an Attente row — matching the table, and
-    // because an empty spreadsheet cell reads as "not applicable" while
-    // a dash reads as a value that failed to arrive.
-    v.zone_kind === "factory_loading" ? hms(v.queue_seconds) : "",
-  ]);
-}
-
-function summaryRows(rows: FactorySummaryRow[]): string[][] {
-  return rows.map((r) => [
-    r.truck_id,
-    r.driver_name || "—",
-    ZONE_LABEL[r.zone_kind] ?? r.zone_kind,
-    String(r.visits),
-    hms(r.total_seconds),
-    hms(r.median_seconds),
-    hms(r.max_seconds),
-    r.zone_kind === "factory_loading" ? hms(r.median_queue_seconds) : "",
-  ]);
-}
 
 // Tab-separated, because that is what spreadsheets expect from the
 // clipboard — pasting comma-separated text into Excel or Sheets lands
@@ -156,14 +118,10 @@ function toCsv(columns: readonly string[], rows: string[][]): string {
 
 export default function ReportsPage() {
   const [report, setReport] = useState<Report>("parc");
-  const [usineView, setUsineView] = useState<UsineView>("detail");
   const [from, setFrom] = useState(() => startOfRange("today").from);
   const [to, setTo] = useState(() => startOfRange("today").to);
 
   const [entries, setEntries] = useState<ParcEntry[] | null>(null);
-  const [visits, setVisits] = useState<FactoryVisit[] | null>(null);
-  const [summary, setSummary] = useState<FactorySummaryRow[] | null>(null);
-  const [totals, setTotals] = useState<FactoryTotals | null>(null);
 
   const [trucks, setTrucks] = useState<{ truck_id: string; name: string | null }[]>([]);
   const [truckId, setTruckId] = useState("");
@@ -200,9 +158,6 @@ export default function ReportsPage() {
     if (next === report) return;
     setReport(next);
     setEntries(null);
-    setVisits(null);
-    setSummary(null);
-    setTotals(null);
     setGeoVisits(null);
     setGeoTotals(null);
     setError(null);
@@ -223,9 +178,9 @@ export default function ReportsPage() {
     }
 
     if (report === "geo") {
-      // Both together for the reason the Usine branch fetches three: the
-      // strip sits above the table and describes the same answer, so a
-      // second round trip would show a filled table over an empty strip.
+      // Both together: the strip sits above the table and describes the
+      // same answer, so a second round trip would show a filled table
+      // over an empty strip.
       const [v, t] = await Promise.all([
         getGeoVisits(truckId, fromIso, toIso),
         getGeoTotals(truckId, fromIso, toIso),
@@ -239,7 +194,7 @@ export default function ReportsPage() {
         setGeoTotals(t.data);
         setTruncated(v.truncated);
       }
-    } else if (report === "parc") {
+    } else {
       const result = await getParcEntries(fromIso, toIso);
       if (result.error) {
         setError(result.error);
@@ -247,27 +202,6 @@ export default function ReportsPage() {
       } else {
         setEntries(result.data);
         setTruncated(result.truncated);
-      }
-    } else {
-      // All three together: the strip sits above both views, so fetching
-      // the totals only when Résumé is open would leave it empty on
-      // Détail, and the two tables are a tab switch apart — fetching on
-      // switch would put a spinner between two views of one answer.
-      const [v, s, t] = await Promise.all([
-        getFactoryVisits(fromIso, toIso),
-        getFactorySummary(fromIso, toIso),
-        getFactoryTotals(fromIso, toIso),
-      ]);
-      if (v.error || s.error || t.error) {
-        setError(v.error ?? s.error ?? t.error);
-        setVisits(null);
-        setSummary(null);
-        setTotals(null);
-      } else {
-        setVisits(v.data);
-        setSummary(s.data);
-        setTotals(t.data);
-        setTruncated(v.truncated);
       }
     }
     setLoading(false);
@@ -278,9 +212,6 @@ export default function ReportsPage() {
     setFrom(r.from);
     setTo(r.to);
     setEntries(null);
-    setVisits(null);
-    setSummary(null);
-    setTotals(null);
     setGeoVisits(null);
     setGeoTotals(null);
     setError(null);
@@ -299,11 +230,7 @@ export default function ReportsPage() {
           // and a folder of identically named files is unusable.
           slug: `rapport-geo-${truckId || "truck"}`,
         }
-      : report === "parc"
-      ? { columns: PARC_COLUMNS, rows: parcRows(entries ?? []), slug: "rapport-parc" }
-      : usineView === "detail"
-        ? { columns: VISIT_COLUMNS, rows: visitRows(visits ?? []), slug: "rapport-usine-detail" }
-        : { columns: SUMMARY_COLUMNS, rows: summaryRows(summary ?? []), slug: "rapport-usine-resume" };
+      : { columns: PARC_COLUMNS, rows: parcRows(entries ?? []), slug: "rapport-parc" };
 
   async function copyTable() {
     if (active.rows.length === 0) return;
@@ -349,8 +276,7 @@ export default function ReportsPage() {
     width: "190px",
   };
   const monoCell: React.CSSProperties = { fontFamily: "var(--font-mono)", color: "var(--text-dim)" };
-  const hasRun =
-    report === "parc" ? entries !== null : report === "geo" ? geoVisits !== null : visits !== null;
+  const hasRun = report === "parc" ? entries !== null : geoVisits !== null;
 
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -360,27 +286,28 @@ export default function ReportsPage() {
       <p className="mt-1 text-sm t-dim">
         {report === "parc"
           ? "Trucks that entered PARC OMD — headquarters & parking."
-          : report === "geo"
-            ? "One truck, every zone it entered — the plant's waiting area and loading bay alongside the client sites."
-            : "Time at Usine Amouda, split between the waiting area and the loading bay."}{" "}
+          : "One truck, every zone it entered — the plant's waiting area and loading bay alongside the client sites."}{" "}
         Times in Algeria local time ({OPS_TIMEZONE}).
       </p>
-      {/* Said once, plainly, because the Attente figure is the one a
-          reader is most likely to take for something it is not. The bay
-          is drawn inside the waiting area, so an Attente row's duration
-          counts the loading too — "Avant chargement" is the wait on its
-          own. */}
-      {report === "usine" && (
+      {/* Said once, plainly, because Attente is the figure a reader is
+          most likely to take for something it is not — and it matters
+          more here than it did on the old fleet-wide report, because
+          the two rows sit next to each other in one table and look like
+          consecutive stages. They overlap: the bay is drawn INSIDE the
+          waiting area, so a truck at the pump is in both zones at once
+          and its Attente row spans the whole stay. Adding the two
+          durations together double-counts the loading. */}
+      {report === "geo" && (
         <p className="mt-1 text-xs t-faint">
-          The loading bay sits inside the waiting area, so an <strong>Attente</strong> duration is the
-          whole stay at the plant, loading included. <strong>Avant chargement</strong> is arrival to
-          the start of loading — the wait on its own.
+          The loading bay sits inside the waiting area, so an <strong>Attente</strong> row is the
+          whole stay at the plant — loading included, not the wait before it. Its window contains the{" "}
+          <strong>Chargement</strong> row rather than running before it, so the two do not add up.
         </p>
       )}
 
       <div className="panel mt-5 p-4">
         <div className="seg" style={{ width: "fit-content" }}>
-          {(["parc", "usine", "geo"] as Report[]).map((r) => (
+          {(["parc", "geo"] as Report[]).map((r) => (
             <button
               key={r}
               type="button"
@@ -388,7 +315,7 @@ export default function ReportsPage() {
               className={`seg-item${report === r ? " is-active" : ""}`}
               aria-pressed={report === r}
             >
-              {r === "parc" ? "Parc" : r === "usine" ? "Usine" : "Geo"}
+              {r === "parc" ? "Parc" : "Geo"}
             </button>
           ))}
         </div>
@@ -407,21 +334,19 @@ export default function ReportsPage() {
               and because leaving it empty is the one thing that makes
               Execute fail. */}
           {report === "geo" && (
-            <label className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
+              {/* A plain <span>, not a <label>: the combobox owns its
+                  own input and a label pointing at a wrapper would
+                  associate with nothing. The input carries the
+                  placeholder that names it. */}
               <span className="text-xs t-dim">Truck</span>
-              <select
+              <TruckCombobox
+                trucks={trucks}
                 value={truckId}
-                onChange={(e) => setTruckId(e.target.value)}
-                style={{ ...inputStyle, width: "220px" }}
-              >
-                <option value="">Choose a truck…</option>
-                {trucks.map((t) => (
-                  <option key={t.truck_id} value={t.truck_id}>
-                    {t.name ? `${t.truck_id} — ${t.name}` : t.truck_id}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(id) => { setTruckId(id); setError(null); }}
+                style={{ width: "240px" }}
+              />
+            </div>
           )}
           <label className="flex flex-col gap-1">
             <span className="text-xs t-dim">From</span>
@@ -480,59 +405,6 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {report === "usine" && totals && (
-        <>
-          {/* Amber is the taxonomy's idle, which is exactly what a truck
-              in the waiting area is. Loading time stays achromatic: it is
-              productive time, not a vehicle state, and green would claim
-              a meaning the palette reserves for on-route and healthy. */}
-          {/* .kpi-strip is a fixed five-column grid because the
-              dashboard needs exactly five. This report has six figures
-              and the class is shared, so the extra column is an override
-              here rather than a change to the rule. */}
-          <div className="kpi-strip mt-5" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
-            <div className="kpi-card">
-              <div className="kpi-value">{totals.trucks || "—"}</div>
-              <div className="kpi-label">Camions</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-value">{totals.plant_visits || "—"}</div>
-              <div className="kpi-label">Passages</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-value">{hms(totals.median_presence)}</div>
-              <div className="kpi-label">Présence médiane</div>
-            </div>
-            <div className="kpi-card amber">
-              <div className="kpi-value">{hms(totals.median_queue)}</div>
-              <div className="kpi-label">Avant chargement</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-value">{hms(totals.median_load)}</div>
-              <div className="kpi-label">Chargement médian</div>
-            </div>
-            <div className="kpi-card amber">
-              <div className="kpi-value">{hms(totals.max_presence)}</div>
-              <div className="kpi-label">Présence max</div>
-            </div>
-          </div>
-
-          <div className="seg mt-4" style={{ width: "fit-content" }}>
-            {(["detail", "resume"] as UsineView[]).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => { setUsineView(v); setCopied(false); }}
-                className={`seg-item${usineView === v ? " is-active" : ""}`}
-                aria-pressed={usineView === v}
-              >
-                {v === "detail" ? "Détail" : "Résumé"}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
       {hasRun && (
         <div className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -540,10 +412,8 @@ export default function ReportsPage() {
               {active.rows.length}{" "}
               {report === "parc"
                 ? active.rows.length === 1 ? "entry" : "entries"
-                : usineView === "detail"
-                  ? active.rows.length === 1 ? "passage" : "passages"
-                  : active.rows.length === 1 ? "ligne" : "lignes"}
-              {truncated && usineView === "detail" && " (showing the first 5000 — narrow the range)"}
+                : active.rows.length === 1 ? "passage" : "passages"}
+              {truncated && " (showing the first 5000 — narrow the range)"}
             </span>
             {active.rows.length > 0 && (
               <div className="flex gap-2">
@@ -562,9 +432,7 @@ export default function ReportsPage() {
             <p className="mt-8 text-center text-sm t-dim">
               {report === "parc"
                 ? "No trucks entered the parc in this period."
-                : report === "geo"
-                  ? `${truckId} entered no zone in this period.`
-                  : "No truck entered either plant zone in this period."}
+                : `${truckId} entered no zone in this period.`}
             </p>
           ) : report === "geo" ? (
             <div className="mt-3 table-wrap">
@@ -610,91 +478,7 @@ export default function ReportsPage() {
                 </tbody>
               </table>
             </div>
-          ) : usineView === "detail" ? (
-            <div className="mt-3 table-wrap">
-              <table>
-                <thead>
-                  <tr>{VISIT_COLUMNS.map((c) => <th key={c}>{c}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {visits!.map((v, i) => {
-                    // A truck's rows are contiguous — the RPC orders by
-                    // truck then entry — so the first row of each group
-                    // takes a top border. Against the row above's bottom
-                    // border that reads as one heavier rule, which is
-                    // enough to separate trucks without a second colour
-                    // or a header row. Over a day it is a nicety; over
-                    // "Last 30 days" it is the difference between a
-                    // table and a wall.
-                    const newTruck = i > 0 && visits![i - 1].truck_id !== v.truck_id;
-                    const group: React.CSSProperties = newTruck
-                      ? { borderTop: "1px solid var(--line)" }
-                      : {};
-                    return (
-                      <tr key={`${v.truck_id}-${v.zone_kind}-${v.entered_at}-${i}`}>
-                        <td className="truck-id" style={group}>{v.truck_id}</td>
-                        <td style={{ ...group, color: v.driver_name ? "var(--text)" : "var(--text-dim)" }}>
-                          {v.driver_name || "—"}
-                        </td>
-                        <td style={group}>{ZONE_LABEL[v.zone_kind] ?? v.zone_name}</td>
-                        <td style={{ ...monoCell, ...group }}>{formatOpsDateTime(v.entered_at)}</td>
-                        {/* An open visit says so rather than showing a
-                            blank, which reads as missing data, or a zero,
-                            which reads as a truck that never stayed. */}
-                        <td style={{ ...monoCell, ...group }}>
-                          {v.exited_at ? formatOpsDateTime(v.exited_at) : <span className="t-faint">encore sur place</span>}
-                        </td>
-                        <td style={{ fontFamily: "var(--font-mono)", ...group }}>{hms(v.seconds_in_zone)}</td>
-                        {/* Only a loading row can have one — it is the
-                            gap back to the enclosing waiting entry. On
-                            an Attente row the cell is blank rather than
-                            a dash, because a dash there would read as a
-                            missing value rather than an inapplicable
-                            one. Amber: this is queueing, which is idle. */}
-                        <td style={{ ...group, fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
-                          {v.zone_kind === "factory_loading" ? hms(v.queue_seconds) : ""}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="mt-3 table-wrap">
-              <table>
-                <thead>
-                  <tr>{SUMMARY_COLUMNS.map((c) => <th key={c}>{c}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {summary!.map((r) => (
-                    <tr key={`${r.truck_id}-${r.zone_kind}`}>
-                      <td className="truck-id">{r.truck_id}</td>
-                      <td style={{ color: r.driver_name ? "var(--text)" : "var(--text-dim)" }}>
-                        {r.driver_name || "—"}
-                      </td>
-                      <td>{ZONE_LABEL[r.zone_kind] ?? r.zone_kind}</td>
-                      <td style={monoCell}>
-                        {r.visits}
-                        {/* Only worth saying when they differ: it is why
-                            the medianes beside it are over fewer visits
-                            than the count suggests. */}
-                        {r.closed_visits < r.visits && (
-                          <span className="t-faint"> ({r.closed_visits} terminés)</span>
-                        )}
-                      </td>
-                      <td style={monoCell}>{hms(r.total_seconds)}</td>
-                      <td style={{ fontFamily: "var(--font-mono)" }}>{hms(r.median_seconds)}</td>
-                      <td style={monoCell}>{hms(r.max_seconds)}</td>
-                      <td style={{ fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
-                        {r.zone_kind === "factory_loading" ? hms(r.median_queue_seconds) : ""}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          ) : null}
         </div>
       )}
     </div>

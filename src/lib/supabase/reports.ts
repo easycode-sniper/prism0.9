@@ -221,3 +221,135 @@ export async function getFactorySummary(
   if (error) return { data: [], error: error.message };
   return { data: (data ?? []) as FactorySummaryRow[], error: null };
 }
+
+// ── Rapport Geo ───────────────────────────────────────────────
+//
+// One truck, one range, every zone it entered — the plant's waiting area
+// and loading bay alongside the client sites, in one chronological
+// table. That is the shape of the Wialon export the owner works from.
+//
+// Distinct from getFactoryVisits, which answers "what did the whole
+// fleet do at Amouda". This answers "where did THIS truck spend its
+// time", which is why it takes a truck and why 'site' rows appear at
+// all.
+
+export type GeoZoneKind = "factory" | "factory_loading" | "site";
+
+export interface GeoVisit {
+  truck_id: string;
+  driver_name: string | null;
+  zone_kind: GeoZoneKind;
+  /** The zone's name as it read on the day it was entered, not as it
+   *  reads now — the log must not rewrite its own history. */
+  zone_name: string;
+  /** construction_sites.id on a 'site' row, null on the two plant
+   *  zones. What the totals group by, since names cannot be trusted to
+   *  match (the Wialon export carries typos on both sides). */
+  site_id: string | null;
+  entered_at: string;
+  /** Null while the truck is still inside. */
+  exited_at: string | null;
+  /** Null for the same reason — an open visit has no duration yet. */
+  seconds_in_zone: number | null;
+}
+
+export interface GeoTotalRow {
+  zone_kind: GeoZoneKind;
+  zone_name: string;
+  site_id: string | null;
+  visits: number;
+  /** Visits that have actually ended; the total below is over these
+   *  only, so an open visit cannot read as zero time spent. */
+  closed_visits: number;
+  total_seconds: number;
+  max_seconds: number | null;
+}
+
+/** Every visit this truck made in the range, oldest first.
+ *
+ *  OVERLAP, not entry time — a stay that began at 23:50 and ended at
+ *  02:00 belongs in both days' reports rather than in neither, and it
+ *  is exactly the long waits the owner is looking for that straddle a
+ *  boundary. The duration reported is the whole visit, not the slice
+ *  inside the window; see migration 042. */
+export async function getGeoVisits(
+  truckId: string,
+  fromIso: string,
+  toIso: string
+): Promise<{ data: GeoVisit[]; truncated: boolean; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], truncated: false, error: "Not authenticated" };
+
+  if (!truckId) return { data: [], truncated: false, error: "Choose a truck" };
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], truncated: false, error: invalid };
+
+  // One truck rather than the fleet, so the cap is far out of reach in
+  // normal use — but asked for explicitly anyway, because PostgREST
+  // truncates at 1000 without erroring and a silently partial report is
+  // the failure this codebase keeps paying for.
+  const { data, error } = await supabase
+    .rpc("geo_zone_visits", { p_truck_id: truckId, p_from: fromIso, p_to: toIso })
+    .limit(MAX_ROWS + 1);
+
+  if (error) return { data: [], truncated: false, error: error.message };
+
+  const rows = (data ?? []) as GeoVisit[];
+  return { data: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS, error: null };
+}
+
+/** One row per zone visited, for the strip above the table.
+ *
+ *  Aggregated in Postgres rather than summed from the list above, for
+ *  the reason 041 exists: the detail is capped and a total derived from
+ *  a truncated list is wrong without saying so. */
+export async function getGeoTotals(
+  truckId: string,
+  fromIso: string,
+  toIso: string
+): Promise<{ data: GeoTotalRow[]; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], error: "Not authenticated" };
+
+  if (!truckId) return { data: [], error: "Choose a truck" };
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], error: invalid };
+
+  const { data, error } = await supabase.rpc("geo_zone_totals", {
+    p_truck_id: truckId,
+    p_from: fromIso,
+    p_to: toIso,
+  });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as GeoTotalRow[], error: null };
+}
+
+/** The trucks Rapport Geo can be run for.
+ *
+ *  Cargo only, matching the tick: runSiteZoneCheck and both factory
+ *  checks take cargoTrucks, so a staff car has no zone_visits rows and
+ *  offering one in the picker would only ever produce an empty report.
+ *
+ *  Read from fleet_trucks rather than from zone_visits so a truck that
+ *  has not moved yet is still selectable — an empty report for a real
+ *  truck is an answer, a missing truck is a puzzle. */
+export async function getReportableTrucks(): Promise<{
+  data: { truck_id: string; name: string | null }[];
+  error: string | null;
+}> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], error: "Not authenticated" };
+
+  const { data, error } = await supabase
+    .from("fleet_trucks")
+    .select("truck_id, name")
+    .neq("category", "staff")
+    .order("truck_id", { ascending: true });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as { truck_id: string; name: string | null }[], error: null };
+}

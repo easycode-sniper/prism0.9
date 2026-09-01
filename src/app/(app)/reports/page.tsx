@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getParcEntries,
   getFactoryVisits,
   getFactorySummary,
   getFactoryTotals,
+  getGeoVisits,
+  getGeoTotals,
+  getReportableTrucks,
   type ParcEntry,
   type FactoryVisit,
   type FactorySummaryRow,
   type FactoryTotals,
+  type GeoVisit,
+  type GeoTotalRow,
 } from "@/lib/supabase/reports";
 import {
   formatOpsDateTime,
@@ -24,13 +29,17 @@ import { Copy, Download, Check } from "lucide-react";
 // with minute precision.
 //
 // That Template selector was dropped when this page shipped, on the
-// reasoning that one report needs no chooser. There are two now — the
-// parc, and time at the Amouda plant — so it is back, and the range
-// controls below it are shared because they mean the same thing to both.
-// Wialon's Object selector stays dropped: there is one parc and one
-// plant, so it would be a dropdown with a single option.
-
-type Report = "parc" | "usine";
+// reasoning that one report needs no chooser. There are three now — the
+// parc, time at the Amouda plant fleet-wide, and one truck's own
+// movements across every zone — so it is back, and the range controls
+// below it are shared because they mean the same thing to all three.
+//
+// Wialon's Object selector was dropped too, because there is one parc
+// and one plant and it would have been a dropdown with a single option.
+// Geo brings it back for that template alone: the whole question it
+// answers is "where did THIS truck spend its time", so the truck is not
+// a filter over the report, it is the report's subject.
+type Report = "parc" | "usine" | "geo";
 type UsineView = "detail" | "resume";
 type QuickRange = "today" | "yesterday" | "week" | "month";
 
@@ -75,6 +84,31 @@ const VISIT_COLUMNS = [
 const SUMMARY_COLUMNS = [
   "Truck ID", "Driver", "Zone", "Passages", "Total", "Médiane", "Max", "Avant chargement",
 ] as const;
+
+// The owner's Wialon export verbatim — zone, entrée, sortie, temps —
+// plus Type, because in this table a client site and the two plant
+// zones interleave and the zone names alone do not say which is which
+// at a glance.
+const GEO_COLUMNS = ["Zone", "Type", "Heure d'entrée", "Heure sortie", "Temps passé"] as const;
+
+const GEO_ZONE_LABEL: Record<GeoVisit["zone_kind"], string> = {
+  factory: "Attente",
+  factory_loading: "Chargement",
+  site: "Client",
+};
+
+function geoRows(visits: GeoVisit[]): string[][] {
+  return visits.map((v) => [
+    v.zone_name,
+    GEO_ZONE_LABEL[v.zone_kind],
+    formatOpsDateTime(v.entered_at),
+    // An open visit is blank rather than a dash: the truck has not left,
+    // so there is no time to report, and inventing one would be read as
+    // a zero-length stay. Same rule the Attente rows follow.
+    v.exited_at ? formatOpsDateTime(v.exited_at) : "",
+    v.seconds_in_zone == null ? "" : hms(v.seconds_in_zone),
+  ]);
+}
 
 function parcRows(entries: ParcEntry[]): string[][] {
   return entries.map((e) => [e.truck_id, e.driver_name || "—", formatOpsDateTime(e.entered_at)]);
@@ -131,6 +165,23 @@ export default function ReportsPage() {
   const [summary, setSummary] = useState<FactorySummaryRow[] | null>(null);
   const [totals, setTotals] = useState<FactoryTotals | null>(null);
 
+  const [trucks, setTrucks] = useState<{ truck_id: string; name: string | null }[]>([]);
+  const [truckId, setTruckId] = useState("");
+  const [geoVisits, setGeoVisits] = useState<GeoVisit[] | null>(null);
+  const [geoTotals, setGeoTotals] = useState<GeoTotalRow[] | null>(null);
+
+  // Fetched once on mount rather than when Geo is selected: the list is
+  // ~40 rows, and loading it on switch would put a spinner inside the
+  // selector at the moment someone reaches for it.
+  useEffect(() => {
+    let cancelled = false;
+    getReportableTrucks().then((result) => {
+      if (cancelled || result.error) return;
+      setTrucks(result.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +203,8 @@ export default function ReportsPage() {
     setVisits(null);
     setSummary(null);
     setTotals(null);
+    setGeoVisits(null);
+    setGeoTotals(null);
     setError(null);
     setCopied(false);
   }
@@ -169,7 +222,24 @@ export default function ReportsPage() {
       return;
     }
 
-    if (report === "parc") {
+    if (report === "geo") {
+      // Both together for the reason the Usine branch fetches three: the
+      // strip sits above the table and describes the same answer, so a
+      // second round trip would show a filled table over an empty strip.
+      const [v, t] = await Promise.all([
+        getGeoVisits(truckId, fromIso, toIso),
+        getGeoTotals(truckId, fromIso, toIso),
+      ]);
+      if (v.error || t.error) {
+        setError(v.error ?? t.error);
+        setGeoVisits(null);
+        setGeoTotals(null);
+      } else {
+        setGeoVisits(v.data);
+        setGeoTotals(t.data);
+        setTruncated(v.truncated);
+      }
+    } else if (report === "parc") {
       const result = await getParcEntries(fromIso, toIso);
       if (result.error) {
         setError(result.error);
@@ -211,6 +281,8 @@ export default function ReportsPage() {
     setVisits(null);
     setSummary(null);
     setTotals(null);
+    setGeoVisits(null);
+    setGeoTotals(null);
     setError(null);
     setCopied(false);
   }
@@ -219,7 +291,15 @@ export default function ReportsPage() {
   // screen. Exporting the detail while looking at the summary is the
   // kind of thing nobody notices until the figures are in a meeting.
   const active: { columns: readonly string[]; rows: string[][]; slug: string } =
-    report === "parc"
+    report === "geo"
+      ? {
+          columns: GEO_COLUMNS,
+          rows: geoRows(geoVisits ?? []),
+          // The truck in the filename, because these get saved per truck
+          // and a folder of identically named files is unusable.
+          slug: `rapport-geo-${truckId || "truck"}`,
+        }
+      : report === "parc"
       ? { columns: PARC_COLUMNS, rows: parcRows(entries ?? []), slug: "rapport-parc" }
       : usineView === "detail"
         ? { columns: VISIT_COLUMNS, rows: visitRows(visits ?? []), slug: "rapport-usine-detail" }
@@ -269,17 +349,20 @@ export default function ReportsPage() {
     width: "190px",
   };
   const monoCell: React.CSSProperties = { fontFamily: "var(--font-mono)", color: "var(--text-dim)" };
-  const hasRun = report === "parc" ? entries !== null : visits !== null;
+  const hasRun =
+    report === "parc" ? entries !== null : report === "geo" ? geoVisits !== null : visits !== null;
 
   return (
     <div className="mx-auto max-w-6xl p-6">
       <h1 className="text-2xl font-semibold t-primary">
-        {report === "parc" ? "Rapport Parc" : "Rapport Usine"}
+        {report === "parc" ? "Rapport Parc" : report === "geo" ? "Rapport Geo" : "Rapport Usine"}
       </h1>
       <p className="mt-1 text-sm t-dim">
         {report === "parc"
           ? "Trucks that entered PARC OMD — headquarters & parking."
-          : "Time at Usine Amouda, split between the waiting area and the loading bay."}{" "}
+          : report === "geo"
+            ? "One truck, every zone it entered — the plant's waiting area and loading bay alongside the client sites."
+            : "Time at Usine Amouda, split between the waiting area and the loading bay."}{" "}
         Times in Algeria local time ({OPS_TIMEZONE}).
       </p>
       {/* Said once, plainly, because the Attente figure is the one a
@@ -297,7 +380,7 @@ export default function ReportsPage() {
 
       <div className="panel mt-5 p-4">
         <div className="seg" style={{ width: "fit-content" }}>
-          {(["parc", "usine"] as Report[]).map((r) => (
+          {(["parc", "usine", "geo"] as Report[]).map((r) => (
             <button
               key={r}
               type="button"
@@ -305,7 +388,7 @@ export default function ReportsPage() {
               className={`seg-item${report === r ? " is-active" : ""}`}
               aria-pressed={report === r}
             >
-              {r === "parc" ? "Parc" : "Usine"}
+              {r === "parc" ? "Parc" : r === "usine" ? "Usine" : "Geo"}
             </button>
           ))}
         </div>
@@ -319,6 +402,27 @@ export default function ReportsPage() {
         </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
+          {/* First in the row, before the dates, because it is the
+              subject of the report rather than another filter on it —
+              and because leaving it empty is the one thing that makes
+              Execute fail. */}
+          {report === "geo" && (
+            <label className="flex flex-col gap-1">
+              <span className="text-xs t-dim">Truck</span>
+              <select
+                value={truckId}
+                onChange={(e) => setTruckId(e.target.value)}
+                style={{ ...inputStyle, width: "220px" }}
+              >
+                <option value="">Choose a truck…</option>
+                {trucks.map((t) => (
+                  <option key={t.truck_id} value={t.truck_id}>
+                    {t.name ? `${t.truck_id} — ${t.name}` : t.truck_id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="flex flex-col gap-1">
             <span className="text-xs t-dim">From</span>
             <input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} style={inputStyle} />
@@ -345,6 +449,35 @@ export default function ReportsPage() {
 
       {error && (
         <div className="mt-4 rounded-md p-3 text-sm tint-red c-red">{error}</div>
+      )}
+
+      {report === "geo" && geoTotals && geoTotals.length > 0 && (
+        // One card per zone actually visited, so the strip is as long as
+        // the truck's day rather than a fixed set of slots — a truck
+        // that never reached a client site should not be shown an empty
+        // "Client" figure implying the data is missing.
+        //
+        // Amber on the waiting area only: that is the taxonomy's idle,
+        // and a truck queueing at the plant is precisely idle. Loading
+        // and time on a client site stay achromatic — both are
+        // productive time, and green would claim the palette's
+        // "moving, on-route" for something standing still.
+        <div
+          className="kpi-strip mt-5"
+          style={{ gridTemplateColumns: `repeat(${Math.min(geoTotals.length, 4)}, minmax(0, 1fr))` }}
+        >
+          {geoTotals.map((t) => (
+            <div
+              key={`${t.zone_kind}-${t.site_id ?? "plant"}`}
+              className={`kpi-card${t.zone_kind === "factory" ? " amber" : ""}`}
+            >
+              <div className="kpi-value">{hms(t.total_seconds)}</div>
+              <div className="kpi-label" title={t.zone_name}>
+                {GEO_ZONE_LABEL[t.zone_kind]} · {t.visits} {t.visits === 1 ? "passage" : "passages"}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {report === "usine" && totals && (
@@ -429,8 +562,35 @@ export default function ReportsPage() {
             <p className="mt-8 text-center text-sm t-dim">
               {report === "parc"
                 ? "No trucks entered the parc in this period."
-                : "No truck entered either plant zone in this period."}
+                : report === "geo"
+                  ? `${truckId} entered no zone in this period.`
+                  : "No truck entered either plant zone in this period."}
             </p>
+          ) : report === "geo" ? (
+            <div className="mt-3 table-wrap">
+              <table>
+                <thead>
+                  <tr>{GEO_COLUMNS.map((c) => <th key={c}>{c}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {geoVisits!.map((v, i) => (
+                    // entered_at is not unique on its own: the waiting
+                    // area and the loading bay can both be entered on
+                    // the same tick, and both carry that tick's
+                    // timestamp to the millisecond.
+                    <tr key={`${v.zone_kind}-${v.entered_at}-${i}`}>
+                      <td>{v.zone_name}</td>
+                      <td style={{ color: "var(--text-dim)" }}>{GEO_ZONE_LABEL[v.zone_kind]}</td>
+                      <td style={monoCell}>{formatOpsDateTime(v.entered_at)}</td>
+                      <td style={monoCell}>
+                        {v.exited_at ? formatOpsDateTime(v.exited_at) : "encore sur place"}
+                      </td>
+                      <td style={monoCell}>{hms(v.seconds_in_zone)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : report === "parc" ? (
             <div className="mt-3 table-wrap">
               <table>

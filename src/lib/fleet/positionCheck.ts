@@ -13,6 +13,8 @@ import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofenc
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { selectFactoryGeofence } from "@/lib/fleet/geofences";
 import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH, stationWatchRadius } from "@/lib/constants";
+import { boundSiteZone, siteZoneAt, type SiteZone, type BoundedSiteZone } from "@/lib/fleet/siteZones";
+export type { SiteZone } from "@/lib/fleet/siteZones";
 
 export interface PositionCheckResult {
   truckId: string;
@@ -394,6 +396,10 @@ interface ZoneTarget {
   onDeparted?(truckIds: string[]): Promise<void>;
 }
 
+/** The three things a zone_visits row can be about. 'site' arrived with
+ *  042 and Rapport Geo; the first two have been logged since 039. */
+type ZoneVisitKind = "factory" | "factory_loading" | "site";
+
 /**
  * A truck's stay in one of the plant's zones, as two half-writes.
  *
@@ -416,10 +422,16 @@ interface ZoneTarget {
  */
 async function openZoneVisit(
   supabase: SupabaseClient,
-  zoneKind: "factory" | "factory_loading",
+  zoneKind: ZoneVisitKind,
   zoneName: string,
   truckIds: string[],
-  driverOf: Map<string, string | null>
+  driverOf: Map<string, string | null>,
+  // The construction_sites row, on a 'site' visit only. NULL on the two
+  // plant zones, which have no site. Stamped alongside the name rather
+  // than instead of it: the name is what the zone was called on the day
+  // and must not move when someone renames a site, but a name cannot be
+  // grouped on (the Wialon export carries typos on both sides).
+  siteId: string | null = null
 ): Promise<void> {
   const { error: repairError } = await supabase
     .from("zone_visits")
@@ -436,6 +448,7 @@ async function openZoneVisit(
       driver_name: driverOf.get(truck_id) ?? null,
       zone_kind: zoneKind,
       zone_name: zoneName,
+      site_id: siteId,
       entered_at: enteredAt,
     }))
   );
@@ -444,7 +457,7 @@ async function openZoneVisit(
 
 async function closeZoneVisit(
   supabase: SupabaseClient,
-  zoneKind: "factory" | "factory_loading",
+  zoneKind: ZoneVisitKind,
   truckIds: string[]
 ): Promise<void> {
   const { error } = await supabase
@@ -618,6 +631,127 @@ export async function runFactoryLoadingCheck(
       openZoneVisit(supabase, "factory_loading", bay.name, truckIds, driverOf),
     onDeparted: (truckIds) => closeZoneVisit(supabase, "factory_loading", truckIds),
   });
+}
+
+/**
+ * Time at a client site — the third row of Rapport Geo.
+ *
+ * Shaped like runBlacklistedStationCheck rather than runZoneArrivalCheck,
+ * and for that function's reason: state is WHICH site, not a boolean per
+ * site. at_hq/at_factory's one-column-per-zone shape does not survive
+ * 112 polygons. Moving from one site to another is therefore a real
+ * transition — it closes one visit and opens the next in the same pass.
+ *
+ * STRICT CONTAINMENT, no edge buffer, and this is a deliberate
+ * disagreement with the dispatch-scoped arrival check twenty lines up,
+ * which uses GEOFENCE_EDGE_BUFFER_METERS = 150.
+ *
+ * They are answering different questions. "Has this truck arrived?" is
+ * an alert, and a generous buffer costs nothing — better early than
+ * missed. "How long was it there?" is a measurement, and 039 paid for
+ * that lesson at the loading bay: a 50m buffer turned a 3½-hour queue
+ * into loading time and split one stay into three. The owner is
+ * comparing this table against Wialon's own zone report, which uses
+ * strict polygon containment, so strict is also the only way the two
+ * numbers can agree.
+ *
+ * The consequence to know about: a truck parked just outside a badly
+ * drawn polygon logs no visit at all, where the arrival alert would
+ * still fire. That shows up as a missing row rather than a wrong
+ * number, which is the failure worth having.
+ *
+ * NO NOTIFICATION, like the loading bay. Site arrival already alerts
+ * through the dispatch-scoped check; a second one per run would be
+ * forty toasts a day.
+ */
+export async function runSiteZoneCheck(
+  supabase: SupabaseClient,
+  trucks: ZoneTruck[],
+  sites: SiteZone[]
+): Promise<void> {
+  const zones = sites.filter((s) => s.ring.length >= 3).map(boundSiteZone);
+  if (zones.length === 0) return;
+
+  const positioned = freshestPerTruck(
+    trucks.filter((t): t is PositionedTruck => t.lat != null && t.lng != null)
+  );
+  if (positioned.length === 0) return;
+
+  // Which site each truck is inside now. See siteZoneAt.
+  const nowIn = new Map<string, BoundedSiteZone>();
+  for (const t of positioned) {
+    const zone = siteZoneAt(t.lat, t.lng, zones);
+    if (zone) nowIn.set(t.truck_id, zone);
+  }
+
+  const { data: rows, error: readError } = await supabase
+    .from("fleet_trucks")
+    .select("truck_id, current_site_id")
+    .in("truck_id", positioned.map((t) => t.truck_id));
+  if (readError) throw new Error(`site zone state read failed: ${readError.message}`);
+
+  const wasIn = new Map(
+    (rows ?? []).map((r) => [r.truck_id as string, (r.current_site_id as string | null) ?? null])
+  );
+
+  // Grouped by destination site, because the RPC sets one site for a
+  // batch of trucks — one call per site keeps that contract.
+  const enteredBySite = new Map<string, string[]>();
+  const left: string[] = [];
+
+  for (const t of positioned) {
+    const now = nowIn.get(t.truck_id) ?? null;
+    const before = wasIn.get(t.truck_id) ?? null;
+    if ((now?.siteId ?? null) === before) continue;
+    if (now) {
+      const list = enteredBySite.get(now.siteId) ?? [];
+      list.push(t.truck_id);
+      enteredBySite.set(now.siteId, list);
+    } else {
+      left.push(t.truck_id);
+    }
+  }
+
+  const driverOf = new Map(positioned.map((t) => [t.truck_id, t.driverName ?? null]));
+  const zoneOf = new Map(zones.map((z) => [z.siteId, z]));
+
+  for (const [siteId, truckIds] of enteredBySite) {
+    // The flag first, then the log — the ordering the rest of this file
+    // settled on. openZoneVisit repairs a visit left open by a failed
+    // close, so a truck moving site A -> site B closes A on the way in.
+    const { data: changed, error } = await supabase.rpc("mark_trucks_site_state", {
+      p_truck_ids: truckIds,
+      p_site_id: siteId,
+    });
+    if (error) throw new Error(`site zone state write failed: ${error.message}`);
+
+    const transitioned = ((changed ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
+    if (transitioned.length === 0) continue;
+
+    const zone = zoneOf.get(siteId);
+    await openZoneVisit(
+      supabase,
+      "site",
+      zone?.name ?? "Unknown site",
+      transitioned,
+      driverOf,
+      siteId
+    );
+  }
+
+  if (left.length > 0) {
+    const { data: changed, error } = await supabase.rpc("mark_trucks_site_state", {
+      p_truck_ids: left,
+      p_site_id: null,
+    });
+    // A departure that fails to persist pins the truck to the site
+    // forever, and a truck that never leaves can never be seen to
+    // arrive again.
+    if (error) throw new Error(`site zone departure write failed: ${error.message}`);
+
+    const transitioned = ((changed ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
+    if (transitioned.length > 0) await closeZoneVisit(supabase, "site", transitioned);
+  }
 }
 
 /**

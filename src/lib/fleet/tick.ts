@@ -17,6 +17,7 @@ import {
   runHqArrivalCheck,
   runFactoryArrivalCheck,
   runFactoryLoadingCheck,
+  runSiteZoneCheck,
   runFleetSpeedingCheck,
   runBlacklistedStationCheck,
 } from "@/lib/fleet/positionCheck";
@@ -212,6 +213,29 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
       });
     } catch (err) {
       warnings.push(`loading: ${(err as Error).message}`);
+    }
+  }
+
+  // Client sites, for Rapport Geo's third row. Like the loading bay this
+  // raises no alert — site arrival already alerts through the
+  // dispatch-scoped check in runPositionCheck — it only writes the
+  // zone_visits rows the report reads.
+  //
+  // FLEET-WIDE, not scoped to a truck's open dispatch, and that is the
+  // point: Wialon's report lists every zone a truck entered, and a
+  // dispatch-scoped version would miss a truck visiting a site nobody
+  // dispatched it to and would lose the exit if the run completed
+  // mid-visit. Sites without a drawn polygon are simply absent from the
+  // report rather than approximated by the 300m radius that arrivals
+  // fall back to — an invented duration is worse than a missing row.
+  const siteZones = geofences
+    .filter((g) => g.kind === "site" && g.siteId != null && g.ring != null)
+    .map((g) => ({ siteId: g.siteId!, name: g.name, ring: g.ring! }));
+  if (siteZones.length > 0) {
+    try {
+      await runSiteZoneCheck(supabase, cargoTrucks, siteZones);
+    } catch (err) {
+      warnings.push(`sites: ${(err as Error).message}`);
     }
   }
 

@@ -175,7 +175,12 @@ function MonitoringRow({
 }) {
   const isOffRoute = truck.dispatched && truck.last_on_route === false;
   const statusLabel = isOffRoute ? "off-route" : truck.status;
-  const statusColor = isOffRoute ? "var(--red)" : truck.status === "moving" ? "var(--green)" : truck.status === "idle" ? "var(--cyan)" : "var(--text-dim)";
+  // Amber for idle, matching the taxonomy in CLAUDE.md and globals.css
+  // — cyan is parking and stations. This row and dispatch's statusColor
+  // were the app's two hold-outs; the map, the dashboard and
+  // .status-pill.idle were amber all along, so an idle truck read amber
+  // on the map and cyan in this table. Corrected 2026-09-01.
+  const statusColor = isOffRoute ? "var(--red)" : truck.status === "moving" ? "var(--green)" : truck.status === "idle" ? "var(--amber)" : "var(--text-dim)";
 
   const locateHref = truck.lat != null && truck.lng != null
     ? `/dispatch?lat=${truck.lat}&lng=${truck.lng}`

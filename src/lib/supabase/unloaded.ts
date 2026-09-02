@@ -13,7 +13,11 @@
 // it would make every export there a callable HTTP endpoint.
 
 import { createClient } from "@/lib/supabase/server";
-import { UNLOADED_MIN_SECONDS, UNLOADED_MAX_AGE_HOURS } from "@/lib/constants";
+import {
+  UNLOADED_MIN_SECONDS,
+  UNLOADED_MAX_AGE_HOURS,
+  UNLOADED_SETTLE_SECONDS,
+} from "@/lib/constants";
 
 export interface UnloadedTruck {
   truck_id: string;
@@ -24,6 +28,9 @@ export interface UnloadedTruck {
   entered_at: string;
   exited_at: string;
   seconds_on_site: number;
+  /** When the settle timer ran out — the moment the truck actually
+   *  counts as free, which is no longer the moment it left the site. */
+  free_at: string;
 }
 
 export async function getUnloadedTrucks(): Promise<{
@@ -40,6 +47,7 @@ export async function getUnloadedTrucks(): Promise<{
   const { data, error } = await supabase.rpc("unloaded_trucks", {
     p_min_seconds: UNLOADED_MIN_SECONDS,
     p_max_age_hours: UNLOADED_MAX_AGE_HOURS,
+    p_settle_seconds: UNLOADED_SETTLE_SECONDS,
   });
 
   if (error) return { data: [], error: error.message };

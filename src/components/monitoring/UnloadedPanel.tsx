@@ -22,7 +22,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getUnloadedTrucks, type UnloadedTruck } from "@/lib/supabase/unloaded";
 import { formatAge } from "@/lib/format";
-import { UNLOADED_MIN_SECONDS, UNLOADED_MAX_AGE_HOURS } from "@/lib/constants";
+import {
+  UNLOADED_MIN_SECONDS,
+  UNLOADED_MAX_AGE_HOURS,
+  UNLOADED_SETTLE_SECONDS,
+} from "@/lib/constants";
 
 /** Live status per truck, passed down rather than subscribed to here:
  *  the page already holds the fleet from FleetProvider, and a second
@@ -81,8 +85,8 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
           list counts as "unloaded" — and the 25 minutes is the only
           reason a truck that drove past a site is not in it. */}
       <p className="mt-0.5 text-xs t-dim">
-        Left the client site after {Math.round(UNLOADED_MIN_SECONDS / 60)} min or more, and not yet
-        back at the plant.
+        {Math.round(UNLOADED_MIN_SECONDS / 60)} min or more at the client, then{" "}
+        {Math.round(UNLOADED_SETTLE_SECONDS / 60)} min since leaving, and not yet back at the plant.
       </p>
 
       {error && <p className="mt-3 text-xs c-red">{error}</p>}
@@ -130,10 +134,13 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
                 <div className="mt-0.5 text-xs t-primary">{r.driver_name || "—"}</div>
                 <div className="text-xs t-dim" title={r.zone_name}>{r.zone_name}</div>
                 <div className="mt-0.5 font-mono text-xs" style={{ color: "var(--text-dim)" }}>
-                  {/* Left X ago, after Y on site. Both, because "left 20
-                      minutes ago" and "was there four hours" answer
-                      different halves of "can I use this truck". */}
-                  left {formatAge(minutesSince(r.exited_at))} · {hoursMinutes(r.seconds_on_site)} on site
+                  {/* Free since, not left-at: the settle timer means
+                      those are 25 minutes apart, and the one that
+                      matters is when the truck became available. Paired
+                      with time on site because "free 20 minutes" and
+                      "was there four hours" answer different halves of
+                      "can I use this truck". */}
+                  free {formatAge(minutesSince(r.free_at))} · {hoursMinutes(r.seconds_on_site)} on site
                 </div>
               </li>
             );

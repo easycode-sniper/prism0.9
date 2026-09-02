@@ -125,6 +125,15 @@ export interface GeoVisit {
   exited_at: string | null;
   /** Null for the same reason — an open visit has no duration yet. */
   seconds_in_zone: number | null;
+  /** How long the truck was at the plant before loading started:
+   *  loading entry minus the enclosing waiting entry.
+   *
+   *  On a CHARGEMENT row only. The bay sits inside the waiting area, so
+   *  an Attente row's own duration is total time at the plant — this is
+   *  the wait on its own, and the two are not the same number. Null on
+   *  every other kind, and on a loading visit nothing encloses; see
+   *  migrations 040 and 043. */
+  queue_seconds: number | null;
 }
 
 export interface GeoTotalRow {

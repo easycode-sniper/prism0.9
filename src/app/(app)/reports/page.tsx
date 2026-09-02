@@ -74,11 +74,22 @@ function hms(seconds: number | null | undefined): string {
 // distinction would say they are different kinds of place rather than
 // two parts of one.
 const PARC_COLUMNS = ["Truck ID", "Driver", "Entry date"] as const;
-// The owner's Wialon export verbatim — zone, entrée, sortie, temps —
-// plus Type, because in this table a client site and the two plant
-// zones interleave and the zone names alone do not say which is which
-// at a glance.
-const GEO_COLUMNS = ["Zone", "Type", "Heure d'entrée", "Heure sortie", "Temps passé"] as const;
+// The owner's Wialon export — zone, entrée, sortie, temps — plus three
+// columns it does not have.
+//
+// Type, because a client site and the two plant zones interleave here
+// and the names alone do not say which is which at a glance.
+//
+// Driver, because the question being asked is about a person as much as
+// a vehicle. It is stamped per visit rather than resolved now, so a
+// truck that changed hands mid-period shows both names on the rows they
+// actually drove.
+//
+// Avant chargement, because without it the report cannot answer "how
+// long did he wait" — see geoRows.
+const GEO_COLUMNS = [
+  "Zone", "Type", "Driver", "Heure d'entrée", "Heure sortie", "Temps passé", "Avant chargement",
+] as const;
 
 const GEO_ZONE_LABEL: Record<GeoVisit["zone_kind"], string> = {
   factory: "Attente",
@@ -90,12 +101,20 @@ function geoRows(visits: GeoVisit[]): string[][] {
   return visits.map((v) => [
     v.zone_name,
     GEO_ZONE_LABEL[v.zone_kind],
+    v.driver_name || "—",
     formatOpsDateTime(v.entered_at),
     // An open visit is blank rather than a dash: the truck has not left,
     // so there is no time to report, and inventing one would be read as
     // a zero-length stay. Same rule the Attente rows follow.
     v.exited_at ? formatOpsDateTime(v.exited_at) : "",
     v.seconds_in_zone == null ? "" : hms(v.seconds_in_zone),
+    // The real wait: arrival at the plant to the start of loading. On a
+    // Chargement row only, and BLANK elsewhere rather than a dash —
+    // matching the table, and because an empty spreadsheet cell reads as
+    // "not applicable" while a dash reads as a value that failed to
+    // arrive. An Attente row's own Temps passé is the whole stay with
+    // the loading inside it, so the two must never be added together.
+    v.zone_kind === "factory_loading" && v.queue_seconds != null ? hms(v.queue_seconds) : "",
   ]);
 }
 
@@ -275,6 +294,23 @@ export default function ReportsPage() {
     // controls still look correct.
     width: "190px",
   };
+  // NO nowrap here, and that is a measured decision rather than an
+  // oversight. Adding Driver and Avant chargement took Geo to seven
+  // columns, and the timestamps started wrapping into date-over-time.
+  // Pinning them with nowrap looked like the fix and made it worse: the
+  // zone column absorbed the squeeze and went to three lines, taking
+  // rows from 65px to 107px. Measured at 1366 over the six real rows of
+  // 00033-523-35 on 2026-09-01:
+  //
+  //   all wrap (this)     65px rows, 443px table, no h-scroll
+  //   timestamps nowrap  107px rows, 572px table, no h-scroll
+  //   everything nowrap   44px rows, 301px table, SCROLLS (1289 > 1102)
+  //
+  // The densest option hides Avant chargement — the number this report
+  // exists to show — behind a horizontal scroll. CLAUDE.md's density
+  // rule is about dispatch fitting forty trucks on one screen; this is
+  // a per-truck report showing a handful of rows a day, so legibility
+  // with nothing hidden wins.
   const monoCell: React.CSSProperties = { fontFamily: "var(--font-mono)", color: "var(--text-dim)" };
   const hasRun = report === "parc" ? entries !== null : geoVisits !== null;
 
@@ -302,6 +338,8 @@ export default function ReportsPage() {
           The loading bay sits inside the waiting area, so an <strong>Attente</strong> row is the
           whole stay at the plant — loading included, not the wait before it. Its window contains the{" "}
           <strong>Chargement</strong> row rather than running before it, so the two do not add up.
+          The wait on its own is <strong>Avant chargement</strong>: arrival at the plant to the
+          moment loading started.
         </p>
       )}
 
@@ -449,11 +487,21 @@ export default function ReportsPage() {
                     <tr key={`${v.zone_kind}-${v.entered_at}-${i}`}>
                       <td>{v.zone_name}</td>
                       <td style={{ color: "var(--text-dim)" }}>{GEO_ZONE_LABEL[v.zone_kind]}</td>
+                      <td style={{ color: v.driver_name ? "var(--text)" : "var(--text-dim)" }}>
+                        {v.driver_name || "—"}
+                      </td>
                       <td style={monoCell}>{formatOpsDateTime(v.entered_at)}</td>
                       <td style={monoCell}>
                         {v.exited_at ? formatOpsDateTime(v.exited_at) : "encore sur place"}
                       </td>
                       <td style={monoCell}>{hms(v.seconds_in_zone)}</td>
+                      {/* Amber: the taxonomy's idle, and a truck queueing
+                          at the plant is precisely idle. It is the only
+                          coloured cell in the table, which is the point —
+                          this is the number the owner acts on. */}
+                      <td style={{ ...monoCell, color: v.zone_kind === "factory_loading" && v.queue_seconds != null ? "var(--amber)" : "var(--text-dim)" }}>
+                        {v.zone_kind === "factory_loading" ? hms(v.queue_seconds) : ""}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

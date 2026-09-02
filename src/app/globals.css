@@ -362,6 +362,11 @@ a.btn-primary:active, a.btn-secondary:active, a.btn-sm:active {
 
 .tint-red { background: color-mix(in srgb, var(--red) 15%, transparent); }
 .tint-green { background: color-mix(in srgb, var(--green) 15%, transparent); }
+/* Added 2026-09-02 for the error page's "browser translated this page"
+   panel, which had no amber sibling to reuse and was hardcoding
+   rgba(255,179,0,.12). 12% rather than 15%: amber is the brightest of
+   the five and reads hotter than red or green at the same mix. */
+.tint-amber { background: color-mix(in srgb, var(--amber) 12%, transparent); }
 .c-red { color: var(--red); }
 .c-green { color: var(--green); }
 .c-amber { color: var(--amber); }

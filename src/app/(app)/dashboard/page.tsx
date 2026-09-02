@@ -401,6 +401,15 @@ export default function DashboardPage() {
 
   const labels = (series?.km ?? []).map((p) => axisLabel(p.day));
 
+  // The first day that actually carries a telemetry reading, but only
+  // when the range reaches back past it — otherwise there is no gap on
+  // screen to explain and the sentence would be noise.
+  const kmGapDay = useMemo(() => {
+    const km = series?.km;
+    if (!km || km.length === 0 || km[0].value != null) return null;
+    return km.find((p) => p.value != null)?.day ?? null;
+  }, [series]);
+
   // The ISO days behind each series, handed to the tooltip so it can name
   // the day in full where the axis only has room to abbreviate it. The
   // RPC returns every series dense over the same range, so these are the
@@ -626,6 +635,15 @@ export default function DashboardPage() {
                       actually reaches today. */}
                   Fleet kilometres, staff cars included.
                   {range.to == null || range.to >= opsToday() ? " Today is still counting." : ""}
+                  {/* A break in the line is "not recorded", never "zero
+                      km driven". This panel reads fleet_day_metrics,
+                      which pg_cron began writing on 2026-08-17 — earlier
+                      days have no telemetry and cannot get any, since
+                      fleet_snapshots is pruned after seven days. Derived
+                      from the series rather than hardcoded, so it stops
+                      appearing on its own once the range starts inside
+                      the recorded period. */}
+                  {kmGapDay ? ` No fleet tracking before ${kmGapDay} — those days are a gap, not zero.` : ""}
                 </div>
               </div>
             </header>

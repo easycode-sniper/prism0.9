@@ -98,3 +98,23 @@ export const UNLOADED_MIN_SECONDS = 25 * 60;
  *  tracker problem rather than an availability signal. Ageing them out
  *  keeps the panel a picture of now. */
 export const UNLOADED_MAX_AGE_HOURS = 12;
+
+/**
+ * How long after a truck LEAVES the client before it is called free.
+ *
+ * A confirmation delay, not a countdown. Strict containment means a
+ * truck manoeuvring near a site boundary can log an exit it did not
+ * really make: 000054-525-35 left EQUIPE2 BOUDOUAOU at 19:11 on the
+ * first day and was back inside at 19:17. Announcing it free at 19:11
+ * would have been wrong six minutes later.
+ *
+ * The margin is thinner than it looks — 000100-525-35 left GREAT WALL
+ * HMD after 51 minutes and re-entered EXACTLY 25 minutes later, which
+ * this clears by seconds. It does not, however, hide trucks behind
+ * their own arrival at the plant: measured site-exit to plant-entry was
+ * 79 and 199 minutes, far longer than the settle.
+ *
+ * The owner's rule, 2026-09-01: 25 minutes on site to count as
+ * unloading, then 25 more after leaving to count as free.
+ */
+export const UNLOADED_SETTLE_SECONDS = 25 * 60;

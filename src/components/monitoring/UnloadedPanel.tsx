@@ -86,7 +86,8 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
           reason a truck that drove past a site is not in it. */}
       <p className="mt-0.5 text-xs t-dim">
         {Math.round(UNLOADED_MIN_SECONDS / 60)} min or more at the client, then{" "}
-        {Math.round(UNLOADED_SETTLE_SECONDS / 60)} min since leaving, and not yet back at the plant.
+        {Math.round(UNLOADED_SETTLE_SECONDS / 60)} min since leaving, and not yet back at the plant
+        or the parc.
       </p>
 
       {error && <p className="mt-3 text-xs c-red">{error}</p>}

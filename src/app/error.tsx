@@ -87,8 +87,17 @@ export default function AppError({
           {error.message || "No message was attached to this error."}
         </p>
         {error.digest && (
-          <p className="mt-2 text-xs t-dim" style={{ fontFamily: "var(--font-mono)" }}>
-            digest {error.digest}
+          // A digest means the throw happened while rendering a SERVER
+          // component, and Next has replaced the message above with its
+          // own boilerplate to avoid leaking internals. Most pages here
+          // are server components fetching from Supabase, so this is a
+          // likely path — and a bare hex string tells an operator
+          // nothing. Say what it is FOR, so the person reading it knows
+          // the number is the handle and not the answer.
+          <p className="mt-2 text-xs t-dim">
+            <span style={{ fontFamily: "var(--font-mono)" }}>digest {error.digest}</span>
+            {" — this one came from the server, so the message above is generic. "}
+            Quote this number to find the real error in the deployment logs.
           </p>
         )}
       </div>
@@ -97,10 +106,7 @@ export default function AppError({
         // Amber, not red: this is a diagnosis of a stale/mangled state,
         // not a second failure. Same reading amber carries for an idle
         // truck and a disabled account.
-        <div
-          className="mt-3 rounded-md p-3"
-          style={{ background: "rgba(255, 179, 0, 0.12)", border: "1px solid var(--line)" }}
-        >
+        <div className="mt-3 rounded-md tint-amber p-3" style={{ border: "1px solid var(--line)" }}>
           <div className="text-xs uppercase" style={{ color: "var(--amber)", letterSpacing: ".06em" }}>
             Your browser translated this page
           </div>

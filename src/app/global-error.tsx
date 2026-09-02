@@ -27,6 +27,13 @@ export default function GlobalError({
 }) {
   return (
     <html lang="en">
+      {/* This component REPLACES the document, so the root layout's head
+          never renders and its notranslate meta goes with it. Repeat it
+          here: a translated error page is how the 2026-09-02 outage
+          disguised itself in the first place. */}
+      <head>
+        <meta name="google" content="notranslate" />
+      </head>
       {/* Same reasoning as the root layout: never let a machine
           translator touch this page. It is the one screen whose exact
           wording someone will be reading back over a phone. */}

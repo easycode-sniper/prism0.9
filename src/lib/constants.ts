@@ -118,3 +118,26 @@ export const UNLOADED_MAX_AGE_HOURS = 12;
  * unloading, then 25 more after leaving to count as free.
  */
 export const UNLOADED_SETTLE_SECONDS = 25 * 60;
+
+// ── Accounts ─────────────────────────────────────────────────
+
+/**
+ * The shortest password an admin may set when creating an account.
+ *
+ * There is no self-service signup and no password-reset email in this
+ * app: an admin types the password on the User Management page and
+ * tells the person what it is. So this floor is the ONLY thing standing
+ * between a hurried admin and a two-character password on an account
+ * that can see every truck's position.
+ *
+ * 8 rather than Supabase's own default of 6, deliberately — the project
+ * setting is the backstop, not the policy. If the Supabase policy is
+ * ever raised above this, its rejection still reaches the admin
+ * verbatim; the check here exists to fail fast and in our own words.
+ *
+ * Lives here rather than in lib/supabase/admin-actions.ts because that
+ * file is "use server" and may export only async functions, and because
+ * the form renders this number in its own hint — the rule and the
+ * sentence explaining it must not drift apart.
+ */
+export const MIN_PASSWORD_LENGTH = 8;

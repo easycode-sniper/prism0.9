@@ -28,7 +28,6 @@ import {
   getDriverVariance,
   getTruckVariance,
   getDriverSpeeding,
-  type OpsRange,
   type FuelPeriodStats,
   type DashboardSeries,
   type DriverVariance,
@@ -50,6 +49,7 @@ import {
   doughnutCentrePlugin,
 } from "@/lib/chartTheme";
 import RangeBar, { buildPresets, describeRange } from "@/components/dashboard/RangeBar";
+import type { OpsRange } from "@/lib/dashboard/range";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
 import { opsToday } from "@/lib/format";

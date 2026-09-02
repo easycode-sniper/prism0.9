@@ -19,7 +19,7 @@
 // the owner asked for and needs no timestamp arithmetic here.
 
 import { useMemo } from "react";
-import type { OpsRange } from "@/lib/supabase/dashboard";
+import type { OpsRange } from "@/lib/dashboard/range";
 import { opsToday, opsNowLocalValue, OPS_TIMEZONE } from "@/lib/format";
 
 /** An ops day N days before today, as YYYY-MM-DD. opsNowLocalValue does

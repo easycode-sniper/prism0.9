@@ -1,6 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+// OpsRange and ALL_TIME live in a plain module, NOT here: this file is
+// "use server", which may only export async functions. Exporting the
+// constant from here compiled fine — nothing outside crossed a client
+// boundary with it — and then broke the render at runtime.
+import { type OpsRange, ALL_TIME } from "@/lib/dashboard/range";
 
 // Everything the redesigned dashboard reads, in one module so the page
 // makes one round trip per section rather than a query per tile.
@@ -11,31 +16,6 @@ import { createClient } from "@/lib/supabase/server";
 // can be trusted without knowing which is which.
 
 // ── The fuel sheet, summed ────────────────────────────────────
-
-/**
- * An inclusive range of OPERATIONS DAYS, as YYYY-MM-DD strings.
- *
- * Days, not instants, because that is the axis the data already lives
- * on: migration 028 buckets a fill by (occurred_at AT TIME ZONE
- * 'Africa/Algiers')::date, so a fill logged at 00:12 local belongs to
- * the day the office worked it rather than to the previous UTC one.
- * Algiers does not observe DST, so an ops day is a clean 24 hours.
- *
- * That also makes "today, midnight to 23:59" trivially expressible —
- * from and to are the same date — without the caller assembling
- * timestamps or reasoning about the offset.
- *
- * null on either side means unbounded there, which is how the
- * all-time figures these panels used to show are still reachable.
- */
-export interface OpsRange {
-  from: string | null;
-  to: string | null;
-}
-
-/** Both ends open — every fill ever, which is what the scorecards and
- *  the two variance tables silently showed before migration 047. */
-export const ALL_TIME: OpsRange = { from: null, to: null };
 
 export interface FuelPeriodStats {
   /** What the sheet's own date cells say the first and last fill were,

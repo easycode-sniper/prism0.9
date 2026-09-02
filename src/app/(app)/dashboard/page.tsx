@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Chart as ChartJS,
@@ -28,6 +28,7 @@ import {
   getDriverVariance,
   getTruckVariance,
   getDriverSpeeding,
+  type OpsRange,
   type FuelPeriodStats,
   type DashboardSeries,
   type DriverVariance,
@@ -48,8 +49,10 @@ import {
   crosshairPlugin,
   doughnutCentrePlugin,
 } from "@/lib/chartTheme";
+import RangeBar, { buildPresets, describeRange } from "@/components/dashboard/RangeBar";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
+import { opsToday } from "@/lib/format";
 import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
 import { SPEED_LIMIT_KMH } from "@/lib/constants";
 
@@ -75,8 +78,11 @@ ChartJS.register(
 );
 installChartDefaults();
 
-const RANGES = [7, 14, 30] as const;
-type Range = (typeof RANGES)[number];
+// The 7/14/30 segmented control that used to live on the "Distance per
+// day" header is gone. It could only say "the last N days ending today",
+// which cannot express August — a window ending in the past — or a
+// single day. RangeBar replaces it at page level and governs every
+// historical panel, not just the charts.
 
 const nf = (n: number) => Math.round(n).toLocaleString("en-GB");
 
@@ -311,51 +317,39 @@ export default function DashboardPage() {
 
   const [fuel, setFuel] = useState<FuelPeriodStats | null>(null);
   const [series, setSeries] = useState<DashboardSeries | null>(null);
-  const [range, setRange] = useState<Range>(7);
+  // Defaults to the last 30 ops days: the widest window the old control
+  // offered, so a returning reader sees roughly what they saw before
+  // rather than the whole sheet at once.
+  const [range, setRange] = useState<OpsRange>(() => buildPresets().find((p) => p.key === "30d")!.range);
   const [variance, setVariance] = useState<DriverVariance[] | null>(null);
   const [truckVariance, setTruckVariance] = useState<TruckVariance[] | null>(null);
   const [speeding, setSpeeding] = useState<DriverSpeeding[] | null>(null);
 
+  // Every historical panel reads the same range, in ONE effect. Five
+  // separate effects on the same dependency would fire five renders as
+  // they landed and let the page sit briefly in a state where the
+  // scorecards describe August and the tables still describe July —
+  // which is the exact incoherence this control exists to remove.
   useEffect(() => {
     let cancelled = false;
-    getFuelPeriodStats().then(({ stats }) => {
-      if (!cancelled && stats) setFuel(stats);
+    void Promise.all([
+      getFuelPeriodStats(range),
+      getDashboardSeries(range),
+      getDriverVariance(500, range),
+      getTruckVariance(500, range),
+      getDriverSpeeding(100, range),
+    ]).then(([f, s, dv, tv, sp]) => {
+      if (cancelled) return;
+      setFuel(f.stats ?? null);
+      setSeries(s.series ?? null);
+      setVariance(dv.drivers ?? null);
+      setTruckVariance(tv.trucks ?? null);
+      setSpeeding(sp.drivers ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    getDriverVariance().then(({ drivers }) => {
-      if (!cancelled && drivers) setVariance(drivers);
-    });
-    getTruckVariance().then(({ trucks }) => {
-      if (!cancelled && trucks) setTruckVariance(trucks);
-    });
-    getDriverSpeeding().then(({ drivers }) => {
-      if (!cancelled && drivers) setSpeeding(drivers);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const loadSeries = useCallback(async (days: Range) => {
-    const { series: s } = await getDashboardSeries(days);
-    return s ?? null;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadSeries(range).then((s) => {
-      if (!cancelled) setSeries(s);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [range, loadSeries]);
+  }, [range]);
 
   const trucks = fleetData.trucks;
 
@@ -522,8 +516,16 @@ export default function DashboardPage() {
 
   const signals = notifications.slice(0, 6);
 
+  // The sheet's own date cells for the first and last fill IN THE
+  // RANGE, as written. Secondary now that the heading names the selected
+  // window: these strings are raw, and the source carried mixed
+  // month/day and day/month until it was normalised, so "9/1/2026" can
+  // still appear where 1 September is meant. Useful as provenance,
+  // wrong as the headline — which is what it used to be.
   const periodLabel =
-    fuel?.firstRaw && fuel?.lastRaw ? `${fuel.firstRaw.split(" ")[0]} → ${fuel.lastRaw.split(" ")[0]}` : "the fuel sheet";
+    fuel?.firstRaw && fuel?.lastRaw
+      ? `${fuel.firstRaw.split(" ")[0]} → ${fuel.lastRaw.split(" ")[0]}`
+      : "";
 
   return (
     <div className="dash" style={{ overflowY: "auto", height: "100%" }}>
@@ -531,9 +533,14 @@ export default function DashboardPage() {
         <div>
           <h2 style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", fontWeight: 600 }}>{t("dashboard.title")}</h2>
           <p className="t-dim" style={{ fontSize: ".78rem", marginTop: "3px" }}>
-            Fuel figures cover {periodLabel}, as the sheet records them.
+            Every figure below covers {describeRange(range)}
+            {periodLabel ? `, first to last fill ${periodLabel}` : ""}.
           </p>
         </div>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <RangeBar value={range} onChange={setRange} daysWithData={series?.daysAvailable ?? null} />
       </div>
 
       {/* ── The sheet, summed ─────────────────────────────────
@@ -583,22 +590,15 @@ export default function DashboardPage() {
                       distance, which draws as a dive to the floor. Said
                       plainly rather than hidden by dropping the point:
                       the current day is the one people look for. */}
-                  Fleet kilometres, staff cars included. Today is still counting.
-                  {series && series.daysAvailable < range ? ` ${series.daysAvailable} days recorded so far.` : ""}
+                  {/* Today is always partial — at 02:00 it is a
+                      hundredth of a day's distance, which draws as a
+                      dive to the floor. Said plainly rather than hidden
+                      by dropping the point: the current day is the one
+                      people look for. Only worth saying when the range
+                      actually reaches today. */}
+                  Fleet kilometres, staff cars included.
+                  {range.to == null || range.to >= opsToday() ? " Today is still counting." : ""}
                 </div>
-              </div>
-              <div className="seg seg--sm" style={{ flex: "none" }}>
-                {RANGES.map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRange(r)}
-                    aria-pressed={range === r}
-                    className={`seg-item${range === r ? " is-active" : ""}`}
-                  >
-                    {r}d
-                  </button>
-                ))}
               </div>
             </header>
             <div className="dash-panel__body">
@@ -880,7 +880,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">What the fleet is doing</div>
+                <div className="dash-panel__title">What the fleet is doing<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title="Reads the live fleet — the date range does not apply">live</span></div>
                 <div className="dash-panel__sub">
                   {/* Says which population it counts, like the distance
                       chart does. This one DOES include staff cars —
@@ -920,7 +920,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Drivers on duty</div>
+                <div className="dash-panel__title">Drivers on duty<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title="Reads the live fleet — the date range does not apply">live</span></div>
                 <div className="dash-panel__sub">Who is out right now.</div>
               </div>
             </header>
@@ -953,7 +953,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Active runs</div>
+                <div className="dash-panel__title">Active runs<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title="Reads the live fleet — the date range does not apply">live</span></div>
                 <div className="dash-panel__sub">Trucks on their way to a client right now.</div>
               </div>
             </header>

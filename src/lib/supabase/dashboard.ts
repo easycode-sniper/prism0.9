@@ -12,6 +12,31 @@ import { createClient } from "@/lib/supabase/server";
 
 // ── The fuel sheet, summed ────────────────────────────────────
 
+/**
+ * An inclusive range of OPERATIONS DAYS, as YYYY-MM-DD strings.
+ *
+ * Days, not instants, because that is the axis the data already lives
+ * on: migration 028 buckets a fill by (occurred_at AT TIME ZONE
+ * 'Africa/Algiers')::date, so a fill logged at 00:12 local belongs to
+ * the day the office worked it rather than to the previous UTC one.
+ * Algiers does not observe DST, so an ops day is a clean 24 hours.
+ *
+ * That also makes "today, midnight to 23:59" trivially expressible —
+ * from and to are the same date — without the caller assembling
+ * timestamps or reasoning about the offset.
+ *
+ * null on either side means unbounded there, which is how the
+ * all-time figures these panels used to show are still reachable.
+ */
+export interface OpsRange {
+  from: string | null;
+  to: string | null;
+}
+
+/** Both ends open — every fill ever, which is what the scorecards and
+ *  the two variance tables silently showed before migration 047. */
+export const ALL_TIME: OpsRange = { from: null, to: null };
+
 export interface FuelPeriodStats {
   /** What the sheet's own date cells say the first and last fill were,
    *  as written. Taken in sheet-row order rather than by date, which is
@@ -64,12 +89,16 @@ export interface FuelPeriodStats {
 // 17,000 rows, and dragging those over the wire to add them is the wrong
 // shape however well it fits. An aggregate is one row at any size.
 
-export async function getFuelPeriodStats(): Promise<{ stats?: FuelPeriodStats; error?: string }> {
+export async function getFuelPeriodStats(
+  range: OpsRange = ALL_TIME
+): Promise<{ stats?: FuelPeriodStats; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
 
-  const { data, error } = await supabase.rpc("fuel_period_stats").single();
+  const { data, error } = await supabase
+    .rpc("fuel_period_stats", { p_from: range.from, p_to: range.to })
+    .single();
   if (error) return { error: error.message };
   if (!data) return { error: "No fuel data" };
 
@@ -133,7 +162,7 @@ export interface DashboardSeries {
 }
 
 export async function getDashboardSeries(
-  days = 30
+  range: OpsRange
 ): Promise<{ series?: DashboardSeries; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -141,9 +170,13 @@ export async function getDashboardSeries(
 
   // The RPC returns one row per day, already dense and already bucketed
   // to the Africa/Algiers operations day — so a fill logged at 00:12
-  // local counts against the day the office worked it. At most 90 rows
-  // however many fills sit behind them.
-  const { data, error } = await supabase.rpc("dashboard_daily_series", { p_days: days });
+  // local counts against the day the office worked it. One row per day
+  // in the range however many fills sit behind them; 047 caps the span
+  // at ~3 years so a mistyped year cannot generate 45,000 rows.
+  const { data, error } = await supabase.rpc("dashboard_daily_series", {
+    p_from: range.from,
+    p_to: range.to,
+  });
   if (error) return { error: error.message };
 
   const rows = (data ?? []) as { day: string; km: string | number; litres: string | number;
@@ -197,13 +230,16 @@ export async function getDriverVariance(
   // with headcount rather than with fills, so it is small enough to hand
   // over whole and sort in the browser, where changing the sort costs
   // nothing. The cap is a guard, not a page size.
-  limit = 500
+  limit = 500,
+  range: OpsRange = ALL_TIME
 ): Promise<{ drivers?: DriverVariance[]; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
 
-  const { data, error } = await supabase.rpc("driver_variance_leaders", { p_limit: limit });
+  const { data, error } = await supabase.rpc("driver_variance_leaders", {
+    p_limit: limit, p_from: range.from, p_to: range.to,
+  });
   if (error) return { error: error.message };
 
   const rows = (data ?? []) as Record<string, unknown>[];
@@ -233,12 +269,17 @@ export interface TruckVariance {
   variancePer100Km: number | null;
 }
 
-export async function getTruckVariance(limit = 500): Promise<{ trucks?: TruckVariance[]; error?: string }> {
+export async function getTruckVariance(
+  limit = 500,
+  range: OpsRange = ALL_TIME
+): Promise<{ trucks?: TruckVariance[]; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
 
-  const { data, error } = await supabase.rpc("truck_variance_leaders", { p_limit: limit });
+  const { data, error } = await supabase.rpc("truck_variance_leaders", {
+    p_limit: limit, p_from: range.from, p_to: range.to,
+  });
   if (error) return { error: error.message };
 
   const rows = (data ?? []) as Record<string, unknown>[];
@@ -271,7 +312,15 @@ export interface DriverSpeeding {
   lastAt: string | null;
 }
 
-export async function getDriverSpeeding(limit = 100): Promise<{ drivers?: DriverSpeeding[]; error?: string }> {
+export async function getDriverSpeeding(
+  limit = 100,
+  // Defaulted to ALL_TIME like the others, but note this one was NEVER
+  // all-time before 047: it carried a hardcoded date_trunc('month'),
+  // so it showed month-to-date while the tables beside it showed
+  // everything. Callers must pass the page's range or the panels
+  // disagree again.
+  range: OpsRange = ALL_TIME
+): Promise<{ drivers?: DriverSpeeding[]; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
@@ -279,7 +328,9 @@ export async function getDriverSpeeding(limit = 100): Promise<{ drivers?: Driver
   // Counted and grouped in Postgres: notifications grow without bound and
   // PostgREST truncates at 1000 rows without erroring. One row per driver
   // who sped at least once this month, which is far smaller.
-  const { data, error } = await supabase.rpc("driver_speeding_leaders", { p_limit: limit });
+  const { data, error } = await supabase.rpc("driver_speeding_leaders", {
+    p_limit: limit, p_from: range.from, p_to: range.to,
+  });
   if (error) return { error: error.message };
 
   const rows = (data ?? []) as Record<string, unknown>[];

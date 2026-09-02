@@ -67,3 +67,34 @@ export function stationWatchRadius(radiusMeters: number | null | undefined, blac
   const base = radiusMeters ?? STATION_RADIUS_METERS;
   return blacklisted ? Math.max(base, BLACKLIST_WATCH_RADIUS_METERS) : base;
 }
+
+/**
+ * How long a truck must sit inside a client site before leaving it
+ * counts as "finished unloading".
+ *
+ * THIS IS THE WHOLE DESIGN OF THE DÉCHARGÉS PANEL, not a tuning knob.
+ * Site visits are logged with STRICT containment and no edge buffer
+ * (see fleet/siteZones.ts for why), so a public road clipping a site
+ * polygon logs a truck that merely drove past. On the first day of site
+ * logging, 2 of 5 closed visits were exactly that:
+ *
+ *   real unloading stops   50, 95, 103 minutes
+ *   drive-throughs          1, 2 minutes
+ *
+ * A list that calls a 60-second pass "finished unloading" is worse than
+ * no list — a dispatcher burned once stops believing the rest of it.
+ * 25 minutes is the owner's number, chosen 2026-09-01 against that
+ * spread: well above every drive-through observed, under half the
+ * shortest real stop.
+ *
+ * Lives here rather than in lib/supabase/unloaded.ts because that file
+ * is "use server" and may only export async functions — and because the
+ * panel renders this number in its own subtitle, so the rule and the
+ * sentence explaining it cannot drift apart.
+ */
+export const UNLOADED_MIN_SECONDS = 25 * 60;
+
+/** Past this, a truck that left a site and never reached the plant is a
+ *  tracker problem rather than an availability signal. Ageing them out
+ *  keeps the panel a picture of now. */
+export const UNLOADED_MAX_AGE_HOURS = 12;

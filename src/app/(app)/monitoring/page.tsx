@@ -9,6 +9,7 @@ import { useFleet } from "@/components/providers/FleetProvider";
 import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { formatAge } from "@/lib/format";
+import UnloadedPanel from "@/components/monitoring/UnloadedPanel";
 
 type FilterType = "all" | "dispatched" | "moving" | "idle" | "offline";
 
@@ -29,6 +30,22 @@ export default function MonitoringPage() {
   const trucks = useMemo(
     () => joinFleetWithDispatches(fleetData.trucks, dispatches),
     [fleetData.trucks, dispatches]
+  );
+
+  // Handed to the panel so it can show whether a freed truck is already
+  // rolling, without opening a second subscription to fleet data this
+  // page is already holding.
+  const statusOf = useMemo(
+    () => new Map(trucks.map((tr) => [tr.truck_id, tr.status])),
+    [trucks]
+  );
+  const positionOf = useMemo(
+    () => new Map(
+      trucks
+        .filter((tr) => tr.lat != null && tr.lng != null)
+        .map((tr) => [tr.truck_id, { lat: tr.lat as number, lng: tr.lng as number }])
+    ),
+    [trucks]
   );
 
   async function handleCheckPosition(dispatchId: string, truckId: string) {
@@ -66,7 +83,13 @@ export default function MonitoringPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
+    // No max-w-6xl any more, and that is what makes the split free
+    // rather than costly. Measured at 1366 before building: the table
+    // needs 949px to render without wrapping, the old cap left it ~720px
+    // once a panel took its share — horizontal scroll, and rows from
+    // 54px to 83px. Uncapped with a 320px panel it gets 980px and rows
+    // stay at 54px, exactly as before the panel existed.
+    <div className="p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold t-primary">{t("monitoring.title")}</h1>
@@ -95,7 +118,11 @@ export default function MonitoringPage() {
         ))}
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-lg border bd">
+      <div
+        className="mt-4"
+        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 16, alignItems: "start" }}
+      >
+      <div className="overflow-x-auto rounded-lg border bd">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
@@ -123,6 +150,13 @@ export default function MonitoringPage() {
         {filteredTrucks.length === 0 && (
           <div className="p-8 text-center text-sm t-dim">No trucks match.</div>
         )}
+      </div>
+
+      {/* Outside the search/filter state on purpose: this answers "who
+          is free", which is a question about the whole fleet. Narrowing
+          it with the table's search would hide the very truck a
+          dispatcher is about to reach for. */}
+      <UnloadedPanel statusOf={statusOf} positionOf={positionOf} />
       </div>
     </div>
   );

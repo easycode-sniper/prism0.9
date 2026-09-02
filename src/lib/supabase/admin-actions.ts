@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadWialonConfig, probeWialonZones, type WialonResourceShape } from "@/lib/fleet/wialon";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { MIN_PASSWORD_LENGTH } from "@/lib/constants";
 
 let adminClient: any = null;
 
@@ -104,22 +105,75 @@ export async function adminListUsers(): Promise<{ data: AdminUser[]; error: stri
   };
 }
 
-export async function adminInviteUser(email: string, fullName: string, role: "operator" | "admin"): Promise<{ error: string | null }> {
+/**
+ * Create an account with a password the ADMIN chooses.
+ *
+ * It was called adminInviteUser and it invited nobody. It called
+ * createUser (not inviteUserByEmail) with `email_confirm: true` and
+ * this as the password:
+ *
+ *     password: Math.random().toString(36).slice(2, 14)
+ *
+ * No mail is sent by that call, and the random string was never
+ * returned, logged or shown. So every account it made was born
+ * confirmed, enabled, correctly rolled — and impossible to sign into,
+ * by anyone, ever. The button reported success because creation had in
+ * fact succeeded; only logging in was impossible.
+ *
+ * The owner asked for the admin to set the password, which is the right
+ * shape for this app: a small dispatch office with no self-service
+ * signup and no reset mail configured. The admin types the password and
+ * tells the person.
+ */
+export async function adminCreateUser(
+  email: string,
+  fullName: string,
+  role: "operator" | "admin",
+  password: string
+): Promise<{ error: string | null }> {
   const check = await requireAdmin();
   if (check.error) return { error: check.error };
 
+  // Re-checked here and not only in the form. minLength on an input is
+  // a courtesy to a cooperating browser; this is a POST endpoint any
+  // signed-in admin can call directly with anything.
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` };
+  }
+
   const admin = getAdminClient();
   const { data, error } = await admin.auth.admin.createUser({
-    email,
-    password: Math.random().toString(36).slice(2, 14),
-    user_metadata: { full_name: fullName },
+    email: email.trim(),
+    password,
+    user_metadata: { full_name: fullName.trim() },
+    // Still confirmed on creation: there is no mailbox round trip in
+    // this flow to confirm through, and leaving it false would produce
+    // exactly the unusable account this function was written to stop
+    // producing.
     email_confirm: true,
   });
 
   if (error) return { error: error.message };
+
   if (data.user && role === "admin") {
-    await admin.from("profiles").update({ role: "admin" }).eq("id", data.user.id);
+    // The trigger on auth.users creates every profile as an operator,
+    // so admin is a second write — and its failure used to be
+    // discarded. That silently handed back an OPERATOR while the form
+    // said the account was created, which is the worse direction for a
+    // permissions mistake to fail in. Say it instead: the account
+    // exists, and the role can be fixed from the table below.
+    const { error: roleError } = await admin
+      .from("profiles")
+      .update({ role: "admin" })
+      .eq("id", data.user.id);
+
+    if (roleError) {
+      return {
+        error: `Account created, but the admin role could not be set (${roleError.message}). It is an operator — change the role in the table below.`,
+      };
+    }
   }
+
   return { error: null };
 }
 

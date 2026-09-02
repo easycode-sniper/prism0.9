@@ -25,9 +25,18 @@ import { stationWatchRadius } from "@/lib/constants";
 
 // Shared by the live-fleet list and the truck picker so a truck reads
 // the same colour in both — they used to carry their own copies.
+//
+// AMBER for idle, not cyan. The taxonomy in CLAUDE.md and globals.css
+// spends amber on "idle, stale" and cyan on "parking, stations,
+// informational", and the rest of the app already agreed: the map
+// marker fill, its popup text, the dashboard's location split,
+// .status-pill.idle and .glow-marker.idle are all amber. This function
+// and monitoring's copy were the two hold-outs, so an idle truck read
+// amber on the map and cyan in the list beside it. Corrected
+// 2026-09-01.
 function statusColor(status: string): string {
   if (status === "moving") return "var(--green)";
-  if (status === "idle") return "var(--cyan)";
+  if (status === "idle") return "var(--amber)";
   return "var(--text-dim)";
 }
 

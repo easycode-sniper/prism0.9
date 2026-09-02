@@ -108,7 +108,7 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
             // back; free and idle is one sitting somewhere.
             const dot =
               status === "moving" ? "var(--green)"
-              : status === "idle" ? "var(--cyan)"
+              : status === "idle" ? "var(--amber)"
               : "var(--text-dim)";
             const pos = positionOf.get(r.truck_id);
             return (

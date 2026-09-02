@@ -324,6 +324,13 @@ export default function DashboardPage() {
   const [variance, setVariance] = useState<DriverVariance[] | null>(null);
   const [truckVariance, setTruckVariance] = useState<TruckVariance[] | null>(null);
   const [speeding, setSpeeding] = useState<DriverSpeeding[] | null>(null);
+  // Whether the last load actually succeeded. Without this a failed RPC
+  // is INDISTINGUISHABLE from a slow one: every panel keeps its skeleton
+  // and its "reading the sheet…" caption forever, which is exactly what
+  // happened when 047 changed five signatures and PostgREST was still
+  // serving the old ones from its schema cache. The page looked like it
+  // was buffering. It had already failed.
+  const [dataError, setDataError] = useState<string | null>(null);
 
   // Every historical panel reads the same range, in ONE effect. Five
   // separate effects on the same dependency would fire five renders as
@@ -332,20 +339,29 @@ export default function DashboardPage() {
   // which is the exact incoherence this control exists to remove.
   useEffect(() => {
     let cancelled = false;
+    setDataError(null);
     void Promise.all([
       getFuelPeriodStats(range),
       getDashboardSeries(range),
       getDriverVariance(500, range),
       getTruckVariance(500, range),
       getDriverSpeeding(100, range),
-    ]).then(([f, s, dv, tv, sp]) => {
-      if (cancelled) return;
-      setFuel(f.stats ?? null);
-      setSeries(s.series ?? null);
-      setVariance(dv.drivers ?? null);
-      setTruckVariance(tv.trucks ?? null);
-      setSpeeding(sp.drivers ?? null);
-    });
+    ])
+      .then(([f, s, dv, tv, sp]) => {
+        if (cancelled) return;
+        // First error wins. They share a range and a round trip, so if
+        // one signature is wrong they all are — reporting five copies of
+        // the same sentence would only bury it.
+        setDataError(f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? null);
+        setFuel(f.stats ?? null);
+        setSeries(s.series ?? null);
+        setVariance(dv.drivers ?? null);
+        setTruckVariance(tv.trucks ?? null);
+        setSpeeding(sp.drivers ?? null);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setDataError(e instanceof Error ? e.message : String(e));
+      });
     return () => {
       cancelled = true;
     };
@@ -543,26 +559,38 @@ export default function DashboardPage() {
         <RangeBar value={range} onChange={setRange} daysWithData={series?.daysAvailable ?? null} />
       </div>
 
+      {/* Shown verbatim rather than as "something went wrong". This is an
+          operations tool read by the person who can act on it, and the
+          message PostgREST returns for a stale schema cache names the
+          function it could not find — which is the whole diagnosis. */}
+      {dataError && (
+        <div className="mt-3 rounded-md p-3 text-sm tint-red c-red" role="alert">
+          The figures below could not be loaded: {dataError}
+        </div>
+      )}
+
       {/* ── The sheet, summed ─────────────────────────────────
           One surface with hairline dividers rather than five bordered
           cards in a gapped grid. Same five figures, but five borders and
           four gutters were most of what made this strip look heavy — the
           numbers were never the problem. */}
       <div className="kpi-strip">
-        <Kpi label="Kilometres driven" value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? `${nf(fuel.fills)} fills` : ""} />
-        <Kpi label="Litres consumed" value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? `incl. ${nf(fuel.unpairedLitres)} L with no km logged` : ""} />
-        <Kpi label="Amount filled" value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? `${nf(fuel.unpairedFills)} fills logged amount only` : "paid at the pump"} />
+        <Kpi label="Kilometres driven" value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? `${nf(fuel.fills)} fills` : ""}  failed={dataError != null} />
+        <Kpi label="Litres consumed" value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? `incl. ${nf(fuel.unpairedLitres)} L with no km logged` : ""}  failed={dataError != null} />
+        <Kpi label="Amount filled" value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? `${nf(fuel.unpairedFills)} fills logged amount only` : "paid at the pump"}  failed={dataError != null} />
         <Kpi
           label="Average consumption"
           value={fuel?.litresPer100Km != null ? fuel.litresPer100Km.toFixed(2) : null}
           unit="L/100km"
           foot={fuel ? `${nf(fuel.fills - fuel.unpairedFills)} fills with km logged` : ""}
+          failed={dataError != null}
         />
         <Kpi
           label="Total variance"
           value={fuel ? nf(fuel.varianceDa) : null}
           unit="DA"
           foot={fuel ? (fuel.varianceDa > 0 ? "▲ over the assumed rate" : "▼ under the assumed rate") : ""}
+          failed={dataError != null}
         />
       </div>
 
@@ -1044,11 +1072,15 @@ function Kpi({
   value,
   unit,
   foot,
+  failed,
 }: {
   label: string;
   value: string | null;
   unit: string;
   foot: string;
+  /** True when the load finished and failed. A skeleton then is a lie:
+   *  nothing is still coming. */
+  failed?: boolean;
 }) {
   return (
     // No .panel here: the surface, border and radius belong to
@@ -1056,7 +1088,9 @@ function Kpi({
     // would put a border back around each and undo the point.
     <div className="dash-kpi">
       <div className="dash-kpi__label">{label}</div>
-      {value === null ? (
+      {value === null && failed ? (
+        <div className="dash-kpi__value" style={{ color: "var(--text-dim)" }}>—</div>
+      ) : value === null ? (
         <div className="skeleton skeleton--line" style={{ width: "72%", height: "22px", marginTop: "8px" }} />
       ) : (
         <div className="dash-kpi__value">
@@ -1066,7 +1100,7 @@ function Kpi({
       )}
       <div className="dash-kpi__foot">
         <span className="dash-delta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {value === null ? "reading the sheet…" : foot}
+          {value === null ? (failed ? "unavailable" : "reading the sheet…") : foot}
         </span>
       </div>
     </div>

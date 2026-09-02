@@ -317,3 +317,20 @@ GRANT EXECUTE ON FUNCTION public.driver_speeding_leaders(INT, DATE, DATE)       
 -- scans. If the sheet ever grows past a few hundred thousand fills, the
 -- fix is a stored ops_day DATE column maintained on write — not an
 -- expression index, which cannot be made to work.
+
+-- ── Tell PostgREST the signatures changed ─────────────────────
+--
+-- NOT optional, and the reason is worth the paragraph. PostgREST serves
+-- RPC calls from a CACHED view of the schema and matches a request to a
+-- function by its ARGUMENT NAMES. After the DROP/CREATE above it still
+-- believed fuel_period_stats took no arguments and dashboard_daily_series
+-- took p_days, so every call from the new client — which sends p_from and
+-- p_to — matched nothing and came back as PGRST202.
+--
+-- That is exactly what happened in production on 2026-09-02: the SQL was
+-- correct, the functions were correct, and the dashboard sat on its
+-- loading skeletons because the API in front of them was a version
+-- behind. Supabase's apply_migration issues this reload itself; running
+-- the same DDL through a plain SQL console does not, which is how it was
+-- missed. Left here so the file is correct however it is applied.
+NOTIFY pgrst, 'reload schema';

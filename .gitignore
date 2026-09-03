@@ -35,3 +35,6 @@ tsconfig.tsbuildinfo
 # .claude/ stay committable.
 .agents/
 .claude/skills/
+
+# Site-test output (screenshots + report.json) from scripts/site-test.mts
+.site-test/

@@ -133,6 +133,11 @@ export interface GeoVisit {
    *  the wait on its own, and the two are not the same number. Null on
    *  every other kind, and on a loading visit nothing encloses; see
    *  migrations 040 and 043. */
+  /** Still returned by geo_zone_visits, but no longer shown: the "Avant
+   *  chargement" column was removed from the Geo table on 2026-09-03 at
+   *  the owner's request. Kept here, and the RPC left alone, because
+   *  dropping a function is a migration to undo while an unread field
+   *  costs nothing — and restoring the column needs no database work. */
   queue_seconds: number | null;
 }
 

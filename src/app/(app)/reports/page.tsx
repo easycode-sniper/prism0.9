@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   getParcEntries,
   getGeoVisits,
@@ -85,11 +85,21 @@ const PARC_COLUMNS = ["Truck ID", "Driver", "Entry date"] as const;
 // truck that changed hands mid-period shows both names on the rows they
 // actually drove.
 //
-// Avant chargement, because without it the report cannot answer "how
-// long did he wait" — see geoRows.
+// Avant chargement was REMOVED on 2026-09-03 at the owner's request —
+// he does not use the figure. Nothing was dropped from the database to
+// do it: geo_zone_visits still computes queue_seconds and it still
+// arrives on GeoVisit, so restoring the column is an edit to this array
+// and one cell, with no migration.
 const GEO_COLUMNS = [
-  "Zone", "Type", "Driver", "Heure d'entrée", "Heure sortie", "Temps passé", "Avant chargement",
+  "Zone", "Type", "Driver", "Heure d'entrée", "Heure sortie", "Temps passé",
 ] as const;
+
+// The per-row copy button is spliced into the HEADER after this column,
+// and into the body in the matching place. It is a control rather than
+// data, so it deliberately stays out of GEO_COLUMNS — that array is what
+// Copy table and Download CSV write, and an extra empty field would land
+// in every exported row.
+const GEO_COPY_AFTER = "Heure sortie";
 
 const GEO_ZONE_LABEL: Record<GeoVisit["zone_kind"], string> = {
   factory: "Attente",
@@ -108,13 +118,6 @@ function geoRows(visits: GeoVisit[]): string[][] {
     // a zero-length stay. Same rule the Attente rows follow.
     v.exited_at ? formatOpsDateTime(v.exited_at) : "",
     v.seconds_in_zone == null ? "" : hms(v.seconds_in_zone),
-    // The real wait: arrival at the plant to the start of loading. On a
-    // Chargement row only, and BLANK elsewhere rather than a dash —
-    // matching the table, and because an empty spreadsheet cell reads as
-    // "not applicable" while a dash reads as a value that failed to
-    // arrive. An Attente row's own Temps passé is the whole stay with
-    // the loading inside it, so the two must never be added together.
-    v.zone_kind === "factory_loading" && v.queue_seconds != null ? hms(v.queue_seconds) : "",
   ]);
 }
 
@@ -163,6 +166,9 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Keyed by row rather than a boolean: two rows copied in quick
+  // succession must not leave the tick sitting on the first one.
+  const [copiedRow, setCopiedRow] = useState<string | null>(null);
 
   function applyQuickRange(range: QuickRange) {
     const r = startOfRange(range);
@@ -262,6 +268,31 @@ export default function ReportsPage() {
     }
   }
 
+  // One row's two timestamps, and nothing else — the owner pastes them
+  // into his own sheet beside the Wialon figures.
+  //
+  // Tab-separated for the same reason toClipboardText is: a tab lands
+  // entrée and sortie in two cells in Excel or Sheets, where a comma
+  // lands them in one. An OPEN visit copies its entry and an empty
+  // second cell, matching what Download CSV writes for that row — the
+  // truck has not left, and copying the words on screen ("encore sur
+  // place") would paste a sentence into a date column.
+  async function copyRowTimes(v: GeoVisit, key: string) {
+    const text = [
+      formatOpsDateTime(v.entered_at),
+      v.exited_at ? formatOpsDateTime(v.exited_at) : "",
+    ].join("\t");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedRow(key);
+      // Clears only if this row is still the one showing the tick, so a
+      // later copy's confirmation cannot be cancelled by an earlier timer.
+      setTimeout(() => setCopiedRow((current) => (current === key ? null : current)), 2000);
+    } catch {
+      setError("Could not reach the clipboard — use Download CSV instead");
+    }
+  }
+
   function downloadCsv() {
     if (active.rows.length === 0) return;
     // ﻿ so Excel opens it as UTF-8; without it, accented driver
@@ -295,23 +326,31 @@ export default function ReportsPage() {
     width: "190px",
   };
   // NO nowrap here, and that is a measured decision rather than an
-  // oversight. Adding Driver and Avant chargement took Geo to seven
-  // columns, and the timestamps started wrapping into date-over-time.
-  // Pinning them with nowrap looked like the fix and made it worse: the
-  // zone column absorbed the squeeze and went to three lines, taking
-  // rows from 65px to 107px. Measured at 1366 over the six real rows of
-  // 00033-523-35 on 2026-09-01:
+  // oversight. The timestamps wrap into date-over-time, and pinning them
+  // with nowrap looked like the fix and made it worse: the zone column
+  // absorbed the squeeze and went to three lines, taking rows from 65px
+  // to 107px. Measured at 1366 over the six real rows of 00033-523-35 on
+  // 2026-09-01, when Avant chargement was still here and the table was
+  // therefore WIDER than it is now:
   //
   //   all wrap (this)     65px rows, 443px table, no h-scroll
   //   timestamps nowrap  107px rows, 572px table, no h-scroll
   //   everything nowrap   44px rows, 301px table, SCROLLS (1289 > 1102)
   //
-  // The densest option hides Avant chargement — the number this report
-  // exists to show — behind a horizontal scroll. CLAUDE.md's density
-  // rule is about dispatch fitting forty trucks on one screen; this is
-  // a per-truck report showing a handful of rows a day, so legibility
-  // with nothing hidden wins.
+  // Dropping Avant chargement on 2026-09-03 and adding the copy control
+  // in its place only took width OUT — a 13px glyph for a column that
+  // held "0:37:18" under a sixteen-character heading — so the wrapping
+  // choice still holds and the scroll margin is strictly wider than the
+  // numbers above. CLAUDE.md's density rule is about dispatch fitting
+  // forty trucks on one screen; this is a per-truck report showing a
+  // handful of rows a day, so legibility with nothing hidden wins.
   const monoCell: React.CSSProperties = { fontFamily: "var(--font-mono)", color: "var(--text-dim)" };
+  // The copy column's heading is empty to the eye but not to a screen
+  // reader, which would otherwise announce an unlabelled column.
+  const srOnly: React.CSSProperties = {
+    position: "absolute", width: 1, height: 1, padding: 0, margin: -1,
+    overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0,
+  };
   const hasRun = report === "parc" ? entries !== null : geoVisits !== null;
 
   return (
@@ -338,8 +377,6 @@ export default function ReportsPage() {
           The loading bay sits inside the waiting area, so an <strong>Attente</strong> row is the
           whole stay at the plant — loading included, not the wait before it. Its window contains the{" "}
           <strong>Chargement</strong> row rather than running before it, so the two do not add up.
-          The wait on its own is <strong>Avant chargement</strong>: arrival at the plant to the
-          moment loading started.
         </p>
       )}
 
@@ -476,15 +513,26 @@ export default function ReportsPage() {
             <div className="mt-3 table-wrap">
               <table>
                 <thead>
-                  <tr>{GEO_COLUMNS.map((c) => <th key={c}>{c}</th>)}</tr>
+                  <tr>
+                    {GEO_COLUMNS.map((c) => (
+                      <Fragment key={c}>
+                        <th>{c}</th>
+                        {c === GEO_COPY_AFTER && (
+                          <th><span style={srOnly}>Copier les heures</span></th>
+                        )}
+                      </Fragment>
+                    ))}
+                  </tr>
                 </thead>
                 <tbody>
-                  {geoVisits!.map((v, i) => (
+                  {geoVisits!.map((v, i) => {
                     // entered_at is not unique on its own: the waiting
                     // area and the loading bay can both be entered on
                     // the same tick, and both carry that tick's
                     // timestamp to the millisecond.
-                    <tr key={`${v.zone_kind}-${v.entered_at}-${i}`}>
+                    const rowKey = `${v.zone_kind}-${v.entered_at}-${i}`;
+                    return (
+                    <tr key={rowKey}>
                       <td>{v.zone_name}</td>
                       <td style={{ color: "var(--text-dim)" }}>{GEO_ZONE_LABEL[v.zone_kind]}</td>
                       <td style={{ color: v.driver_name ? "var(--text)" : "var(--text-dim)" }}>
@@ -494,16 +542,28 @@ export default function ReportsPage() {
                       <td style={monoCell}>
                         {v.exited_at ? formatOpsDateTime(v.exited_at) : "encore sur place"}
                       </td>
-                      <td style={monoCell}>{hms(v.seconds_in_zone)}</td>
-                      {/* Amber: the taxonomy's idle, and a truck queueing
-                          at the plant is precisely idle. It is the only
-                          coloured cell in the table, which is the point —
-                          this is the number the owner acts on. */}
-                      <td style={{ ...monoCell, color: v.zone_kind === "factory_loading" && v.queue_seconds != null ? "var(--amber)" : "var(--text-dim)" }}>
-                        {v.zone_kind === "factory_loading" ? hms(v.queue_seconds) : ""}
+                      {/* Directly after the pair it copies, rather than at
+                          the end of the row: a control in the last column
+                          reads as acting on the whole row, and this one
+                          takes the two timestamps to its left and nothing
+                          else. Achromatic on purpose — .icon-ghost is
+                          chrome, and every hue here belongs to a truck
+                          state. */}
+                      <td style={{ width: "1%", whiteSpace: "nowrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => copyRowTimes(v, rowKey)}
+                          className="icon-ghost"
+                          title="Copier entrée + sortie"
+                          aria-label={`Copier l'heure d'entrée et l'heure de sortie — ${v.zone_name}`}
+                        >
+                          {copiedRow === rowKey ? <Check size={13} /> : <Copy size={13} />}
+                        </button>
                       </td>
+                      <td style={monoCell}>{hms(v.seconds_in_zone)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

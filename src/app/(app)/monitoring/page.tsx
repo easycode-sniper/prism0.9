@@ -61,7 +61,7 @@ export default function MonitoringPage() {
   if (trucks.length === 0 && !fleetData.lastUpdated && !fleetData.error) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-sm t-dim">Waiting for first fleet sync...</div>
+        <div className="text-sm t-dim">{t("Waiting for first fleet sync…")}</div>
       </div>
     );
   }
@@ -93,7 +93,7 @@ export default function MonitoringPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold t-primary">{t("monitoring.title")}</h1>
-          <p className="text-xs t-dim">Search and filter every truck in the fleet, dispatched or not</p>
+          <p className="text-xs t-dim">{t("Search and filter every truck in the fleet, dispatched or not")}</p>
         </div>
         <span className="font-mono text-sm" style={{ color: "var(--text-dim)" }}>{filteredTrucks.length} / {trucks.length}</span>
       </div>
@@ -101,7 +101,7 @@ export default function MonitoringPage() {
       <div className="mt-4 flex flex-wrap items-center gap-2.5">
         <input
           type="text"
-          placeholder="Search driver or truck ID..."
+          placeholder={t("Search driver or truck ID…")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="rounded-md border bd bg-raised px-3 py-1.5 text-sm t-primary placeholder-current focus:border-[var(--accent)] focus:outline-none"
@@ -113,7 +113,7 @@ export default function MonitoringPage() {
             onClick={() => setFilter(f)}
             className={`btn-sm capitalize ${filter === f ? "is-on" : ""}`}
           >
-            {f}
+            {t(f)}
           </button>
         ))}
       </div>
@@ -126,12 +126,12 @@ export default function MonitoringPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
-              <th className="px-4 py-2">Truck</th>
-              <th className="px-4 py-2">Driver</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">Speed</th>
-              <th className="px-4 py-2">Destination</th>
-              <th className="px-4 py-2">Updated</th>
+              <th className="px-4 py-2">{t("Truck")}</th>
+              <th className="px-4 py-2">{t("Driver")}</th>
+              <th className="px-4 py-2">{t("Status")}</th>
+              <th className="px-4 py-2">{t("Speed")}</th>
+              <th className="px-4 py-2">{t("Destination")}</th>
+              <th className="px-4 py-2">{t("Updated")}</th>
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
@@ -148,7 +148,7 @@ export default function MonitoringPage() {
           </tbody>
         </table>
         {filteredTrucks.length === 0 && (
-          <div className="p-8 text-center text-sm t-dim">No trucks match.</div>
+          <div className="p-8 text-center text-sm t-dim">{t("No trucks match.")}</div>
         )}
       </div>
 
@@ -173,8 +173,11 @@ function MonitoringRow({
   checking: boolean;
   onCheckPosition: () => void;
 }) {
+  const { t } = useTranslation();
   const isOffRoute = truck.dispatched && truck.last_on_route === false;
-  const statusLabel = isOffRoute ? "off-route" : truck.status;
+  // The filter buttons above use the same keys, so a truck reads the same
+  // word in the table as on the button that selected it.
+  const statusLabel = isOffRoute ? t("off-route") : t(truck.status);
   // Amber for idle, matching the taxonomy in CLAUDE.md and globals.css
   // — cyan is parking and stations. This row and dispatch's statusColor
   // were the app's two hold-outs; the map, the dashboard and
@@ -192,7 +195,7 @@ function MonitoringRow({
         <span className="inline-flex items-center gap-1.5">
           {truck.truck_id}
           {truck.category === "staff" && (
-            <span className="vehicle-tag" title="Staff car — excluded from notifications">staff</span>
+            <span className="vehicle-tag" title={t("Staff car — excluded from notifications")}>{t("staff")}</span>
           )}
         </span>
       </td>
@@ -220,11 +223,11 @@ function MonitoringRow({
             className="mr-2 text-xs c-accent hover:opacity-80 disabled:opacity-50"
             title={check ? `${check.etaLabel}` : undefined}
           >
-            {checking ? "..." : "Check"}
+            {checking ? "…" : t("Check")}
           </button>
         )}
         {locateHref && (
-          <Link href={locateHref} className="text-xs c-accent hover:opacity-80">Locate</Link>
+          <Link href={locateHref} className="text-xs c-accent hover:opacity-80">{t("Locate")}</Link>
         )}
       </td>
     </tr>

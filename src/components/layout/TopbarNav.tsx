@@ -28,7 +28,7 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
           .topbar > .brand is what puts it in column 1, so wrapping it in
           a link would take it out of that column. The link IS the
           brand. */}
-      <Link href="/dashboard" className="brand brand-link" aria-label={`${t("brand.title")} — go to dashboard`}>
+      <Link href="/dashboard" className="brand brand-link" aria-label={`${t("brand.title")} — ${t("go to dashboard")}`}>
         <div className="brand-mark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/omd-logo.png" alt="OMD" width={24} height={24} style={{ objectFit: "contain" }} />
@@ -70,9 +70,10 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
 
 export function FleetActiveCount() {
   const { activeRuns, fleetData } = useFleet();
+  const { t } = useTranslation();
   return (
     <span className="topbar-active">
-      <span className="topbar-active__label">Active:</span>{" "}
+      <span className="topbar-active__label">{t("Active:")}</span>{" "}
       <strong style={{ color: "var(--amber)" }}>{activeRuns}</strong> / <span>{fleetData.trucks.length || "—"}</span>
     </span>
   );

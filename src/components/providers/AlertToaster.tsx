@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { playAlertTone, primeAlertAudio } from "@/lib/sound";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatTime } from "@/lib/format";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 // Mounted once in the app shell, so an alert reaches the operator on
 // whatever page they happen to be on rather than only in the
@@ -50,6 +51,7 @@ const MAX_VISIBLE = 4;
 
 export function AlertToaster() {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const { t: tr } = useTranslation();
 
   const dismiss = useCallback((id: string) => {
     setToasts((cur) => cur.filter((t) => t.id !== id));
@@ -185,7 +187,7 @@ export function AlertToaster() {
             </div>
             <button
               onClick={() => dismiss(t.id)}
-              aria-label="Dismiss"
+              aria-label={tr("Dismiss")}
               className="t-faint"
               style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px", lineHeight: 0, flex: "none" }}
             >

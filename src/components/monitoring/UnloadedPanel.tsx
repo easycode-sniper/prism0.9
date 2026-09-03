@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getUnloadedTrucks, type UnloadedTruck } from "@/lib/supabase/unloaded";
 import { formatAge } from "@/lib/format";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 import {
   UNLOADED_MIN_SECONDS,
   UNLOADED_MAX_AGE_HOURS,
@@ -47,6 +48,7 @@ function hoursMinutes(seconds: number): string {
 }
 
 export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelProps) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<UnloadedTruck[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,20 +87,24 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
           list counts as "unloaded" — and the 25 minutes is the only
           reason a truck that drove past a site is not in it. */}
       <p className="mt-0.5 text-xs t-dim">
-        {Math.round(UNLOADED_MIN_SECONDS / 60)} min or more at the client, then{" "}
-        {Math.round(UNLOADED_SETTLE_SECONDS / 60)} min since leaving, and not yet back at the plant
-        or the parc.
+        {t(
+          "{min} min or more at the client, then {settle} min since leaving, and not yet back at the plant or the parc.",
+          {
+            min: Math.round(UNLOADED_MIN_SECONDS / 60),
+            settle: Math.round(UNLOADED_SETTLE_SECONDS / 60),
+          },
+        )}
       </p>
 
-      {error && <p className="mt-3 text-xs c-red">{error}</p>}
+      {error && <p className="mt-3 text-xs c-red">{t(error)}</p>}
 
       {rows === null && !error && (
-        <p className="mt-4 text-xs t-faint">Loading…</p>
+        <p className="mt-4 text-xs t-faint">{t("Loading…")}</p>
       )}
 
       {rows?.length === 0 && (
         <p className="mt-4 text-xs t-faint">
-          No truck has finished unloading in the last {UNLOADED_MAX_AGE_HOURS} hours.
+          {t("No truck has finished unloading in the last {hours} hours.", { hours: UNLOADED_MAX_AGE_HOURS })}
         </p>
       )}
 
@@ -128,7 +134,7 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
                   </span>
                   {pos && (
                     <Link href={`/dispatch?lat=${pos.lat}&lng=${pos.lng}`} className="text-xs c-accent hover:opacity-80">
-                      Locate
+                      {t("Locate")}
                     </Link>
                   )}
                 </div>
@@ -141,7 +147,10 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
                       with time on site because "free 20 minutes" and
                       "was there four hours" answer different halves of
                       "can I use this truck". */}
-                  free {formatAge(minutesSince(r.free_at))} · {hoursMinutes(r.seconds_on_site)} on site
+                  {t("free {age} · {duration} on site", {
+                    age: formatAge(minutesSince(r.free_at)),
+                    duration: hoursMinutes(r.seconds_on_site),
+                  })}
                 </div>
               </li>
             );

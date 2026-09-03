@@ -121,7 +121,28 @@ export default function MonitoringPage() {
 
       <div
         className="mt-4"
-        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 16, alignItems: "stretch" }}
+        // EQUAL HEIGHT, NOT EQUAL WIDTH. Both panels are 704px tall and
+        // that half of the balancing is right — but 1fr/1fr was measured
+        // on 2026-09-03 and clips the data. The table is table-layout:
+        // fixed over a 628px colgroup, so it never scrolls sideways; it
+        // truncates instead, and at half the viewport there is not enough
+        // to truncate from. At 1366 the truck cell needs 140px and gets
+        // 122, so EVERY truck id rendered as "000051-52…" — the one
+        // identifier a dispatcher reads off this screen — and half the
+        // driver names went with it. Rows also grew 45px → 63px, costing
+        // about seven trucks of the density CLAUDE.md asks for.
+        //
+        // 380px is not a new number: it is what the previous commit used
+        // before the equal-width pass. Measured across three widths:
+        //
+        //   1fr/1fr    1280  24/24 trucks clipped   63px rows
+        //              1366  24/24 clipped          63px rows
+        //   1fr/380px  1280   0/24 clipped          45px rows
+        //              1366   0/24 clipped, 0/24 drivers clipped
+        //
+        // The panel is a list of truck, driver and site — it has never
+        // needed half the screen, and the table has always needed more.
+        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 380px", gap: 16, alignItems: "stretch" }}
       >
       <div className="flex flex-col overflow-hidden rounded-lg border bd" style={{ height: 704, minHeight: 0 }}>
         <div className="min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>

@@ -21,6 +21,7 @@
 import { useMemo } from "react";
 import type { OpsRange } from "@/lib/dashboard/range";
 import { opsToday, opsNowLocalValue, OPS_TIMEZONE } from "@/lib/format";
+import { useTranslation } from "@/lib/i18n/I18nProvider";
 
 /** An ops day N days before today, as YYYY-MM-DD. opsNowLocalValue does
  *  the timezone work already; this only wants the date half. */
@@ -70,10 +71,22 @@ export function buildPresets(): Preset[] {
   ];
 }
 
-export function describeRange(range: OpsRange): string {
-  if (!range.from && !range.to) return "all time";
+/**
+ * The chosen window as a phrase, for the dashboard heading.
+ *
+ * Takes t rather than returning English for the caller to translate: two
+ * of the three branches are whole phrases and one is a date, so there is
+ * no single key that covers it. The preset LABELS above are different —
+ * each is a whole phrase on its own, so they are used as keys directly
+ * and translated at the point they are rendered.
+ */
+export function describeRange(
+  range: OpsRange,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
+  if (!range.from && !range.to) return t("all time");
   if (range.from && range.to && range.from === range.to) return range.from;
-  return `${range.from ?? "the start"} → ${range.to ?? "now"}`;
+  return t("{from} → {to}", { from: range.from ?? t("the start"), to: range.to ?? t("now") });
 }
 
 interface Props {
@@ -85,6 +98,7 @@ interface Props {
 }
 
 export default function RangeBar({ value, onChange, daysWithData }: Props) {
+  const { t } = useTranslation();
   const presets = useMemo(buildPresets, []);
   const activeKey = presets.find(
     (p) => p.range.from === value.from && p.range.to === value.to
@@ -118,13 +132,13 @@ export default function RangeBar({ value, onChange, daysWithData }: Props) {
             aria-pressed={activeKey === p.key}
             className={`seg-item${activeKey === p.key ? " is-active" : ""}`}
           >
-            {p.label}
+            {t(p.label)}
           </button>
         ))}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <label className="text-xs t-dim" htmlFor="dash-from">From</label>
+        <label className="text-xs t-dim" htmlFor="dash-from">{t("From")}</label>
         <input
           id="dash-from"
           type="date"
@@ -133,7 +147,7 @@ export default function RangeBar({ value, onChange, daysWithData }: Props) {
           onChange={(e) => onChange({ ...value, from: e.target.value || null })}
           style={dateInput}
         />
-        <label className="text-xs t-dim" htmlFor="dash-to">To</label>
+        <label className="text-xs t-dim" htmlFor="dash-to">{t("To")}</label>
         <input
           id="dash-to"
           type="date"
@@ -148,8 +162,8 @@ export default function RangeBar({ value, onChange, daysWithData }: Props) {
         {/* Named on screen because every figure on the page now depends
             on it, and a reader coming back to a screenshot needs to know
             which window they are looking at. */}
-        Operations days, {OPS_TIMEZONE}
-        {daysWithData != null ? ` · ${daysWithData} with data` : ""}
+        {t("Operations days, {tz}", { tz: OPS_TIMEZONE })}
+        {daysWithData != null ? t(" · {n} with data", { n: daysWithData }) : ""}
       </span>
     </div>
   );

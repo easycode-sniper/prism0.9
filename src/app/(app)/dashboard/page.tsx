@@ -92,13 +92,16 @@ function axisLabel(day: string): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
-function relativeTime(iso: string): string {
+function relativeTime(
+  iso: string,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1) return t("just now");
+  if (mins < 60) return t("{n} min ago", { n: mins });
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs} hr ago`;
-  return `${Math.round(hrs / 24)} d ago`;
+  if (hrs < 24) return t("{n} hr ago", { n: hrs });
+  return t("{n} d ago", { n: Math.round(hrs / 24) });
 }
 
 /** Every driver and every truck the sheet names is rendered. The panel
@@ -246,6 +249,7 @@ function SortableTable<T>({
  * argue with.
  */
 function SpeedingPanel({ rows }: { rows: DriverSpeeding[] | null }) {
+  const { t } = useTranslation();
   const worst = rows && rows.length > 0 ? Math.max(...rows.map((r) => r.times)) : 0;
   const total = rows ? rows.reduce((sum, r) => sum + r.times, 0) : 0;
 
@@ -253,9 +257,9 @@ function SpeedingPanel({ rows }: { rows: DriverSpeeding[] | null }) {
     <section className="panel dash-panel">
       <header className="dash-panel__head">
         <div>
-          <div className="dash-panel__title">Over the limit, by driver</div>
+          <div className="dash-panel__title">{t("Over the limit, by driver")}</div>
           <div className="dash-panel__sub">
-            Times above {SPEED_LIMIT_KMH} km/h this month, anywhere in the fleet.
+            {t("Times above {limit} km/h this month, anywhere in the fleet.", { limit: SPEED_LIMIT_KMH })}
           </div>
         </div>
       </header>
@@ -266,7 +270,7 @@ function SpeedingPanel({ rows }: { rows: DriverSpeeding[] | null }) {
           <p className="dash-empty">
             <span>
               <Gauge size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-              Nobody has crossed {SPEED_LIMIT_KMH} km/h this month.
+              {t("Nobody has crossed {limit} km/h this month.", { limit: SPEED_LIMIT_KMH })}
             </span>
           </p>
         ) : (
@@ -281,7 +285,7 @@ function SpeedingPanel({ rows }: { rows: DriverSpeeding[] | null }) {
                   <span className="rank-row__name">{r.driverName}</span>
                 </div>
                 <span className="rank-row__meta">
-                  {r.truckCount > 1 ? `${r.truckCount} trucks` : (r.trucks ?? "")}
+                  {r.truckCount > 1 ? t("{n} trucks", { n: r.truckCount }) : (r.trucks ?? "")}
                 </span>
                 <span className="rank-row__value">{r.times}</span>
               </div>
@@ -291,8 +295,12 @@ function SpeedingPanel({ rows }: { rows: DriverSpeeding[] | null }) {
       </div>
       {rows !== null && rows.length > 0 && (
         <div className="table-foot-note">
-          {total} crossing{total === 1 ? "" : "s"} of the limit by {rows.length}{" "}
-          driver{rows.length === 1 ? "" : "s"}. Slowing down and speeding up again counts twice.
+          {t(
+            total === 1
+              ? "{crossings} crossing of the limit by {drivers} driver. Slowing down and speeding up again counts twice."
+              : "{crossings} crossings of the limit by {drivers} drivers. Slowing down and speeding up again counts twice.",
+            { crossings: total, drivers: rows.length },
+          )}
         </div>
       )}
     </section>
@@ -386,7 +394,7 @@ export default function DashboardPage() {
   }, [trucks]);
 
   const statusChart = {
-    labels: ["Moving", "Stationary", "Offline"],
+    labels: [t("Moving"), t("Stationary"), t("Offline")],
     datasets: [
       {
         data: [fleetStatus.moving, fleetStatus.stationary, fleetStatus.offline],
@@ -452,7 +460,7 @@ export default function DashboardPage() {
     labels: (series?.litres ?? []).map((p) => axisLabel(p.day)),
     datasets: [
       {
-        label: "Litres",
+        label: t("Litres"),
         data: (series?.litres ?? []).map((p) => (p.value == null ? null : Math.round(p.value))),
         type: "bar" as const,
         yAxisID: "y",
@@ -460,7 +468,7 @@ export default function DashboardPage() {
         ...BAR_SERIES,
       },
       {
-        label: "L/100km",
+        label: t("L/100km"),
         data: (series?.consumption ?? []).map((p) => (p.value == null ? null : Number(p.value.toFixed(2)))),
         type: "line" as const,
         yAxisID: "y1",
@@ -492,7 +500,7 @@ export default function DashboardPage() {
     labels: (series?.amountDa ?? []).map((p) => axisLabel(p.day)),
     datasets: [
       {
-        label: "Amount filled",
+        label: t("Amount filled"),
         data: (series?.amountDa ?? []).map((p) => (p.value == null ? null : Math.round(p.value))),
         type: "bar" as const,
         yAxisID: "y",
@@ -500,7 +508,7 @@ export default function DashboardPage() {
         ...BAR_SERIES,
       },
       {
-        label: "Cost per km",
+        label: t("Cost per km"),
         // Null on a day with no priced fill, so the line breaks rather
         // than dropping to a floor that would read as a free day.
         data: (series?.daPerKm ?? []).map((p) => (p.value == null ? null : Number(p.value.toFixed(2)))),
@@ -558,8 +566,8 @@ export default function DashboardPage() {
         <div>
           <h2 style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", fontWeight: 600 }}>{t("dashboard.title")}</h2>
           <p className="t-dim" style={{ fontSize: ".78rem", marginTop: "3px" }}>
-            Every figure below covers {describeRange(range)}
-            {periodLabel ? `, first to last fill ${periodLabel}` : ""}.
+            {t("Every figure below covers {range}", { range: describeRange(range, t) })}
+            {periodLabel ? t(", first to last fill {period}", { period: periodLabel }) : ""}.
           </p>
         </div>
       </div>
@@ -574,7 +582,7 @@ export default function DashboardPage() {
           function it could not find — which is the whole diagnosis. */}
       {dataError && (
         <div className="mt-3 rounded-md p-3 text-sm tint-red c-red" role="alert">
-          The figures below could not be loaded: {dataError}
+          {t("The figures below could not be loaded: {reason}", { reason: dataError })}
         </div>
       )}
 
@@ -584,21 +592,21 @@ export default function DashboardPage() {
           four gutters were most of what made this strip look heavy — the
           numbers were never the problem. */}
       <div className="kpi-strip">
-        <Kpi label="Kilometres driven" value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? `${nf(fuel.fills)} fills` : ""}  failed={dataError != null} />
-        <Kpi label="Litres consumed" value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? `incl. ${nf(fuel.unpairedLitres)} L with no km logged` : ""}  failed={dataError != null} />
-        <Kpi label="Amount filled" value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? `${nf(fuel.unpairedFills)} fills logged amount only` : "paid at the pump"}  failed={dataError != null} />
+        <Kpi label={t("Kilometres driven")} value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? t("{n} fills", { n: nf(fuel.fills) }) : ""}  failed={dataError != null} />
+        <Kpi label={t("Litres consumed")} value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? t("incl. {n} L with no km logged", { n: nf(fuel.unpairedLitres) }) : ""}  failed={dataError != null} />
+        <Kpi label={t("Amount filled")} value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? t("{n} fills logged amount only", { n: nf(fuel.unpairedFills) }) : t("paid at the pump")}  failed={dataError != null} />
         <Kpi
-          label="Average consumption"
+          label={t("Average consumption")}
           value={fuel?.litresPer100Km != null ? fuel.litresPer100Km.toFixed(2) : null}
           unit="L/100km"
-          foot={fuel ? `${nf(fuel.fills - fuel.unpairedFills)} fills with km logged` : ""}
+          foot={fuel ? t("{n} fills with km logged", { n: nf(fuel.fills - fuel.unpairedFills) }) : ""}
           failed={dataError != null}
         />
         <Kpi
-          label="Total variance"
+          label={t("Total variance")}
           value={fuel ? nf(fuel.varianceDa) : null}
           unit="DA"
-          foot={fuel ? (fuel.varianceDa > 0 ? "▲ over the assumed rate" : "▼ under the assumed rate") : ""}
+          foot={fuel ? (fuel.varianceDa > 0 ? t("▲ over the assumed rate") : t("▼ under the assumed rate")) : ""}
           failed={dataError != null}
         />
       </div>
@@ -620,7 +628,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div style={{ minWidth: 0 }}>
-                <div className="dash-panel__title">Distance per day</div>
+                <div className="dash-panel__title">{t("Distance per day")}</div>
                 <div className="dash-panel__sub">
                   {/* The last point is always today, and today is always
                       partial — at 02:00 it is a hundredth of a day's
@@ -633,8 +641,8 @@ export default function DashboardPage() {
                       by dropping the point: the current day is the one
                       people look for. Only worth saying when the range
                       actually reaches today. */}
-                  Fleet kilometres, staff cars included.
-                  {range.to == null || range.to >= opsToday() ? " Today is still counting." : ""}
+                  {t("Fleet kilometres, staff cars included.")}
+                  {range.to == null || range.to >= opsToday() ? " " + t("Today is still counting.") : ""}
                   {/* A break in the line is "not recorded", never "zero
                       km driven". This panel reads fleet_day_metrics,
                       which pg_cron began writing on 2026-08-17 — earlier
@@ -643,7 +651,7 @@ export default function DashboardPage() {
                       from the series rather than hardcoded, so it stops
                       appearing on its own once the range starts inside
                       the recorded period. */}
-                  {kmGapDay ? ` No fleet tracking before ${kmGapDay} — those days are a gap, not zero.` : ""}
+                  {kmGapDay ? " " + t("No fleet tracking before {day} — those days are a gap, not zero.", { day: kmGapDay }) : ""}
                 </div>
               </div>
             </header>
@@ -674,17 +682,16 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">What fuel cost per day</div>
+                <div className="dash-panel__title">{t("What fuel cost per day")}</div>
                 <div className="dash-panel__sub">
-                  Bars are what was paid at the pump, every fill. The line is the montant
-                  kilométrique — dinars per kilometre, on the fills that logged a distance.
+                  {t("Bars are what was paid at the pump, every fill. The line is the montant kilométrique — dinars per kilometre, on the fills that logged a distance.")}
                   {/* Today's column is empty until the first fill of the
                       day syncs: the bar is 0 and the rate has no priced
                       fill to divide, so the newest slot draws nothing at
                       all. Said here for the same reason the distance
                       panel says it — a blank column reads as a day that
                       cost nothing rather than a day still counting. */}
-                  {" "}Today fills in as the sheet syncs.
+                  {" "}{t("Today fills in as the sheet syncs.")}
                 </div>
               </div>
             </header>
@@ -712,7 +719,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Litres bought per day</div>
+                <div className="dash-panel__title">{t("Litres bought per day")}</div>
                 {/* Names both series, which is why this chart carries no
                     legend — 32px of legend is a fifth of a 150px plot. */}
                 <div className="dash-panel__sub">
@@ -748,9 +755,9 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Consumption per day</div>
+                <div className="dash-panel__title">{t("Consumption per day")}</div>
                 <div className="dash-panel__sub">
-                  L/100km, on fills that logged a distance. The sheet assumes 45.
+                  {t("L/100km, on fills that logged a distance. The sheet assumes 45.")}
                 </div>
               </div>
             </header>
@@ -776,8 +783,8 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Alerts raised per day</div>
-                <div className="dash-panel__sub">Off route, speeding and arrivals together.</div>
+                <div className="dash-panel__title">{t("Alerts raised per day")}</div>
+                <div className="dash-panel__sub">{t("Off route, speeding and arrivals together.")}</div>
               </div>
             </header>
             <div className="dash-panel__body">
@@ -799,10 +806,9 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Fuel variance by truck</div>
+                <div className="dash-panel__title">{t("Fuel variance by truck")}</div>
                 <div className="dash-panel__sub">
-                  The same écart, per vehicle. A truck that is thirsty under several drivers is a
-                  truck, not a run of unlucky people.
+                  {t("The same écart, per vehicle. A truck that is thirsty under several drivers is a truck, not a run of unlucky people.")}
                 </div>
               </div>
             </header>
@@ -810,25 +816,25 @@ export default function DashboardPage() {
               {truckVariance === null ? (
                 <VarianceWaiting />
               ) : truckVariance.length === 0 ? (
-                <p className="dash-empty">No fill carries a variance yet.</p>
+                <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
               ) : (
                 <SortableTable
                   rows={truckVariance}
                   rowKey={(t) => t.truckId}
                   initialKey="varianceDa"
                   unit="trucks"
-                  noteSuffix={(dir) => (dir === "desc" ? " — worst first" : " — best first")}
+                  noteSuffix={(dir) => (dir === "desc" ? t(" — worst first") : t(" — best first"))}
                   columns={[
                     {
                       key: "truckId",
-                      label: "Truck",
+                      label: t("Truck"),
                       value: (t) => t.truckId,
                       render: (t) => t.truckId,
                       cellClass: () => "truck-id",
                     },
                     {
                       key: "drivers",
-                      label: "Drivers",
+                      label: t("Drivers"),
                       value: (t) => t.drivers,
                       render: (t) => t.drivers,
                       // One driver means this row and that driver's row are
@@ -836,17 +842,17 @@ export default function DashboardPage() {
                       // seeing before either is treated as proof.
                       cellClass: (t) => (t.drivers > 1 ? "t-primary" : "t-dim"),
                     },
-                    { key: "km", label: "Distance", value: (t) => t.km, render: (t) => `${nf(t.km)} km` },
+                    { key: "km", label: t("Distance"), value: (tr) => tr.km, render: (tr) => `${nf(tr.km)} km` },
                     {
                       key: "litresPer100Km",
-                      label: "L/100km",
+                      label: t("L/100km"),
                       value: (t) => t.litresPer100Km,
                       render: (t) => (t.litresPer100Km != null ? t.litresPer100Km.toFixed(2) : "—"),
                       cellClass: (t) => consumptionClass(t.litresPer100Km),
                     },
                     {
                       key: "varianceDa",
-                      label: "Variance",
+                      label: t("Variance"),
                       value: (t) => t.varianceDa,
                       render: (t) => signed(t.varianceDa, "DA"),
                       cellClass: (t) => signedClass(t.varianceDa),
@@ -860,7 +866,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Fuel variance by driver</div>
+                <div className="dash-panel__title">{t("Fuel variance by driver")}</div>
                 <div className="dash-panel__sub">
                   Against the sheet&rsquo;s assumed {ASSUMED_L_PER_100KM} L/100km. Click a column to sort.
                   The truck column matters: a driver with one truck cannot be told apart from it.
@@ -871,25 +877,25 @@ export default function DashboardPage() {
               {variance === null ? (
                 <VarianceWaiting />
               ) : variance.length === 0 ? (
-                <p className="dash-empty">No fill carries a variance yet.</p>
+                <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
               ) : (
                 <SortableTable
                   rows={variance}
                   rowKey={(d) => d.driverName}
                   initialKey="varianceDa"
                   unit="drivers"
-                  noteSuffix={(dir) => (dir === "desc" ? " — worst first" : " — best first")}
+                  noteSuffix={(dir) => (dir === "desc" ? t(" — worst first") : t(" — best first"))}
                   columns={[
                     {
                       key: "driverName",
-                      label: "Driver",
+                      label: t("Driver"),
                       value: (d) => d.driverName,
                       render: (d) => d.driverName,
                       cellClass: () => "t-primary",
                     },
                     {
                       key: "trucks",
-                      label: "Truck",
+                      label: t("Truck"),
                       value: (d) => d.trucks,
                       // One truck is named, because that is the row's
                       // confound and the reader should see which vehicle to
@@ -899,17 +905,17 @@ export default function DashboardPage() {
                         d.truckCount > 1 ? `${d.truckCount} trucks` : (d.trucks ?? "—"),
                       cellClass: (d) => (d.truckCount > 1 ? "t-dim" : "truck-id"),
                     },
-                    { key: "km", label: "Distance", value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
+                    { key: "km", label: t("Distance"), value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
                     {
                       key: "litresPer100Km",
-                      label: "L/100km",
+                      label: t("L/100km"),
                       value: (d) => d.litresPer100Km,
                       render: (d) => (d.litresPer100Km != null ? d.litresPer100Km.toFixed(2) : "—"),
                       cellClass: (d) => consumptionClass(d.litresPer100Km),
                     },
                     {
                       key: "varianceDa",
-                      label: "Variance",
+                      label: t("Variance"),
                       value: (d) => d.varianceDa,
                       render: (d) => signed(d.varianceDa, "DA"),
                       cellClass: (d) => signedClass(d.varianceDa),
@@ -926,7 +932,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">What the fleet is doing<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title="Reads the live fleet — the date range does not apply">live</span></div>
+                <div className="dash-panel__title">{t("What the fleet is doing")}<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span></div>
                 <div className="dash-panel__sub">
                   {/* Says which population it counts, like the distance
                       chart does. This one DOES include staff cars —
@@ -937,7 +943,7 @@ export default function DashboardPage() {
                       which is which. */}
                   {trucks.length > 0
                     ? `${trucks.length} vehicles reporting, staff cars included.`
-                    : "Waiting for the first fleet snapshot."}
+                    : t("Waiting for the first fleet snapshot.")}
                 </div>
               </div>
             </header>
@@ -966,13 +972,13 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Drivers on duty<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title="Reads the live fleet — the date range does not apply">live</span></div>
-                <div className="dash-panel__sub">Who is out right now.</div>
+                <div className="dash-panel__title">{t("Drivers on duty")}<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span></div>
+                <div className="dash-panel__sub">{t("Who is out right now.")}</div>
               </div>
             </header>
             <div className="dash-panel__body dash-panel__body--flush">
               {duty.length === 0 ? (
-                <p className="dash-empty">No driver is named on the current fleet feed.</p>
+                <p className="dash-empty">{t("No driver is named on the current fleet feed.")}</p>
               ) : (
                 duty.map((d) => (
                   <div key={d.truckId} className="duty-row">
@@ -981,7 +987,7 @@ export default function DashboardPage() {
                       <div className="duty-name">{d.name}</div>
                       <div className="duty-meta">
                         {d.status === "moving" ? `moving · ${Math.round(d.speed)} km/h` : d.status}
-                        {d.onRun ? " · on a run" : ""}
+                        {d.onRun ? " · " + t("on a run") : ""}
                       </div>
                     </div>
                     <span className="truck-id" style={{ fontSize: ".68rem", flex: "none" }}>{d.truckId}</span>
@@ -999,8 +1005,8 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Active runs<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title="Reads the live fleet — the date range does not apply">live</span></div>
-                <div className="dash-panel__sub">Trucks on their way to a client right now.</div>
+                <div className="dash-panel__title">{t("Active runs")}<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span></div>
+                <div className="dash-panel__sub">{t("Trucks on their way to a client right now.")}</div>
               </div>
             </header>
             <div className="dash-panel__body dash-panel__body--flush">
@@ -1023,12 +1029,12 @@ export default function DashboardPage() {
                       <div className="run-row__head">
                         <span className="truck-id">{d.truck_id}</span>
                         <span className={`status-pill ${d.last_on_route === false ? "off-route" : "dispatched"}`}>
-                          {d.last_on_route === false ? "Off route" : "On route"}
+                          {d.last_on_route === false ? t("Off route") : t("On route")}
                         </span>
                       </div>
                       <div className="run-row__dest">{d.site?.name ?? "—"}</div>
                       <div className="run-row__eta">
-                        {d.last_eta_seconds != null ? `ETA ${formatDuration(d.last_eta_seconds)}` : "no ETA yet"}
+                        {d.last_eta_seconds != null ? t("ETA {eta}", { eta: formatDuration(d.last_eta_seconds) }) : t("no ETA yet")}
                       </div>
                     </div>
                   ))}
@@ -1045,8 +1051,8 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">Operational signals</div>
-                <div className="dash-panel__sub">The latest from the alert feed.</div>
+                <div className="dash-panel__title">{t("Operational signals")}</div>
+                <div className="dash-panel__sub">{t("The latest from the alert feed.")}</div>
               </div>
             </header>
             <div className="dash-panel__body dash-panel__body--flush">
@@ -1066,7 +1072,7 @@ export default function DashboardPage() {
                       <Icon size={13} strokeWidth={2} color={meta.color} className="signal-icon" />
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div className="signal-title">{n.title}</div>
-                        <div className="signal-time">{relativeTime(n.created_at)}</div>
+                        <div className="signal-time">{relativeTime(n.created_at, t)}</div>
                       </div>
                     </div>
                   );
@@ -1100,6 +1106,7 @@ function Kpi({
    *  nothing is still coming. */
   failed?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     // No .panel here: the surface, border and radius belong to
     // .kpi-strip, which draws one card for all five. A .panel per cell
@@ -1118,7 +1125,7 @@ function Kpi({
       )}
       <div className="dash-kpi__foot">
         <span className="dash-delta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {value === null ? (failed ? "unavailable" : "reading the sheet…") : foot}
+          {value === null ? (failed ? t("unavailable") : t("reading the sheet…")) : foot}
         </span>
       </div>
     </div>
@@ -1142,7 +1149,8 @@ function VarianceWaiting() {
 /** A chart's own waiting state. Sized to the slot it will fill, so the
  *  row does not resize when the series lands. */
 function ChartWaiting() {
+  const { t } = useTranslation();
   return (
-    <div className="skeleton" style={{ position: "absolute", inset: 0, borderRadius: "var(--r-md)" }} role="status" aria-label="Loading chart" />
+    <div className="skeleton" style={{ position: "absolute", inset: 0, borderRadius: "var(--r-md)" }} role="status" aria-label={t("Loading chart")} />
   );
 }

@@ -16,8 +16,9 @@
 // header, inner scroll), same border/radius and same header treatment, so
 // neither reads as secondary. The table here mirrors the left table's
 // column treatment (fixed layout, 118/130/—/92/96/68) with its own six
-// columns: Truck / Driver / Last client / Time on site / Free since /
-// Locate.
+// columns: Truck / Driver / Client / On site / Free / Locate. Those
+// last four headers are deliberately terse: at 1366 this panel gets
+// 617px for six columns, and "Temps sur place" alone wants 167 of them.
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -114,21 +115,25 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
 
       {rows && rows.length > 0 && (
         <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+          {/* Truck is fixed at the 148px a 13-character id needs, so it
+              never truncates the one field this panel exists to name;
+              the two free-text columns absorb the rest. See the long
+              note in monitoring/page.tsx for the measurements. */}
           <colgroup>
-            <col style={{ width: 118 }} />
-            <col style={{ width: 130 }} />
+            <col style={{ width: 148 }} />
             <col />
-            <col style={{ width: 92 }} />
+            <col />
+            <col style={{ width: 110 }} />
             <col style={{ width: 96 }} />
-            <col style={{ width: 68 }} />
+            <col style={{ width: 78 }} />
           </colgroup>
           <thead className="sticky top-0 z-10 bg-panel">
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
               <th className="px-3 py-2">{t("Truck")}</th>
               <th className="px-3 py-2">{t("Driver")}</th>
-              <th className="px-3 py-2">{t("Last client")}</th>
-              <th className="px-3 py-2">{t("Time on site")}</th>
-              <th className="px-3 py-2">{t("Free since")}</th>
+              <th className="px-3 py-2">{t("Client")}</th>
+              <th className="px-3 py-2">{t("On site")}</th>
+              <th className="px-3 py-2">{t("Free")}</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>

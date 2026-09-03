@@ -121,39 +121,50 @@ export default function MonitoringPage() {
 
       <div
         className="mt-4"
-        // EQUAL HEIGHT, NOT EQUAL WIDTH. Both panels are 704px tall and
-        // that half of the balancing is right — but 1fr/1fr was measured
-        // on 2026-09-03 and clips the data. The table is table-layout:
-        // fixed over a 628px colgroup, so it never scrolls sideways; it
-        // truncates instead, and at half the viewport there is not enough
-        // to truncate from. At 1366 the truck cell needs 140px and gets
-        // 122, so EVERY truck id rendered as "000051-52…" — the one
-        // identifier a dispatcher reads off this screen — and half the
-        // driver names went with it. Rows also grew 45px → 63px, costing
-        // about seven trucks of the density CLAUDE.md asks for.
+        // EQUAL WIDTH IS RIGHT — THE COLUMN WIDTHS WERE NOT.
         //
-        // 380px is not a new number: it is what the previous commit used
-        // before the equal-width pass. Measured across three widths:
+        // An earlier pass here narrowed the right panel to 380px, on the
+        // reading that it was a three-field list that had never needed
+        // half the screen. It is a six-column table now, and measuring
+        // that split on 2026-09-03 killed the idea outright: at 380px the
+        // right table overflows its panel by 158px and "Dernier client"
+        // collapses to 0px wide. 1fr/1fr is the only split where both
+        // tables fit, at every width from 1280 to 2560.
         //
-        //   1fr/1fr    1280  24/24 trucks clipped   63px rows
-        //              1366  24/24 clipped          63px rows
-        //   1fr/380px  1280   0/24 clipped          45px rows
-        //              1366   0/24 clipped, 0/24 drivers clipped
+        // What was actually wrong was the colgroups. Both tables are
+        // table-layout:fixed, so a column that is too narrow truncates
+        // rather than scrolls, and with EVERY column fixed the widths
+        // scale with the panel — which is why 1366 was starved while 1920
+        // was fine. Measured needs, French, worst-case real data (a truck
+        // id is 13 chars, the longest driver 21, the longest site 33):
         //
-        // The panel is a list of truck, driver and site — it has never
-        // needed half the screen, and the table has always needed more.
-        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 380px", gap: 16, alignItems: "stretch" }}
+        //   truck 148   driver 241   status 80   speed 89   updated 111   locate 76
+        //
+        // At 1366 the truck column was getting 122, so every id rendered
+        // "000085-52…" — the one thing a dispatcher reads off this screen
+        // — and "72 km/h" wrapped, taking rows from 43px to 63px and
+        // costing five trucks of the density CLAUDE.md asks for.
+        //
+        // So: every column that holds a bounded value is fixed at what
+        // that value needs, and Driver (here) and Driver + Dernier client
+        // (in UnloadedPanel) are auto, absorbing whatever is left. That
+        // holds the truck id intact and the row at 43px from 1280 to
+        // 2560, with no horizontal scroll at any width. Long names still
+        // ellipsise, which is what the title attribute is for.
+        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 16, alignItems: "stretch" }}
       >
       <div className="flex flex-col overflow-hidden rounded-lg border bd" style={{ height: 704, minHeight: 0 }}>
         <div className="min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
         <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
           <colgroup>
-            <col style={{ width: 118 }} />
-            <col style={{ width: 158 }} />
-            <col style={{ width: 88 }} />
+            {/* Truck, then the four bounded columns, at the width their
+                own content and header need; Driver absorbs the rest. */}
+            <col style={{ width: 148 }} />
+            <col />
+            <col style={{ width: 84 }} />
+            <col style={{ width: 92 }} />
+            <col style={{ width: 112 }} />
             <col style={{ width: 78 }} />
-            <col style={{ width: 118 }} />
-            <col style={{ width: 68 }} />
           </colgroup>
           <thead className="sticky top-0 z-10 bg-panel">
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">

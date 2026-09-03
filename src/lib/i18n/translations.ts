@@ -58,6 +58,7 @@ export const SAME_IN_FRENCH = new Set<string>([
   "Litres",
   "L/100km",
   "Distance",
+  "Client",
   "{from} → {to}",
 ]);
 
@@ -143,7 +144,6 @@ export const translations: Record<Language, Record<string, string>> = {
     "{min} min or more at the client, then {settle} min since leaving, and not yet back at the plant or the parc.": "{min} min or more at the client, then {settle} min since leaving, and not yet back at the plant or the parc.",
     "Loading…": "Loading…",
     "No truck has finished unloading in the last {hours} hours.": "No truck has finished unloading in the last {hours} hours.",
-    "free {age} · {duration} on site": "free {age} · {duration} on site",
 
     // ── Notification text (rendered from stored English) ──
     "Arrived at the factory": "Arrived at the factory",
@@ -253,6 +253,13 @@ export const translations: Record<Language, Record<string, string>> = {
     "{n} d ago": "{n} d ago",
     "unavailable": "unavailable",
     "reading the sheet…": "reading the sheet…",
+
+    // ── Déchargés table ──
+    // Terse on purpose: the panel is half a 1366 screen wide and the
+    // header is what sets the column's floor. See UnloadedPanel.tsx.
+    "Client": "Client",
+    "On site": "On site",
+    "Free": "Free",
     "admin.subtitle": "Geofence management, user accounts, and connection settings.",
   },
   fr: {
@@ -336,7 +343,6 @@ export const translations: Record<Language, Record<string, string>> = {
     "{min} min or more at the client, then {settle} min since leaving, and not yet back at the plant or the parc.": "{min} min ou plus chez le client, puis {settle} min depuis le départ, et pas encore de retour à l'usine ou au parc.",
     "Loading…": "Chargement…",
     "No truck has finished unloading in the last {hours} hours.": "Aucun camion n'a fini de décharger au cours des {hours} dernières heures.",
-    "free {age} · {duration} on site": "libre {age} · {duration} sur place",
 
     // ── Notification text (rendered from stored English) ──
     "Arrived at the factory": "Arrivé à l'usine",
@@ -446,6 +452,11 @@ export const translations: Record<Language, Record<string, string>> = {
     "{n} d ago": "il y a {n} j",
     "unavailable": "indisponible",
     "reading the sheet…": "lecture du fichier…",
+
+    // ── Déchargés table ──
+    "Client": "Client",
+    "On site": "Sur place",
+    "Free": "Libre",
     "admin.subtitle": "Gestion des géorepérages, comptes utilisateurs et paramètres de connexion.",
   },
   ar: {

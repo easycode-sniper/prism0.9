@@ -9,14 +9,15 @@
 // back OUT, which is what a closed zone_visits row with
 // zone_kind='site' records.
 //
-// WHY IT SITS BESIDE THE TABLE RATHER THAN ABOVE IT: measured at 1366
-// before building. The monitoring table wants 949px to render without
-// wrapping. Inside the page's old max-w-6xl cap a split left it ~720px,
-// which forced a horizontal scroll AND took rows from 54px to 83px —
-// a third of the visible fleet lost, on the page whose whole job is
-// scanning the fleet. Dropping the cap and pinning this panel at 320px
-// gives the table 980px at 1366: rows stay at exactly 54px, unchanged
-// from before this panel existed, and it only gets roomier above that.
+// WHY IT SITS BESIDE THE TABLE RATHER THAN ABOVE IT and why the two
+// panels are the SAME SIZE: the monitoring table used to need 949px
+// unwrapped; with the side panel at 320px it got 980px at 1366 and rows
+// stayed at 54px. Now both panels share 1fr/1fr at 704px tall (≈20 rows +
+// header, inner scroll), same border/radius and same header treatment, so
+// neither reads as secondary. The table here mirrors the left table's
+// column treatment (fixed layout, 118/130/—/92/96/68) with its own six
+// columns: Truck / Driver / Last client / Time on site / Free since /
+// Locate.
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -73,44 +74,65 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
   }, [load]);
 
   return (
-    <aside className="panel flex flex-col overflow-hidden p-4" style={{ height: 704, minHeight: 0 }}>
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold t-primary">Déchargés</h2>
-        {rows && (
-          <span className="font-mono text-xs" style={{ color: "var(--text-dim)" }}>
-            {rows.length}
-          </span>
-        )}
+    <aside className="panel flex flex-col overflow-hidden" style={{ height: 704, minHeight: 0 }}>
+      <div className="flex-none p-4 pb-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold t-primary">Déchargés</h2>
+          {rows && (
+            <span className="font-mono text-xs" style={{ color: "var(--text-dim)" }}>
+              {rows.length}
+            </span>
+          )}
+        </div>
+        {/* The rule is stated on the panel rather than hidden in the code.
+            A dispatcher deciding who to call next needs to know what this
+            list counts as "unloaded" — and the 25 minutes is the only
+            reason a truck that drove past a site is not in it. */}
+        <p className="mt-0.5 text-xs t-dim">
+          {t(
+            "{min} min or more at the client, then {settle} min since leaving, and not yet back at the plant or the parc.",
+            {
+              min: Math.round(UNLOADED_MIN_SECONDS / 60),
+              settle: Math.round(UNLOADED_SETTLE_SECONDS / 60),
+            },
+          )}
+        </p>
       </div>
-      {/* The rule is stated on the panel rather than hidden in the code.
-          A dispatcher deciding who to call next needs to know what this
-          list counts as "unloaded" — and the 25 minutes is the only
-          reason a truck that drove past a site is not in it. */}
-      <p className="mt-0.5 text-xs t-dim">
-        {t(
-          "{min} min or more at the client, then {settle} min since leaving, and not yet back at the plant or the parc.",
-          {
-            min: Math.round(UNLOADED_MIN_SECONDS / 60),
-            settle: Math.round(UNLOADED_SETTLE_SECONDS / 60),
-          },
-        )}
-      </p>
 
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
-      {error && <p className="text-xs c-red">{t(error)}</p>}
+      <div className="min-h-0 flex-1 overflow-y-auto border-t bd" style={{ overscrollBehavior: "contain" }}>
+      {error && <p className="p-4 text-xs c-red">{t(error)}</p>}
 
       {rows === null && !error && (
-        <p className="text-xs t-faint">{t("Loading…")}</p>
+        <p className="p-4 text-xs t-faint">{t("Loading…")}</p>
       )}
 
       {rows?.length === 0 && (
-        <p className="text-xs t-faint">
+        <p className="p-4 text-xs t-faint">
           {t("No truck has finished unloading in the last {hours} hours.", { hours: UNLOADED_MAX_AGE_HOURS })}
         </p>
       )}
 
       {rows && rows.length > 0 && (
-        <ul style={{ display: "flex", flexDirection: "column", gap: 10, listStyle: "none", margin: 0, padding: 0 }}>
+        <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: 118 }} />
+            <col style={{ width: 130 }} />
+            <col />
+            <col style={{ width: 92 }} />
+            <col style={{ width: 96 }} />
+            <col style={{ width: 68 }} />
+          </colgroup>
+          <thead className="sticky top-0 z-10 bg-panel">
+            <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
+              <th className="px-3 py-2">{t("Truck")}</th>
+              <th className="px-3 py-2">{t("Driver")}</th>
+              <th className="px-3 py-2">{t("Last client")}</th>
+              <th className="px-3 py-2">{t("Time on site")}</th>
+              <th className="px-3 py-2">{t("Free since")}</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-token">
           {rows.map((r) => {
             const status = statusOf.get(r.truck_id);
             // The same mapping MonitoringRow uses, deliberately: the two
@@ -124,39 +146,32 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
               : "var(--text-dim)";
             const pos = positionOf.get(r.truck_id);
             return (
-              <li key={r.truck_id} style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 font-mono text-sm c-cyan">
+              <tr key={r.truck_id} className="text-sm bg-raised-hover">
+                <td className="px-3 py-2 font-mono c-cyan" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span className="inline-flex items-center gap-1.5">
                     <span
                       aria-hidden
                       style={{ width: 6, height: 6, borderRadius: "50%", background: dot, display: "inline-block", flex: "none" }}
                     />
                     {r.truck_id}
                   </span>
+                </td>
+                <td className="px-3 py-2 t-primary" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.driver_name || undefined}>{r.driver_name || "—"}</td>
+                <td className="px-3 py-2 t-dim" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.zone_name}>{r.zone_name}</td>
+                <td className="px-3 py-2 t-primary" style={{ whiteSpace: "nowrap" }}>{hoursMinutes(r.seconds_on_site)}</td>
+                <td className="px-3 py-2 t-dim" style={{ whiteSpace: "nowrap" }}>{formatAge(minutesSince(r.free_at))}</td>
+                <td className="px-3 py-2 text-right" style={{ whiteSpace: "nowrap" }}>
                   {pos && (
                     <Link href={`/dispatch?lat=${pos.lat}&lng=${pos.lng}`} className="text-xs c-accent hover:opacity-80">
                       {t("Locate")}
                     </Link>
                   )}
-                </div>
-                <div className="mt-0.5 text-xs t-primary">{r.driver_name || "—"}</div>
-                <div className="text-xs t-dim" title={r.zone_name}>{r.zone_name}</div>
-                <div className="mt-0.5 font-mono text-xs" style={{ color: "var(--text-dim)" }}>
-                  {/* Free since, not left-at: the settle timer means
-                      those are 25 minutes apart, and the one that
-                      matters is when the truck became available. Paired
-                      with time on site because "free 20 minutes" and
-                      "was there four hours" answer different halves of
-                      "can I use this truck". */}
-                  {t("free {age} · {duration} on site", {
-                    age: formatAge(minutesSince(r.free_at)),
-                    duration: hoursMinutes(r.seconds_on_site),
-                  })}
-                </div>
-              </li>
+                </td>
+              </tr>
             );
           })}
-        </ul>
+          </tbody>
+        </table>
       )}
       </div>
     </aside>

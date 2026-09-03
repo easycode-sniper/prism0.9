@@ -1884,14 +1884,28 @@ hr {
   .dispatch-panel .fleet-row__id { font-size: 0.66rem; line-height: 1.25; }
   .dispatch-panel .fleet-row__box { width: 15px; height: 15px; }
 
-  /* Sized so the two lists and everything framing them add up to less
-     than the body, because the point of this tier is that the body does
-     not scroll: a Destination list you have to scroll to reach is the
-     thing being fixed, and a list half out of view is the same bug with
-     a smaller number. */
-  .fleet-list,
-  .site-picker { max-height: clamp(96px, 17.5vh, 170px); }
+  /* The body can scroll on this tier now: the owner wants at least six
+     rows readable in each list, and 6+6 rows (~232px apiece) plus the
+     two labels, search boxes and the action bar will not fit in the
+     ~387px body on a 1366x768 laptop at once. So each list gets a fixed
+     ~6-row cap and the body walks you from Trucks to Destination, with
+     the heads stuck in place (below) the whole way.
 
+     ~232px = six trimmed rows: a fleet-row or site-option is about 34px
+     under this tier's line-height trims, and each list carries ~8px of
+     its own padding plus the 20-22px scroll fade. A fixed value rather
+     than the old 17.5vh, because a viewport-relative cap collapses to
+     108px at 617px of viewport — exactly the 2-3 rows being fixed. */
+  .fleet-list,
+  .site-picker { max-height: 232px; }
+
+  .dispatch-panel .psection__head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-block: 2px;
+    background: var(--bg);
+  }
   .dispatch-panel .psection__head { margin-bottom: 3px; }
   .dispatch-panel .psection .field { padding: 3px 9px; font-size: 0.75rem; line-height: 1.3; }
 

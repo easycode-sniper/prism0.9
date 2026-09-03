@@ -83,14 +83,13 @@ export default function MonitoringPage() {
   });
 
   return (
-    // No max-w-6xl any more, and that is what makes the split affordable.
-    // The table used to need 949px unwrapped; uncapped with a 320px side
-    // panel it got 980px at 1366 and rows stayed at 54px. Tightening the
-    // two widest columns (Truck 118px, Driver 158px, fixed layout) and
-    // widening the side panel to 380px keeps rows at the same height while
-    // giving Déchargés equal visual weight — 60px rebalanced from the
-    // table to the panel, with truncation on driver/destination rather
-    // than wrapping.
+    // Two equal panels, same dimensions. The left fleet table is fixed at
+    // 20 rows (704px incl. header) with its own scroll so the full 101-row
+    // list is reachable without pushing Déchargés off-screen. Destination
+    // column removed — it took the most width for the least signal on this
+    // page (most rows are "—"). Both panels now share 1fr/1fr, same height
+    // (704px), same border/radius, same header treatment, so neither reads
+    // as secondary.
     <div className="p-6">
       <div className="flex items-center justify-between">
         <div>
@@ -122,26 +121,25 @@ export default function MonitoringPage() {
 
       <div
         className="mt-4"
-        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 380px", gap: 16, alignItems: "start" }}
+        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 16, alignItems: "stretch" }}
       >
-      <div className="overflow-x-auto rounded-lg border bd">
+      <div className="flex flex-col overflow-hidden rounded-lg border bd" style={{ height: 704, minHeight: 0 }}>
+        <div className="min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
         <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
           <colgroup>
             <col style={{ width: 118 }} />
             <col style={{ width: 158 }} />
             <col style={{ width: 88 }} />
             <col style={{ width: 78 }} />
-            <col />
             <col style={{ width: 118 }} />
             <col style={{ width: 68 }} />
           </colgroup>
-          <thead>
+          <thead className="sticky top-0 z-10 bg-panel">
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
               <th className="px-3 py-2">{t("Truck")}</th>
               <th className="px-3 py-2">{t("Driver")}</th>
               <th className="px-3 py-2">{t("Status")}</th>
               <th className="px-3 py-2">{t("Speed")}</th>
-              <th className="px-3 py-2">{t("Destination")}</th>
               <th className="px-3 py-2">{t("Updated")}</th>
               <th className="px-3 py-2"></th>
             </tr>
@@ -161,6 +159,7 @@ export default function MonitoringPage() {
         {filteredTrucks.length === 0 && (
           <div className="p-8 text-center text-sm t-dim">{t("No trucks match.")}</div>
         )}
+        </div>
       </div>
 
       {/* Outside the search/filter state on purpose: this answers "who
@@ -218,13 +217,6 @@ function MonitoringRow({
         </span>
       </td>
       <td className="px-3 py-2 t-primary" style={{ whiteSpace: "nowrap" }}>{truck.speed != null ? `${truck.speed} km/h` : "—"}</td>
-      <td className="px-3 py-2 t-dim" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={truck.site_name ?? undefined}>
-        {truck.dispatched ? (
-          <span className="t-primary">{truck.site_name ?? "—"}</span>
-        ) : (
-          <span className="t-faint">—</span>
-        )}
-      </td>
       <td className="px-3 py-2 t-dim" style={{ whiteSpace: "nowrap" }}>{formatAge(truck.age_minutes)}</td>
       <td className="px-3 py-2 text-right" style={{ whiteSpace: "nowrap" }}>
         {truck.dispatched && truck.last_on_route == null && truck.dispatch_id && (

@@ -73,7 +73,7 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
   }, [load]);
 
   return (
-    <aside className="panel p-4" style={{ alignSelf: "start" }}>
+    <aside className="panel flex flex-col overflow-hidden p-4" style={{ height: 704, minHeight: 0 }}>
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold t-primary">Déchargés</h2>
         {rows && (
@@ -96,20 +96,21 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
         )}
       </p>
 
-      {error && <p className="mt-3 text-xs c-red">{t(error)}</p>}
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
+      {error && <p className="text-xs c-red">{t(error)}</p>}
 
       {rows === null && !error && (
-        <p className="mt-4 text-xs t-faint">{t("Loading…")}</p>
+        <p className="text-xs t-faint">{t("Loading…")}</p>
       )}
 
       {rows?.length === 0 && (
-        <p className="mt-4 text-xs t-faint">
+        <p className="text-xs t-faint">
           {t("No truck has finished unloading in the last {hours} hours.", { hours: UNLOADED_MAX_AGE_HOURS })}
         </p>
       )}
 
       {rows && rows.length > 0 && (
-        <ul className="mt-3" style={{ display: "flex", flexDirection: "column", gap: 10, listStyle: "none", margin: 0, padding: 0 }}>
+        <ul style={{ display: "flex", flexDirection: "column", gap: 10, listStyle: "none", margin: 0, padding: 0 }}>
           {rows.map((r) => {
             const status = statusOf.get(r.truck_id);
             // The same mapping MonitoringRow uses, deliberately: the two
@@ -157,6 +158,7 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
           })}
         </ul>
       )}
+      </div>
     </aside>
   );
 }

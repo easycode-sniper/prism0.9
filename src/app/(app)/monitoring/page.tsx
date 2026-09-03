@@ -83,12 +83,14 @@ export default function MonitoringPage() {
   });
 
   return (
-    // No max-w-6xl any more, and that is what makes the split free
-    // rather than costly. Measured at 1366 before building: the table
-    // needs 949px to render without wrapping, the old cap left it ~720px
-    // once a panel took its share — horizontal scroll, and rows from
-    // 54px to 83px. Uncapped with a 320px panel it gets 980px and rows
-    // stay at 54px, exactly as before the panel existed.
+    // No max-w-6xl any more, and that is what makes the split affordable.
+    // The table used to need 949px unwrapped; uncapped with a 320px side
+    // panel it got 980px at 1366 and rows stayed at 54px. Tightening the
+    // two widest columns (Truck 118px, Driver 158px, fixed layout) and
+    // widening the side panel to 380px keeps rows at the same height while
+    // giving Déchargés equal visual weight — 60px rebalanced from the
+    // table to the panel, with truncation on driver/destination rather
+    // than wrapping.
     <div className="p-6">
       <div className="flex items-center justify-between">
         <div>
@@ -120,19 +122,28 @@ export default function MonitoringPage() {
 
       <div
         className="mt-4"
-        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 16, alignItems: "start" }}
+        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 380px", gap: 16, alignItems: "start" }}
       >
       <div className="overflow-x-auto rounded-lg border bd">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: 118 }} />
+            <col style={{ width: 158 }} />
+            <col style={{ width: 88 }} />
+            <col style={{ width: 78 }} />
+            <col />
+            <col style={{ width: 118 }} />
+            <col style={{ width: 68 }} />
+          </colgroup>
           <thead>
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
-              <th className="px-4 py-2">{t("Truck")}</th>
-              <th className="px-4 py-2">{t("Driver")}</th>
-              <th className="px-4 py-2">{t("Status")}</th>
-              <th className="px-4 py-2">{t("Speed")}</th>
-              <th className="px-4 py-2">{t("Destination")}</th>
-              <th className="px-4 py-2">{t("Updated")}</th>
-              <th className="px-4 py-2"></th>
+              <th className="px-3 py-2">{t("Truck")}</th>
+              <th className="px-3 py-2">{t("Driver")}</th>
+              <th className="px-3 py-2">{t("Status")}</th>
+              <th className="px-3 py-2">{t("Speed")}</th>
+              <th className="px-3 py-2">{t("Destination")}</th>
+              <th className="px-3 py-2">{t("Updated")}</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-token">
@@ -191,7 +202,7 @@ function MonitoringRow({
 
   return (
     <tr className="text-sm bg-raised-hover">
-      <td className="px-4 py-2 font-mono c-cyan">
+      <td className="px-3 py-2 font-mono c-cyan" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <span className="inline-flex items-center gap-1.5">
           {truck.truck_id}
           {truck.category === "staff" && (
@@ -199,23 +210,23 @@ function MonitoringRow({
           )}
         </span>
       </td>
-      <td className="px-4 py-2 t-primary">{truck.driver_name || "—"}</td>
-      <td className="px-4 py-2">
+      <td className="px-3 py-2 t-primary" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={truck.driver_name || undefined}>{truck.driver_name || "—"}</td>
+      <td className="px-3 py-2">
         <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium" style={{ color: statusColor }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor, display: "inline-block" }} />
           {statusLabel}
         </span>
       </td>
-      <td className="px-4 py-2 t-primary">{truck.speed != null ? `${truck.speed} km/h` : "—"}</td>
-      <td className="px-4 py-2 t-dim">
+      <td className="px-3 py-2 t-primary" style={{ whiteSpace: "nowrap" }}>{truck.speed != null ? `${truck.speed} km/h` : "—"}</td>
+      <td className="px-3 py-2 t-dim" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={truck.site_name ?? undefined}>
         {truck.dispatched ? (
           <span className="t-primary">{truck.site_name ?? "—"}</span>
         ) : (
           <span className="t-faint">—</span>
         )}
       </td>
-      <td className="px-4 py-2 t-dim">{formatAge(truck.age_minutes)}</td>
-      <td className="px-4 py-2 text-right">
+      <td className="px-3 py-2 t-dim" style={{ whiteSpace: "nowrap" }}>{formatAge(truck.age_minutes)}</td>
+      <td className="px-3 py-2 text-right" style={{ whiteSpace: "nowrap" }}>
         {truck.dispatched && truck.last_on_route == null && truck.dispatch_id && (
           <button
             onClick={onCheckPosition}

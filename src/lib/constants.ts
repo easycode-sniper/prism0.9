@@ -94,10 +94,40 @@ export function stationWatchRadius(radiusMeters: number | null | undefined, blac
  */
 export const UNLOADED_MIN_SECONDS = 25 * 60;
 
-/** Past this, a truck that left a site and never reached the plant is a
- *  tracker problem rather than an availability signal. Ageing them out
- *  keeps the panel a picture of now. */
-export const UNLOADED_MAX_AGE_HOURS = 12;
+/**
+ * Past this, a truck that left a site and never reached the plant or the
+ * parc is a tracker problem rather than an availability signal. Ageing
+ * them out keeps the panel a picture of now.
+ *
+ * RAISED FROM 12 TO 24 on 2026-09-03, against the first full day of site
+ * logging. 12 was a guess made before there was data, and the data says
+ * it cut into the real distribution rather than past it. Of 22 completed
+ * client-to-plant journeys, the median gap between leaving the client and
+ * reaching the plant or the parc was 7.8 hours -- but three took longer
+ * than 12 (17.20, 19.33, 19.43) and three more landed at ~11, just under
+ * the cliff.
+ *
+ * The long ones are not tracker faults, they are NIGHTS. Every gap past
+ * 12 hours began with an evening departure and ended the next afternoon:
+ * 000100-525-35 left GREAT WALL HMD at 20:28 and reached the plant at
+ * 15:48 the next day; 000093-525-35 left BOUDOUAOU ASLAN at 20:35 and got
+ * back at 16:01. The driver finished, stopped for the night, and drove
+ * home in the morning. That truck is free the whole time -- and at 12
+ * hours it fell off the panel at 08:28, which is exactly when the
+ * dispatcher starts looking at it.
+ *
+ * The cost is small and BOUNDED, which is why 24 rather than something
+ * larger is not the interesting question: measured against live data the
+ * panel showed 11 trucks at 12 hours and 13 at 24, and 13 again at 36 and
+ * at 48. It cannot grow without limit, because reaching the plant or the
+ * parc removes a truck whatever the clock says -- the cutoff only ever
+ * decides how long a truck that has NOT come back stays listed. 24 clears
+ * the longest journey actually observed (19.43h) with headroom, keeps a
+ * whole night inside one window, and still catches the thing this
+ * constant exists for: a truck that has been "free" for more than a day
+ * is a tracker to check, not a truck to call.
+ */
+export const UNLOADED_MAX_AGE_HOURS = 24;
 
 /**
  * How long after a truck LEAVES the client before it is called free.

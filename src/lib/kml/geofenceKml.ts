@@ -196,14 +196,52 @@ export interface ZoneMatch {
 const key = (s: string) => collapse(s).toLowerCase();
 
 /** Centroid as the mean of the ring's points. Crude for a continent,
- *  exact enough here: these zones are a few hundred metres across, and
- *  the decision they feed is "0.3km or 115km away". */
+ *  exact enough for a yard: the decision it feeds is "0.3km or 115km
+ *  away", and at that separation the error in this centroid is noise.
+ *
+ *  IT IS ONLY MEANINGFUL FOR A ROUGHLY COMPACT RING. This comment used
+ *  to claim the zones are "a few hundred metres across" and that is not
+ *  true of all of them: the export carries pipeline routes drawn as one
+ *  long thin polygon, and the worst is 1454 km2 with a 168 km perimeter.
+ *  The mean point of a sliver like that is not a location — it can sit
+ *  kilometres from every edge and from anywhere a truck would stop, and
+ *  the distance to it says nothing about whether a site belongs to the
+ *  zone. On 2026-09-03 that produced a confident and wrong match
+ *  recommendation. Screen a ring with SITE_FENCE_MAX_HECTARES before
+ *  trusting its centroid for anything. */
 export function ringCentre(ring: [number, number][]): [number, number] | null {
   if (ring.length === 0) return null;
   const lat = ring.reduce((a, [la]) => a + la, 0) / ring.length;
   const lng = ring.reduce((a, [, ln]) => a + ln, 0) / ring.length;
   return [lat, lng];
 }
+
+/**
+ * The largest a client-site fence may be before the importer holds it
+ * back for a person to look at, in hectares.
+ *
+ * A SIZE CHECK IS A CORRECTNESS CHECK HERE, not tidiness. Time in zone
+ * is measured by containment, and the Déchargés panel calls a truck
+ * unloaded after UNLOADED_MIN_SECONDS inside a site. Make the site big
+ * enough and a truck satisfies that by driving across it: ADRAR, live
+ * in production since the 2026-08-31 import, is 4251 ha — 6.5 km across
+ * — so a lorry crossing it at 15 km/h clears the 25-minute rule without
+ * ever reaching the client, and Rapport Geo would show it parked there.
+ *
+ * 200 sits in a real gap in the data rather than being a round number
+ * someone liked. Measured over the 111 fences that import produced:
+ * median 9 ha, p90 93 ha, then 98, 126, 137, 157, 159, 162, 178 — and
+ * then nothing until 276, 857, 1430 and 4251. Those top four are the
+ * pipeline routes and regional areas; everything at or under 178 is a
+ * plausible yard or plant. 200 ha is a square 1.4 km on a side, which
+ * is already generous for somewhere a cement truck unloads.
+ *
+ * It HOLDS BACK rather than rejects, like every other verdict in the
+ * importer: the zone may be perfectly correct and merely drawn wide, and
+ * the owner's standing rule is that nothing auto-imports and the review
+ * list is the deliverable.
+ */
+export const SITE_FENCE_MAX_HECTARES = 200;
 
 /** Does the closed ring cross itself? PostGIS calls such a polygon
  *  invalid and point-in-polygon on one is unreliable, so the importer

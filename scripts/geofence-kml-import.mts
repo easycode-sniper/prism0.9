@@ -32,9 +32,23 @@
  *                         both would silently keep only the last.
  *   invalid-geometry      the ring crosses itself. PostGIS rejects it
  *                         and point-in-polygon on one is unreliable.
+ *   oversize              bigger than SITE_FENCE_MAX_HECTARES. Time in
+ *                         zone is measured by containment, so a fence
+ *                         wide enough to drive across satisfies the
+ *                         unloading rule without anyone stopping. Added
+ *                         2026-09-03 after four such fences were found
+ *                         already live, the worst 6.5 km across.
  *
  * The 2026-08-31 run of the real 1044-zone export: 138 prefixed, 106
- * imported outright, 32 held back across those four buckets.
+ * imported outright, 32 held back across the first four buckets. That
+ * run predates the size check. Five of those 138 exceed the size limit:
+ * four were imported and are live fences today (4258, 1432, 858 and
+ * 276 ha — the sites ADRAR, CHIALI EL MENIA, FAUCON BLEU ADRAR and
+ * HASSI DELAA), and the fifth, the 145 547 ha M'Guiden pipeline route,
+ * was already held back as no-site-within-5km. So re-running with this
+ * check holds back four zones it previously imported, and the four live
+ * fences stay wrong until they are redrawn in Wialon — the tail query
+ * below reports them on every run so they are not forgotten.
  */
 import { readFileSync } from "node:fs";
 import {
@@ -42,6 +56,7 @@ import {
   ringCentre,
   ringToPolygonWkt,
   ringSelfIntersects,
+  SITE_FENCE_MAX_HECTARES,
 } from "../src/lib/kml/geofenceKml.ts";
 
 // Kept in step with geofenceKml.ts by hand — see the comments there for
@@ -127,7 +142,14 @@ left join r u on u.idx = g.idx and u.rn = 2;
 
 create view public._zone_plan as
 with eligible as (
-  select m.*, (m.valid and m.km <= 5 and (m.ratio is null or m.ratio <= 0.4)) as ok
+  -- The size test belongs here as well as in the verdict below: an
+  -- oversize zone that still "claims" its site would push a smaller,
+  -- better-drawn zone for the same site into site-already-claimed and
+  -- hold back the good one instead of the bad one.
+  select m.*, (m.valid
+               and m.area_km2 * 100 <= ${SITE_FENCE_MAX_HECTARES}
+               and m.km <= 5
+               and (m.ratio is null or m.ratio <= 0.4)) as ok
   from public._zone_match m
 ),
 ranked as (
@@ -139,6 +161,7 @@ ranked as (
 select r.*,
        case
          when not r.valid      then 'invalid-geometry'
+         when r.area_km2 * 100 > ${SITE_FENCE_MAX_HECTARES} then 'oversize'
          when r.km > 5         then 'no-site-within-5km'
          when r.ratio > 0.4    then 'ambiguous-two-sites'
          when r.claim_rank > 1 then 'site-already-claimed'
@@ -157,6 +180,18 @@ select verdict, idx, site_name, km, runner_up_km,
        regexp_replace(zone_name, '^\\s*ciment(e|et)?r?ie\\s+amouda\\s*[-–—]?\\s*(client\\s*)?', '', 'i') as zone
 from public._zone_plan where verdict <> 'import'
 order by verdict, km nulls last;
+
+-- Fences ALREADY in the table that would fail the size check. The
+-- verdict above only screens what this run is importing, and the four
+-- found on 2026-09-03 were imported before the check existed, so every
+-- run re-reports them until someone redraws them in Wialon.
+select s.name, s.client,
+       round((ST_Area(g.polygon::geography) / 10000)::numeric, 1) as hectares
+from public.geofences g
+join public.construction_sites s on s.id = g.site_id
+where g.kind = 'site' and g.polygon is not null
+  and ST_Area(g.polygon::geography) / 10000 > ${SITE_FENCE_MAX_HECTARES}
+order by hectares desc;
 
 -- Sites left without a polygon: they fall back to a 300m radius.
 select s.name, s.client from public.construction_sites s

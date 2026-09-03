@@ -19,6 +19,7 @@
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { translations, SAME_IN_FRENCH, RUNTIME_KEYS } from "../src/lib/i18n/translations.ts";
+import { NOTIFICATION_KEYS } from "../src/lib/notifications/translateText.ts";
 
 const files = execSync("find src -name '*.tsx' -o -name '*.ts'", { encoding: "utf8" })
   .trim()
@@ -54,6 +55,14 @@ const referenced = (key: string) => {
   }
   return false;
 };
+
+// Notification text is looked up from tables inside translateText.ts, so
+// no key appears as a literal at a call site and the scanner would leave
+// the whole alerts feed unchecked — the one place where a missing
+// translation is least visible in the diff and most visible on screen.
+for (const key of NOTIFICATION_KEYS) {
+  if (!used.has(key)) used.set(key, ["src/lib/notifications/translateText.ts"]);
+}
 
 const en = translations.en;
 const fr = translations.fr;

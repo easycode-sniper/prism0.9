@@ -7,6 +7,7 @@ import { playAlertTone, primeAlertAudio } from "@/lib/sound";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatTime } from "@/lib/format";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { translateNotificationTitle, translateNotificationMessage } from "@/lib/notifications/translateText";
 
 // Mounted once in the app shell, so an alert reaches the operator on
 // whatever page they happen to be on rather than only in the
@@ -171,7 +172,7 @@ export function AlertToaster() {
             <Icon size={16} strokeWidth={2} color={meta.color} style={{ flex: "none", marginTop: "2px" }} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-                <span style={{ fontSize: ".85rem", fontWeight: 600 }}>{t.title}</span>
+                <span style={{ fontSize: ".85rem", fontWeight: 600 }}>{translateNotificationTitle(tr, t.title)}</span>
                 {t.truckId && (
                   <span className="c-cyan" style={{ fontFamily: "var(--font-mono)", fontSize: ".72rem" }}>
                     {t.truckId}
@@ -179,7 +180,7 @@ export function AlertToaster() {
                 )}
               </div>
               <p className="t-dim" style={{ fontSize: ".78rem", margin: "3px 0 0", lineHeight: 1.35 }}>
-                {t.message}
+                {translateNotificationMessage(tr, t.message)}
               </p>
               <span className="t-faint" style={{ fontFamily: "var(--font-mono)", fontSize: ".66rem" }}>
                 {formatTime(t.at)}

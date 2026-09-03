@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:i18n": "node --experimental-strip-types scripts/check-i18n.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

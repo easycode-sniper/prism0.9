@@ -139,6 +139,29 @@ export const translations: Record<Language, Record<string, string>> = {
     "Loading…": "Loading…",
     "No truck has finished unloading in the last {hours} hours.": "No truck has finished unloading in the last {hours} hours.",
     "free {age} · {duration} on site": "free {age} · {duration} on site",
+
+    // ── Notification text (rendered from stored English) ──
+    "Arrived at the factory": "Arrived at the factory",
+    "Arrived at factory": "Arrived at factory",
+    "Arrived at headquarters": "Arrived at headquarters",
+    "Arrived at destination": "Arrived at destination",
+    "Arriving at client shortly": "Arriving at client shortly",
+    "Truck left assigned route": "Truck left assigned route",
+    "Speed limit exceeded": "Speed limit exceeded",
+    "Stopped at a blacklisted station": "Stopped at a blacklisted station",
+    "TEST — Truck reached the factory": "TEST — Truck reached the factory",
+    "TEST — Arriving at client shortly": "TEST — Arriving at client shortly",
+    "Alert": "Alert",
+    "{truck} has arrived at {place}.": "{truck} has arrived at {place}.",
+    "{truck} has stopped at {place}.": "{truck} has stopped at {place}.",
+    "{truck} has deviated from its route to {site} ({km}km off).": "{truck} has deviated from its route to {site} ({km}km off).",
+    "{truck} is about {duration} from {site}.": "{truck} is about {duration} from {site}.",
+    "{truck} is going {speed}km/h (limit {limit}km/h).": "{truck} is going {speed}km/h (limit {limit}km/h).",
+    "TEST ALERT (not a real run): this is the factory arrival alert, the cue to dispatch a truck.": "TEST ALERT (not a real run): this is the factory arrival alert, the cue to dispatch a truck.",
+    "TEST ALERT (not a real run): this is the client 5-minute alert, which was rejected by the database until now.": "TEST ALERT (not a real run): this is the client 5-minute alert, which was rejected by the database until now.",
+
+    // ── Notification text — historical wording ──
+    "{truck} is going {speed}km/h on the run to {site} (limit {limit}km/h).": "{truck} is going {speed}km/h on the run to {site} (limit {limit}km/h).",
     "admin.subtitle": "Geofence management, user accounts, and connection settings.",
   },
   fr: {
@@ -223,6 +246,29 @@ export const translations: Record<Language, Record<string, string>> = {
     "Loading…": "Chargement…",
     "No truck has finished unloading in the last {hours} hours.": "Aucun camion n'a fini de décharger au cours des {hours} dernières heures.",
     "free {age} · {duration} on site": "libre {age} · {duration} sur place",
+
+    // ── Notification text (rendered from stored English) ──
+    "Arrived at the factory": "Arrivé à l'usine",
+    "Arrived at factory": "Arrivé à l'usine",
+    "Arrived at headquarters": "Arrivé au parc",
+    "Arrived at destination": "Arrivé à destination",
+    "Arriving at client shortly": "Arrivée imminente chez le client",
+    "Truck left assigned route": "Camion sorti de son itinéraire",
+    "Speed limit exceeded": "Excès de vitesse",
+    "Stopped at a blacklisted station": "Arrêt dans une station interdite",
+    "TEST — Truck reached the factory": "TEST — Camion arrivé à l'usine",
+    "TEST — Arriving at client shortly": "TEST — Arrivée imminente chez le client",
+    "Alert": "Alerte",
+    "{truck} has arrived at {place}.": "{truck} est arrivé à {place}.",
+    "{truck} has stopped at {place}.": "{truck} s'est arrêté à {place}.",
+    "{truck} has deviated from its route to {site} ({km}km off).": "{truck} a quitté son itinéraire vers {site} ({km} km d'écart).",
+    "{truck} is about {duration} from {site}.": "{truck} est à environ {duration} de {site}.",
+    "{truck} is going {speed}km/h (limit {limit}km/h).": "{truck} roule à {speed} km/h (limite {limit} km/h).",
+    "TEST ALERT (not a real run): this is the factory arrival alert, the cue to dispatch a truck.": "ALERTE DE TEST (course fictive) : ceci est l'alerte d'arrivée à l'usine, le signal pour envoyer un camion.",
+    "TEST ALERT (not a real run): this is the client 5-minute alert, which was rejected by the database until now.": "ALERTE DE TEST (course fictive) : ceci est l'alerte client à 5 minutes, que la base de données refusait jusqu'ici.",
+
+    // ── Notification text — historical wording ──
+    "{truck} is going {speed}km/h on the run to {site} (limit {limit}km/h).": "{truck} roule à {speed} km/h sur le trajet vers {site} (limite {limit} km/h).",
     "admin.subtitle": "Gestion des géorepérages, comptes utilisateurs et paramètres de connexion.",
   },
   ar: {

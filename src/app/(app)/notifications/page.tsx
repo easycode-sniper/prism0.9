@@ -17,6 +17,7 @@ import {
   GROUP_LABEL,
   type NotificationGroup,
 } from "@/lib/notifications/kinds";
+import { translateNotificationTitle, translateNotificationMessage } from "@/lib/notifications/translateText";
 
 /**
  * How many rows a group shows before it asks to be expanded.
@@ -239,6 +240,7 @@ function NotificationRow({
   n: NotificationRecord;
   onMarkRead: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const meta = metaFor(n.kind);
   const Icon = meta.icon;
 
@@ -254,10 +256,10 @@ function NotificationRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium t-primary">{n.title}</span>
+          <span className="text-sm font-medium t-primary">{translateNotificationTitle(t, n.title)}</span>
           <span className="font-mono text-xs c-cyan">{n.truck_id}</span>
         </div>
-        <p className="mt-0.5 text-sm t-dim">{n.message}</p>
+        <p className="mt-0.5 text-sm t-dim">{translateNotificationMessage(t, n.message)}</p>
         <span className="mt-1 text-xs t-faint">{formatDateTime(n.created_at)}</span>
       </div>
       {!n.read && (

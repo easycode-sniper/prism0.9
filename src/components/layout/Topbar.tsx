@@ -1,6 +1,7 @@
 import { getCurrentProfile } from "@/lib/supabase/auth";
 import { signOut } from "@/lib/supabase/actions";
-import { TopbarNav, LanguageSwitcher, FleetActiveCount } from "./TopbarNav";
+import { TopbarNav, FleetActiveCount } from "./TopbarNav";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { SignOutButton } from "./SignOutButton";
 
 export async function Topbar({ profile }: { profile: Awaited<ReturnType<typeof getCurrentProfile>> }) {

@@ -6,6 +6,7 @@ import { Eye, EyeOff, Mail, MessageCircle } from "lucide-react";
 import { signIn } from "@/lib/supabase/actions";
 import { LoginMapBackground } from "@/components/layout/LoginMapBackground";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -70,6 +71,20 @@ export default function LoginPage() {
 
 
       <main className="glass signin-card">
+        {/* The one place the language can be chosen before signing in.
+            I18nProvider keeps a copy in localStorage precisely so this
+            screen can render in the operator's language, but setLanguage
+            was only reachable from the topbar — behind the login — so a
+            first visit, a new phone or cleared site data always landed in
+            English with no way out of it.
+
+            en/fr only, not the topbar's three: the ar dictionary covers
+            none of the strings on this card, so picking it would flip the
+            page to RTL and leave every word English — worse than the
+            default it replaced. Adding "ar" here is a one-word change
+            once that dictionary covers the sign-in screen. */}
+        <LanguageSwitcher codes={["en", "fr"]} className="signin-lang" />
+
         <span className="signin-mark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/omd-logo.png" alt="" width={26} height={26} />

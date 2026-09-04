@@ -2778,6 +2778,16 @@ html[dir="rtl"] table { text-align: right; }
   text-align: center;
 }
 
+/* Top-right of the card, out of the logo/title column rather than above
+   it: the eye should still land on the mark, the heading and then the
+   first field. Absolute is safe here because .signin-card is already
+   position: relative for the map background's stacking. */
+.signin-lang {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
 .signin-mark {
   display: flex;
   align-items: center;

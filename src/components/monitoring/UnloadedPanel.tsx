@@ -16,9 +16,7 @@
 // header, inner scroll), same border/radius and same header treatment, so
 // neither reads as secondary. The table here mirrors the left table's
 // column treatment (fixed layout, 118/130/—/92/96/68) with its own six
-// columns: Truck / Driver / Client / On site / Free / Locate. Those
-// last four headers are deliberately terse: at 1366 this panel gets
-// 617px for six columns, and "Temps sur place" alone wants 167 of them.
+// columns: Truck / Driver / Dernier client / Libre / Locate.
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -42,11 +40,6 @@ export interface UnloadedPanelProps {
 
 function minutesSince(iso: string): number {
   return (Date.now() - new Date(iso).getTime()) / 60000;
-}
-
-function hoursMinutes(seconds: number): string {
-  const m = Math.round(seconds / 60);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}`;
 }
 
 export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelProps) {
@@ -115,15 +108,18 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
 
       {rows && rows.length > 0 && (
         <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
-          {/* Truck is fixed at the 148px a 13-character id needs, so it
-              never truncates the one field this panel exists to name;
-              the two free-text columns absorb the rest. See the long
-              note in monitoring/page.tsx for the measurements. */}
+          {/* FIVE COLUMNS, NOT SIX. At 1366 this panel gets 617px, and
+              six columns left the two name columns 92px each — the
+              client name, which is the whole reason a dispatcher reads
+              this panel, came out as "AZZE…". Time on site was the one
+              column that answers nothing they act on, so it went, and
+              the client took its width: 177px at 1366, 454px at 1920.
+              Truck stays fixed at the 148px a 13-character id needs.
+              See the long note in monitoring/page.tsx. */}
           <colgroup>
             <col style={{ width: 148 }} />
+            <col style={{ width: 118 }} />
             <col />
-            <col />
-            <col style={{ width: 110 }} />
             <col style={{ width: 96 }} />
             <col style={{ width: 78 }} />
           </colgroup>
@@ -131,8 +127,7 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
               <th className="px-3 py-2">{t("Truck")}</th>
               <th className="px-3 py-2">{t("Driver")}</th>
-              <th className="px-3 py-2">{t("Client")}</th>
-              <th className="px-3 py-2">{t("On site")}</th>
+              <th className="px-3 py-2">{t("Last client")}</th>
               <th className="px-3 py-2">{t("Free")}</th>
               <th className="px-3 py-2"></th>
             </tr>
@@ -163,7 +158,6 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
                 </td>
                 <td className="px-3 py-2 t-primary" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.driver_name || undefined}>{r.driver_name || "—"}</td>
                 <td className="px-3 py-2 t-dim" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.zone_name}>{r.zone_name}</td>
-                <td className="px-3 py-2 t-primary" style={{ whiteSpace: "nowrap" }}>{hoursMinutes(r.seconds_on_site)}</td>
                 <td className="px-3 py-2 t-dim" style={{ whiteSpace: "nowrap" }}>{formatAge(minutesSince(r.free_at))}</td>
                 <td className="px-3 py-2 text-right" style={{ whiteSpace: "nowrap" }}>
                   {pos && (

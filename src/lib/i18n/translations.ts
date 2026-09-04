@@ -58,7 +58,6 @@ export const SAME_IN_FRENCH = new Set<string>([
   "Litres",
   "L/100km",
   "Distance",
-  "Client",
   "{from} → {to}",
 ]);
 
@@ -257,8 +256,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // ── Déchargés table ──
     // Terse on purpose: the panel is half a 1366 screen wide and the
     // header is what sets the column's floor. See UnloadedPanel.tsx.
-    "Client": "Client",
-    "On site": "On site",
+    "Last client": "Last client",
     "Free": "Free",
     "admin.subtitle": "Geofence management, user accounts, and connection settings.",
   },
@@ -454,8 +452,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "reading the sheet…": "lecture du fichier…",
 
     // ── Déchargés table ──
-    "Client": "Client",
-    "On site": "Sur place",
+    "Last client": "Dernier client",
     "Free": "Libre",
     "admin.subtitle": "Gestion des géorepérages, comptes utilisateurs et paramètres de connexion.",
   },

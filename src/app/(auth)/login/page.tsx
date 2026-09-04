@@ -2,12 +2,31 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Mail, MessageCircle } from "lucide-react";
 import { signIn } from "@/lib/supabase/actions";
 import { LoginMapBackground } from "@/components/layout/LoginMapBackground";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
+import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Support routes off this page. Built once at module scope rather than
+// inline so the encoding stays in one place — a raw newline or "&" in a
+// mailto body silently truncates the draft in some clients.
+const OWNER_EMAIL = "ferdjellahsouhaibomd@gmail.com";
+// wa.me wants the number in E.164 with no "+" and no separators.
+const OWNER_WHATSAPP = "213666353739";
+
+const INVITE_MAILTO =
+  `mailto:${OWNER_EMAIL}?subject=${encodeURIComponent("Prism access request")}` +
+  `&body=${encodeURIComponent("Name:\nCompany/Role:\nReason for access:\n")}`;
+
+const FEEDBACK_MAILTO =
+  `mailto:${OWNER_EMAIL}?subject=${encodeURIComponent("Prism feedback")}` +
+  `&body=${encodeURIComponent("What happened:\n\nWhat you expected:\n\nPage/screen:\n")}`;
+
+const WHATSAPP_URL =
+  `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent("Hello — I'm contacting you about Prism.")}`;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -52,6 +71,20 @@ export default function LoginPage() {
 
 
       <main className="glass signin-card">
+        {/* The one place the language can be chosen before signing in.
+            I18nProvider keeps a copy in localStorage precisely so this
+            screen can render in the operator's language, but setLanguage
+            was only reachable from the topbar — behind the login — so a
+            first visit, a new phone or cleared site data always landed in
+            English with no way out of it.
+
+            en/fr only, not the topbar's three: the ar dictionary covers
+            none of the strings on this card, so picking it would flip the
+            page to RTL and leave every word English — worse than the
+            default it replaced. Adding "ar" here is a one-word change
+            once that dictionary covers the sign-in screen. */}
+        <LanguageSwitcher codes={["en", "fr"]} className="signin-lang" />
+
         <span className="signin-mark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/omd-logo.png" alt="" width={26} height={26} />
@@ -132,10 +165,30 @@ export default function LoginPage() {
 
         <p className="signin-foot">
           {t("No account?")}{" "}
-          <a href="mailto:ferdjellahsouhaibomd@gmail.com?subject=Prism%20access%20request&body=Name%3A%0ACompany%2FRole%3A%0AReason%20for%20access%3A">
+          <a href={INVITE_MAILTO}>
             {t("Request an invite")}
           </a>
         </p>
+
+        {/* Two ways to reach the owner from the one screen a signed-out
+            person can actually see. Deliberately links, not a form: this
+            page is public, so anything that posts from here is an
+            unauthenticated write endpoint. */}
+        <div className="signin-contact">
+          <a className="signin-contact__link" href={FEEDBACK_MAILTO}>
+            <Mail size={13} strokeWidth={2} aria-hidden="true" />
+            {t("Send feedback")}
+          </a>
+          <a
+            className="signin-contact__link"
+            href={WHATSAPP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <MessageCircle size={13} strokeWidth={2} aria-hidden="true" />
+            {t("Contact on WhatsApp")}
+          </a>
+        </div>
       </main>
     </div>
   );

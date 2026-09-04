@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Users, Fuel, Bell, Settings} from "lucide-react";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { useFleet } from "@/components/providers/FleetProvider";
-import type { Language } from "@/lib/i18n/translations";
 
 const NAV_ITEMS: { href: string; key: string; icon: typeof LayoutDashboard }[] = [
   { href: "/dashboard", key: "nav.dashboard", icon: LayoutDashboard },
@@ -76,31 +75,5 @@ export function FleetActiveCount() {
       <span className="topbar-active__label">{t("Active:")}</span>{" "}
       <strong style={{ color: "var(--amber)" }}>{activeRuns}</strong> / <span>{fleetData.trucks.length || "—"}</span>
     </span>
-  );
-}
-
-
-export function LanguageSwitcher() {
-  const { language, setLanguage } = useTranslation();
-  const options: { code: Language; label: string }[] = [
-    { code: "en", label: "EN" },
-    { code: "fr", label: "FR" },
-    { code: "ar", label: "AR" },
-  ];
-
-  return (
-    <div className="seg seg--sm">
-      {options.map((opt) => (
-        <button
-          key={opt.code}
-          type="button"
-          onClick={() => setLanguage(opt.code)}
-          className={`seg-item${language === opt.code ? " is-active" : ""}`}
-          aria-pressed={language === opt.code}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
   );
 }

@@ -15,8 +15,14 @@
 // stayed at 54px. Now both panels share 1fr/1fr at 704px tall (≈20 rows +
 // header, inner scroll), same border/radius and same header treatment, so
 // neither reads as secondary. The table here mirrors the left table's
-// column treatment (fixed layout, 118/130/—/92/96/68) with its own six
-// columns: Truck / Driver / Dernier client / Libre / Locate.
+// column treatment (fixed layout, a bounded width per bounded value)
+// with the five the owner asked for on 2026-09-04: Camion, Chauffeur,
+// Dernier client, Temps sur place, Libre depuis.
+//
+// There is no sixth "Localiser" column any more. Five columns already
+// want more than the 617px this panel gets at 1366, and a whole column
+// spent on a link was the cheapest 78px to reclaim — the truck id is
+// the link now, which is where a dispatcher was already pointing.
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -40,6 +46,11 @@ export interface UnloadedPanelProps {
 
 function minutesSince(iso: string): number {
   return (Date.now() - new Date(iso).getTime()) / 60000;
+}
+
+function hoursMinutes(seconds: number): string {
+  const m = Math.round(seconds / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}`;
 }
 
 export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelProps) {
@@ -108,28 +119,32 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
 
       {rows && rows.length > 0 && (
         <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
-          {/* FIVE COLUMNS, NOT SIX. At 1366 this panel gets 617px, and
-              six columns left the two name columns 92px each — the
-              client name, which is the whole reason a dispatcher reads
-              this panel, came out as "AZZE…". Time on site was the one
-              column that answers nothing they act on, so it went, and
-              the client took its width: 177px at 1366, 454px at 1920.
-              Truck stays fixed at the 148px a 13-character id needs.
-              See the long note in monitoring/page.tsx. */}
+          {/* Every column that holds a bounded value is fixed at what
+              that value needs — 80px holds "23h 59", 124px holds the
+              widest age this panel can print, "il y a 59 min" at 121 —
+              and "Dernier client" takes the rest: 155px at 1366, 432px
+              at 1920. Truck stays at the 148px a
+              13-character id needs so an id is never cut. See the long
+              note in monitoring/page.tsx for how these were measured. */}
           <colgroup>
             <col style={{ width: 148 }} />
-            <col style={{ width: 118 }} />
+            <col style={{ width: 110 }} />
             <col />
-            <col style={{ width: 96 }} />
-            <col style={{ width: 78 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 124 }} />
           </colgroup>
           <thead className="sticky top-0 z-10 bg-panel">
+            {/* whiteSpace: normal overrides the global `thead th`
+                nowrap. These labels say what the column is — "Temps sur
+                place" is 167px of text in an 88px column — and a header
+                that wraps to two lines costs 17px once, where a header
+                cut to "TEMPS SU…" costs the reader every time. */}
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
-              <th className="px-3 py-2">{t("Truck")}</th>
-              <th className="px-3 py-2">{t("Driver")}</th>
-              <th className="px-3 py-2">{t("Last client")}</th>
-              <th className="px-3 py-2">{t("Free")}</th>
-              <th className="px-3 py-2"></th>
+              <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Truck")}</th>
+              <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Driver")}</th>
+              <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Last client")}</th>
+              <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Time on site")}</th>
+              <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Free since")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-token">
@@ -147,25 +162,36 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
             const pos = positionOf.get(r.truck_id);
             return (
               <tr key={r.truck_id} className="text-sm bg-raised-hover">
+                {/* The id is the "locate" control: it carries the same
+                    link the Localiser column used to, and drops to plain
+                    text when the fleet feed has no position for it. */}
                 <td className="px-3 py-2 font-mono c-cyan" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span
-                      aria-hidden
-                      style={{ width: 6, height: 6, borderRadius: "50%", background: dot, display: "inline-block", flex: "none" }}
-                    />
-                    {r.truck_id}
-                  </span>
+                  {pos ? (
+                    <Link
+                      href={`/dispatch?lat=${pos.lat}&lng=${pos.lng}`}
+                      className="inline-flex items-center gap-1.5 c-cyan hover:opacity-80"
+                      title={t("Locate")}
+                    >
+                      <span
+                        aria-hidden
+                        style={{ width: 6, height: 6, borderRadius: "50%", background: dot, display: "inline-block", flex: "none" }}
+                      />
+                      {r.truck_id}
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        aria-hidden
+                        style={{ width: 6, height: 6, borderRadius: "50%", background: dot, display: "inline-block", flex: "none" }}
+                      />
+                      {r.truck_id}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 t-primary" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.driver_name || undefined}>{r.driver_name || "—"}</td>
                 <td className="px-3 py-2 t-dim" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.zone_name}>{r.zone_name}</td>
+                <td className="px-3 py-2 t-primary" style={{ whiteSpace: "nowrap" }}>{hoursMinutes(r.seconds_on_site)}</td>
                 <td className="px-3 py-2 t-dim" style={{ whiteSpace: "nowrap" }}>{formatAge(minutesSince(r.free_at))}</td>
-                <td className="px-3 py-2 text-right" style={{ whiteSpace: "nowrap" }}>
-                  {pos && (
-                    <Link href={`/dispatch?lat=${pos.lat}&lng=${pos.lng}`} className="text-xs c-accent hover:opacity-80">
-                      {t("Locate")}
-                    </Link>
-                  )}
-                </td>
               </tr>
             );
           })}

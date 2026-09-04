@@ -259,7 +259,8 @@ export const translations: Record<Language, Record<string, string>> = {
     // Terse on purpose: the panel is half a 1366 screen wide and the
     // header is what sets the column's floor. See UnloadedPanel.tsx.
     "Last client": "Last client",
-    "Free": "Free",
+    "Time on site": "Time on site",
+    "Free since": "Free since",
     "admin.subtitle": "Geofence management, user accounts, and connection settings.",
   },
   fr: {
@@ -457,7 +458,8 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // ── Déchargés table ──
     "Last client": "Dernier client",
-    "Free": "Libre",
+    "Time on site": "Temps sur place",
+    "Free since": "Libre depuis",
     "admin.subtitle": "Gestion des géorepérages, comptes utilisateurs et paramètres de connexion.",
   },
   ar: {

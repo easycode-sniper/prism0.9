@@ -142,7 +142,7 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
             <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">
               <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Truck")}</th>
               <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Driver")}</th>
-              <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Last client")}</th>
+              <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Last site")}</th>
               <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Time on site")}</th>
               <th className="px-3 py-2" style={{ whiteSpace: "normal" }}>{t("Free since")}</th>
             </tr>
@@ -189,7 +189,17 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
                   )}
                 </td>
                 <td className="px-3 py-2 t-primary" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.driver_name || undefined}>{r.driver_name || "—"}</td>
-                <td className="px-3 py-2 t-dim" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.zone_name}>{r.zone_name}</td>
+                <td className="px-3 py-2" style={{ overflow: "hidden" }} title={[r.zone_name, r.client_name].filter(Boolean).join(" — ")}>
+                  {/* The site is what the dispatcher navigates by, so it
+                      leads and keeps the full-strength text; the company
+                      sits under it, dimmed. Two lines rather than one
+                      because this column is only 155px at 1366 — on one
+                      line the client would push the site into an
+                      ellipsis, which is how it came to look "missing" in
+                      the first place. */}
+                  <div className="unl-site">{r.zone_name}</div>
+                  <UnloadedClient name={r.client_name} />
+                </td>
                 <td className="px-3 py-2 t-primary" style={{ whiteSpace: "nowrap" }}>{hoursMinutes(r.seconds_on_site)}</td>
                 <td className="px-3 py-2 t-dim" style={{ whiteSpace: "nowrap" }}>{formatAge(minutesSince(r.free_at))}</td>
               </tr>
@@ -201,4 +211,12 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
       </div>
     </aside>
   );
+}
+
+/* Dimmed second line under the site. Absent rather than a dash when the
+   site has no client on file — the row already names the place, and an
+   empty line would cost height for nothing. */
+function UnloadedClient({ name }: { name: string | null }) {
+  if (!name) return null;
+  return <div className="unl-client">{name}</div>;
 }

@@ -2246,12 +2246,36 @@ hr {
   color: var(--text);
 }
 
+/* Déchargés' third column: the site leads, the company sits under it. */
+.unl-site {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.unl-client {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  color: var(--text-faint);
+}
+
 /* ── Clients ────────────────────────────────────────────────────
    A directory, not an operations panel: it answers "who do I ring and
    is the gate open". Achromatic throughout — whether a client is open is
    not one of the five vehicle states, and a coloured pixel in this app
    means something about a truck. Open/closed is carried by a cream dot
    and by dimming the closed rows' hours instead. */
+/* Fills the viewport rather than a fixed row count: this page is a
+   directory of 130 delivery points, and the reason to give it a whole
+   tab is that it can show many at once. Scrolls inside its own border so
+   the page itself never scrolls sideways. */
+.cl-scroller {
+  overflow: auto;
+  max-height: calc(100vh - 212px);
+}
+
 .cl-name {
   max-width: 320px;
   overflow: hidden;

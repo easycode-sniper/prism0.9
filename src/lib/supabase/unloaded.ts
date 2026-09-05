@@ -24,6 +24,9 @@ export interface UnloadedTruck {
   driver_name: string | null;
   /** The site as it was named on the day it was visited. */
   zone_name: string;
+  /** The company operating that site. From public.clients, falling back
+   *  to construction_sites.client. See migration 052. */
+  client_name: string | null;
   site_id: string | null;
   entered_at: string;
   exited_at: string;

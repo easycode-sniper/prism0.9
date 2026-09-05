@@ -43,6 +43,14 @@ export type Language = "en" | "fr" | "ar";
  * declared here instead.
  */
 export const RUNTIME_KEYS = new Set<string>([
+  // Built as t(`clients.filter.${f}`) from the FILTERS array, so no call
+  // site names them literally.
+  "clients.filter.all",
+  "clients.filter.open",
+  "clients.filter.24h",
+  "clients.filter.friday",
+  "clients.filter.nophone",
+  "clients.filter.nosite",
   "Invalid login credentials",
   "Email not confirmed",
   "User not found",
@@ -120,7 +128,6 @@ export const translations: Record<Language, Record<string, string>> = {
     "No clients match.": "No clients match.",
 
     // ── Service baselines (monitoring) ──
-    "Service baseline": "Service baseline",
     "Service baseline recorded": "Service baseline recorded",
     "Service baseline not recorded": "Service baseline not recorded",
     "Last oil change": "Last oil change",
@@ -317,7 +324,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // ── Déchargés table ──
     // Terse on purpose: the panel is half a 1366 screen wide and the
     // header is what sets the column's floor. See UnloadedPanel.tsx.
-    "Last client": "Last client",
+    "Last site": "Last site",
     "Time on site": "Time on site",
     "Free since": "Free since",
     "admin.subtitle": "Geofence management, user accounts, and connection settings.",
@@ -373,7 +380,6 @@ export const translations: Record<Language, Record<string, string>> = {
     "No clients match.": "Aucun client ne correspond.",
 
     // ── Service baselines (monitoring) ──
-    "Service baseline": "Référence d'entretien",
     "Service baseline recorded": "Référence d'entretien enregistrée",
     "Service baseline not recorded": "Référence d'entretien non enregistrée",
     "Last oil change": "Dernière vidange",
@@ -568,7 +574,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "reading the sheet…": "lecture du fichier…",
 
     // ── Déchargés table ──
-    "Last client": "Dernier client",
+    "Last site": "Dernier site",
     "Time on site": "Temps sur place",
     "Free since": "Libre depuis",
     "admin.subtitle": "Gestion des géorepérages, comptes utilisateurs et paramètres de connexion.",

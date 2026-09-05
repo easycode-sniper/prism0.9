@@ -106,7 +106,12 @@ export default function ClientsPage() {
 
       {rows !== null && (
         <div className="mt-4 overflow-hidden rounded-lg border bd">
-          <div className="table-wrap--capped" style={{ overflowX: "auto" }}>
+          {/* Not .table-wrap--capped: that caps at 5.5 rows, which is
+              right for a side panel and wrong for a full-page directory
+              of 130 clients. This fills the window instead — the header,
+              search row and page padding above it come to ~212px, and
+              the rest is rows. */}
+          <div className="cl-scroller">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-panel">
                 <tr className="border-b bd bg-panel text-left text-xs uppercase t-dim">

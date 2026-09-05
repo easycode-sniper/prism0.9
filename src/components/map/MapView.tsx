@@ -8,7 +8,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { Moon, Satellite as SatelliteIcon, MapPin, Truck, Fuel, ArrowRight, X } from "lucide-react";
 import { formatAge } from "@/lib/format";
-import { stationWatchRadius } from "@/lib/constants";
+import { stationWatchRadius, TRACK_WINDOW_HOURS } from "@/lib/constants";
 
 // Marker HTML is assembled as strings, so anything coming out of the
 // database — site names, client names — has to be escaped on the way in.
@@ -51,6 +51,14 @@ export interface TruckMarkerData {
 
 function formatEta(seconds: number | null | undefined): string | null {
   if (seconds == null) return null;
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+/** "1h 39m" / "47m". Stops are minutes-to-hours, never seconds — a stay
+ *  shorter than TRACK_STOP_SECONDS never gets drawn. */
+function formatDwell(seconds: number): string {
   const mins = Math.round(seconds / 60);
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
@@ -101,6 +109,19 @@ function ringCentroid(ring: [number, number][]): [number, number] {
  * refitting on identity would yank the map out from under whoever is
  * panning it.
  */
+/** Quick Track overlay: where a truck has actually been. Segments are
+ *  already split on tracker gaps by getTruckTrack, so a break in the
+ *  line is a break in the evidence. */
+export interface TrackOverlayData {
+  truckId: string;
+  hours: number;
+  segments: { line: [number, number][] }[];
+  stops: { lat: number; lng: number; seconds: number }[];
+  bounds: [number, number][];
+  pointCount: number;
+  topSpeed: number | null;
+}
+
 export interface RouteOverlayData {
   id: string;
   truckId: string;
@@ -118,6 +139,14 @@ interface MapViewProps {
   zones?: ZoneData[];
   route?: RouteOverlayData | null;
   onRouteClear?: () => void;
+  track?: TrackOverlayData | null;
+  onTrackClear?: () => void;
+  /** Re-runs the current truck over a different window. */
+  onTrackHours?: (hours: number) => void;
+  /** Absent means no Quick Track button is drawn in the truck popups. */
+  onQuickTrack?: (truckId: string) => void;
+  /** Truck whose track is being fetched, so its popup button can say so. */
+  trackLoadingId?: string | null;
   focusPoint?: [number, number] | null;
   /** Admins only. Absent for everyone else, which is what hides the
    *  button — the server action and the RLS policy both re-check. */
@@ -331,6 +360,7 @@ interface MapCore {
   zonesLayer: L.LayerGroup;
   landmarksLayer: L.LayerGroup;
   routeLayer: L.LayerGroup;
+  trackLayer: L.LayerGroup;
   tileLayers: { dark: L.TileLayer; light: L.TileLayer; satellite: L.TileLayer; satelliteLabels: L.TileLayer };
   ui: { baseLayer: "dark" | "satellite"; showZones: boolean; showUnits: boolean; showStations: boolean };
 }
@@ -403,6 +433,12 @@ function getOrCreateMapCore(): MapCore {
   // The route sits under the landmarks and the trucks — it is the thing
   // they are measured against, not the thing being watched.
   const routeLayer = L.layerGroup().addTo(map);
+  // The travelled trail sits with the route, under the landmarks and the
+  // trucks, for the same reason: it is history being measured, not the
+  // live thing being watched. Added after routeLayer so that when a run's
+  // planned route and the trail it actually drove are both on screen,
+  // the trail — the evidence — reads on top of the plan.
+  const trackLayer = L.layerGroup().addTo(map);
 
   core = {
     container,
@@ -413,13 +449,14 @@ function getOrCreateMapCore(): MapCore {
     zonesLayer,
     landmarksLayer,
     routeLayer,
+    trackLayer,
     tileLayers: { dark, light, satellite, satelliteLabels },
     ui: { baseLayer: "dark", showZones: true, showUnits: true, showStations: true },
   };
   return core;
 }
 
-export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], route = null, onRouteClear, focusPoint = null, onToggleStationBlacklist }: MapViewProps) {
+export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], route = null, onRouteClear, track = null, onTrackClear, onTrackHours, onQuickTrack, trackLoadingId = null, focusPoint = null, onToggleStationBlacklist }: MapViewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Both route effects key off the dispatch id, not the object, so a
@@ -428,6 +465,15 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
   const routeRef = useRef(route);
   routeRef.current = route;
   const routeId = route?.id ?? null;
+
+  const trackRef = useRef(track);
+  trackRef.current = track;
+  // Identity for the drawing effect: the truck AND the window, so
+  // switching 12h -> 24h on the same truck redraws.
+  const trackId = track ? `${track.truckId}:${track.hours}` : null;
+
+  const quickTrackRef = useRef(onQuickTrack);
+  quickTrackRef.current = onQuickTrack;
 
   const [baseLayer, setBaseLayer] = useState<"dark" | "satellite">(() => getOrCreateMapCore().ui.baseLayer);
   const [showZones, setShowZones] = useState(() => getOrCreateMapCore().ui.showZones);
@@ -554,12 +600,39 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           ${m.offRoute ? `<div style="color: var(--red); margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.alert} Off route</div>` : ""}
           ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 5px;">${SVG_ICONS.target} <span>${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</span></div>` : ""}
           ${m.ageMinutes != null ? `<div style="color: var(--text-dim); margin-top: 6px; font-size: 11px;">Updated ${formatAge(m.ageMinutes)}</div>` : ""}
+          ${onQuickTrack ? `<button type="button" data-quick-track="${escapeHtml(m.label)}" style="margin-top: 8px; width: 100%; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer;">${trackLoadingId === m.label ? "Tracking…" : "Quick Track"}</button>` : ""}
         </div>`
       );
 
+      // Same wiring as the station blacklist button below: Leaflet
+      // popups are HTML strings, not React, so the handler is bound on
+      // open and torn down with the popup rather than accumulating.
+      if (onQuickTrack) {
+        marker.on("popupopen", (e) => {
+          const btn = (e.popup.getElement() as HTMLElement | undefined)?.querySelector<HTMLButtonElement>(
+            "button[data-quick-track]"
+          );
+          if (!btn) return;
+          btn.onclick = () => {
+            const id = btn.dataset.quickTrack;
+            if (!id) return;
+            btn.disabled = true;
+            btn.textContent = "Tracking…";
+            quickTrackRef.current?.(id);
+            marker.closePopup();
+          };
+        });
+      }
+
       truckLayer.addLayer(marker);
     }
-  }, [truckMarkers, showUnits]);
+    // onQuickTrack and trackLoadingId are dependencies because they
+    // decide what is WRITTEN into the popup HTML — whether the button
+    // exists at all, and whether it reads "Quick Track" or "Tracking…".
+    // The ref keeps the click calling the current callback, but a ref
+    // cannot rewrite markup that has already been built; that is exactly
+    // the bug the station popups shipped with.
+  }, [truckMarkers, showUnits, onQuickTrack, trackLoadingId]);
 
   // Site markers
   useEffect(() => {
@@ -770,6 +843,53 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     L.marker(end, { icon: buildRouteEndIcon(r.endLabel, "to"), zIndexOffset: 900 }).addTo(routeLayer);
   }, [routeId]);
 
+  // The travelled trail: green line, amber stop dots.
+  //
+  // On-taxonomy, not decoration. Green already means moving/on-route, so
+  // it is the right colour for ground the truck actually covered; amber
+  // already means idle, so it is the right colour for the places it sat.
+  // A trail needed no new hue, and it must not take one.
+  useEffect(() => {
+    const { trackLayer } = getOrCreateMapCore();
+    trackLayer.clearLayers();
+
+    const tk = trackRef.current;
+    if (!tk) return;
+
+    for (const seg of tk.segments) {
+      if (seg.line.length < 2) continue;
+      // Dark casing first, as the route line does: a thin stroke on its
+      // own vanishes over pale satellite ground.
+      L.polyline(seg.line, { color: "#0e100f", weight: 8, opacity: 0.45 }).addTo(trackLayer);
+      L.polyline(seg.line, { color: "#00ff7b", weight: 3, opacity: 0.9 }).addTo(trackLayer);
+    }
+
+    for (const stop of tk.stops) {
+      L.circleMarker([stop.lat, stop.lng], {
+        radius: 5,
+        color: "#0e100f",
+        weight: 2,
+        fillColor: "#ffb300",
+        fillOpacity: 1,
+      })
+        .bindPopup(
+          `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text);">
+            <strong style="color: var(--amber);">Stopped ${formatDwell(stop.seconds)}</strong>
+          </div>`
+        )
+        .addTo(trackLayer);
+    }
+  }, [trackId]);
+
+  // Frame the trail when it arrives, for the same reason the route does:
+  // the map is usually sitting on one truck at close zoom when the
+  // button is pressed, and the point is to see the whole journey.
+  useEffect(() => {
+    const tk = trackRef.current;
+    if (!trackId || !tk || tk.bounds.length < 2) return;
+    getOrCreateMapCore().map.fitBounds(L.latLngBounds(tk.bounds), { padding: [56, 56] });
+  }, [trackId]);
+
   // Frame the whole run when one is picked — the point of the button is
   // to see the route end to end, and the map is usually sitting on the
   // factory at zoom 7 when it's pressed.
@@ -840,6 +960,52 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
             <div className="route-caption__stats">
               {route.distanceMeters != null && <span>{(route.distanceMeters / 1000).toFixed(0)} km</span>}
               {route.durationSeconds != null && <span>{formatDuration(route.durationSeconds)} driving</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sits opposite the route caption rather than under it: a run's
+          planned route and the trail it actually drove can both be on
+          screen, and stacking two chips in one corner buries the map. */}
+      {track && (
+        <div className="glass glass--float track-caption">
+          <div className="route-caption__head">
+            <span className="route-caption__eyebrow">Track</span>
+            <span className="route-caption__truck">{track.truckId}</span>
+            {onTrackClear && (
+              <button type="button" onClick={onTrackClear} className="icon-btn" aria-label="Hide track" title="Hide track">
+                <X size={12} strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+
+          {track.pointCount === 0 ? (
+            /* Not an error. A truck that has been offline the whole
+               window genuinely has no confirmed position to draw, and
+               saying so beats an empty map that looks broken. */
+            <div className="track-caption__empty">No confirmed fixes in this window</div>
+          ) : (
+            <div className="route-caption__stats">
+              <span>{track.pointCount} places</span>
+              <span>{track.stops.length} stop{track.stops.length === 1 ? "" : "s"}</span>
+              {track.topSpeed != null && <span>{Math.round(track.topSpeed)} km/h peak</span>}
+            </div>
+          )}
+
+          {onTrackHours && (
+            <div className="seg seg--sm track-caption__windows" role="group" aria-label="Track window">
+              {TRACK_WINDOW_HOURS.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => onTrackHours(h)}
+                  className={`seg-item${track.hours === h ? " is-active" : ""}`}
+                  aria-pressed={track.hours === h}
+                >
+                  {h}h
+                </button>
+              ))}
             </div>
           )}
         </div>

@@ -171,3 +171,27 @@ export const UNLOADED_SETTLE_SECONDS = 25 * 60;
  * sentence explaining it must not drift apart.
  */
 export const MIN_PASSWORD_LENGTH = 8;
+
+/**
+ * Quick Track — how the trail on the map is drawn.
+ *
+ * TRACK_GAP_SECONDS is when the line breaks instead of continuing.
+ * 40.4% of all readings over a measured 24h were `offline` — a unit that
+ * has stopped reporting keeps repeating its last known position — and
+ * truck_track drops those, so a silent tracker arrives here as a hole in
+ * the timestamps. 15 minutes is comfortably longer than the one-minute
+ * tick plus any jitter, so it only fires on a real outage, and a break
+ * says "not known" rather than asserting a straight road across it.
+ *
+ * TRACK_STOP_SECONDS is when a stay earns an amber marker. At 5 minutes
+ * a 12h trail for a working truck showed 9 stops — few enough to read,
+ * and short enough to catch a delivery rather than only overnight
+ * parking.
+ */
+export const TRACK_GAP_SECONDS = 15 * 60;
+export const TRACK_STOP_SECONDS = 5 * 60;
+
+/** The windows the Quick Track picker offers, and its default. Capped by
+ *  what prune_fleet_snapshots keeps, which is 7 days. */
+export const TRACK_WINDOW_HOURS = [2, 12, 24] as const;
+export const TRACK_DEFAULT_HOURS = 12;

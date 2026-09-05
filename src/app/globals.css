@@ -3054,6 +3054,28 @@ html[dir="rtl"] table { text-align: right; }
   color: var(--text);
 }
 
+/* Quick Track's caption borrows the route caption's internals — same
+   head, same stats row — but sits bottom-RIGHT, because a planned route
+   and the trail actually driven can be on screen together and two chips
+   in one corner bury the map underneath them. */
+.track-caption {
+  position: absolute;
+  bottom: 14px;
+  right: 10px;
+  z-index: 1000;
+  max-width: min(300px, calc(100% - 20px));
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+}
+.track-caption__empty {
+  margin-top: 5px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.track-caption__windows {
+  margin-top: 8px;
+}
+
 .route-caption__stats {
   margin-top: 4px;
   display: flex;

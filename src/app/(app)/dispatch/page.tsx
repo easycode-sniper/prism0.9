@@ -6,7 +6,9 @@ import { useSearchParams } from "next/navigation";
 import { createBatchDispatch, stopDispatch, ensureDispatchRoute } from "@/lib/supabase/actions";
 import { checkPositionForDispatch, checkPositionManual } from "@/lib/supabase/positions";
 import { FACTORY_NAME } from "@/lib/constants";
-import type { RouteOverlayData } from "@/components/map/MapView";
+import type { RouteOverlayData, TrackOverlayData } from "@/components/map/MapView";
+import { getTruckTrack } from "@/lib/supabase/track";
+import { TRACK_DEFAULT_HOURS } from "@/lib/constants";
 import { haversineMeters } from "@/lib/geometry";
 import { useFleet } from "@/components/providers/FleetProvider";
 import { joinFleetWithDispatches } from "@/lib/fleetJoin";
@@ -136,6 +138,12 @@ export default function DispatchPage() {
   // itself the moment that run is stopped.
   const [routeRunId, setRouteRunId] = useState<string | null>(null);
   const [routeLoading, setRouteLoading] = useState<string | null>(null);
+
+  // Quick Track. Held as the resolved overlay rather than an id, because
+  // unlike a route — which is already on the dispatch row — a trail is
+  // not part of any polled state and only exists once it is fetched.
+  const [track, setTrack] = useState<TrackOverlayData | null>(null);
+  const [trackLoadingId, setTrackLoadingId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
@@ -395,9 +403,32 @@ export default function DispatchPage() {
     zones: geofences,
     route: routeOverlay,
     onRouteClear: () => setRouteRunId(null),
+    track,
+    onTrackClear: () => setTrack(null),
+    onTrackHours: (hours: number) => { if (track) void loadTrack(track.truckId, hours); },
+    onQuickTrack: (truckId: string) => { void loadTrack(truckId, TRACK_DEFAULT_HOURS); },
+    trackLoadingId,
     focusPoint,
     onToggleStationBlacklist: admin ? handleToggleBlacklist : undefined,
   };
+
+  async function loadTrack(truckId: string, hours: number) {
+    setError(null);
+    setTrackLoadingId(truckId);
+    const { data, error: trackError } = await getTruckTrack(truckId, hours);
+    setTrackLoadingId(null);
+    if (trackError) { setError(trackError); return; }
+    if (!data) return;
+    setTrack({
+      truckId: data.truckId,
+      hours: data.hours,
+      segments: data.segments,
+      stops: data.stops,
+      bounds: data.bounds,
+      pointCount: data.pointCount,
+      topSpeed: data.topSpeed,
+    });
+  }
 
   async function handleToggleRoute(dispatchId: string) {
     if (routeRunId === dispatchId) { setRouteRunId(null); return; }

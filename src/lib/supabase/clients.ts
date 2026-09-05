@@ -23,6 +23,10 @@ export interface ClientRecord {
   fridayExcluded: boolean | null;
   sevenDays: boolean | null;
   hoursRaw: string | null;
+  /** From the linked construction_site. Null for the 8 delivery points
+   *  that have no site row yet, which is what hides Locate on them. */
+  lat: number | null;
+  lng: number | null;
 }
 
 interface Row {
@@ -41,13 +45,21 @@ interface Row {
   friday_excluded: boolean | null;
   seven_days: boolean | null;
   hours_raw: string | null;
+  // PostgREST returns an embedded one-to-one as an object, but types it
+  // as possibly an array; normalised in toRecord rather than trusted.
+  site: { lat: number | null; lng: number | null } | { lat: number | null; lng: number | null }[] | null;
+}
+
+function coords(site: Row["site"]): { lat: number | null; lng: number | null } {
+  const s = Array.isArray(site) ? site[0] : site;
+  return { lat: s?.lat ?? null, lng: s?.lng ?? null };
 }
 
 export async function listClients(): Promise<{ data: ClientRecord[]; error: string | null }> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("clients")
-    .select("id, client_code, name, phones, phone_note, rep, site_name, site_id, distance_km, is_24h, opens_at, closes_at, friday_excluded, seven_days, hours_raw")
+    .select("id, client_code, name, phones, phone_note, rep, site_name, site_id, distance_km, is_24h, opens_at, closes_at, friday_excluded, seven_days, hours_raw, site:construction_sites(lat, lng)")
     .order("name");
 
   if (error) return { data: [], error: error.message };
@@ -71,6 +83,7 @@ export async function listClients(): Promise<{ data: ClientRecord[]; error: stri
       fridayExcluded: r.friday_excluded,
       sevenDays: r.seven_days,
       hoursRaw: r.hours_raw,
+      ...coords(r.site),
     })),
     error: null,
   };

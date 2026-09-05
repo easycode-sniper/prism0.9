@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Phone, MessageCircle } from "lucide-react";
 import { listClients, type ClientRecord } from "@/lib/supabase/clients";
 import { isOpenAt, hoursLabel } from "@/lib/clientHours";
@@ -115,6 +116,7 @@ export default function ClientsPage() {
                   <th className="px-3 py-2">{t("Phone")}</th>
                   <th className="px-3 py-2">{t("Rep")}</th>
                   <th className="px-3 py-2 text-right">{t("km")}</th>
+                  <th className="px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-token">
@@ -155,6 +157,9 @@ function ClientRow({ client: c, now }: { client: ClientRecord; now: Date }) {
       <td className="px-3 py-2 text-right t-dim" style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
         {c.distanceKm != null ? Math.round(c.distanceKm).toLocaleString("en-GB") : "—"}
       </td>
+      <td className="px-3 py-2 text-right" style={{ whiteSpace: "nowrap" }}>
+        <LocateLink lat={c.lat} lng={c.lng} t={t} />
+      </td>
     </tr>
   );
 }
@@ -162,6 +167,19 @@ function ClientRow({ client: c, now }: { client: ClientRecord; now: Date }) {
 /* Each of these is a component rather than an inline && beside its
    siblings — a bare conditional text node in a row that re-renders every
    minute is the shape that broke every page for the French Chrome user. */
+/* Same destination and wording as the monitoring table's Locate, so the
+   two mean the same thing: open the dispatch map on this point. Absent
+   for the delivery points with no site row — there is no coordinate to
+   send it to, and a dead link is worse than no link. */
+function LocateLink({ lat, lng, t }: { lat: number | null; lng: number | null; t: (k: string) => string }) {
+  if (lat == null || lng == null) return null;
+  return (
+    <Link href={`/dispatch?lat=${lat}&lng=${lng}`} className="text-xs c-accent hover:opacity-80">
+      {t("Locate")}
+    </Link>
+  );
+}
+
 function ClientCode({ code }: { code: string | null }) {
   if (!code) return null;
   return <div className="cl-code">{code}</div>;

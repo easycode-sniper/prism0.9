@@ -56,6 +56,7 @@ export const SAME_IN_FRENCH = new Set<string>([
   "admin.title",
   "notifications.title",
   "Destination",
+  "Date",
   // Units and words French spells the same way.
   "Litres",
   "L/100km",
@@ -89,6 +90,20 @@ export const translations: Record<Language, Record<string, string>> = {
     "reports.subtitle": "Trucks that entered PARC OMD.",
     "notifications.title": "Notifications",
     "admin.title": "Admin",
+
+    // ── Service baselines (monitoring) ──
+    "Service baseline": "Service baseline",
+    "Service baseline recorded": "Service baseline recorded",
+    "Service baseline not recorded": "Service baseline not recorded",
+    "Last oil change": "Last oil change",
+    "Current tyres fitted": "Current tyres fitted",
+    "Date": "Date",
+    "Odometer (km)": "Odometer (km)",
+    "unknown": "unknown",
+    "Save": "Save",
+    "Saving…": "Saving…",
+    "Saved": "Saved",
+    "Leave a field blank if it is still unknown — half an answer is worth saving.": "Leave a field blank if it is still unknown — half an answer is worth saving.",
 
     // ── Maintenance & Service ──
     "Maintenance & Service": "Maintenance & Service",
@@ -304,6 +319,20 @@ export const translations: Record<Language, Record<string, string>> = {
     "reports.subtitle": "Camions entrés au PARC OMD.",
     "notifications.title": "Notifications",
     "admin.title": "Admin",
+
+    // ── Service baselines (monitoring) ──
+    "Service baseline": "Référence d'entretien",
+    "Service baseline recorded": "Référence d'entretien enregistrée",
+    "Service baseline not recorded": "Référence d'entretien non enregistrée",
+    "Last oil change": "Dernière vidange",
+    "Current tyres fitted": "Montage des pneus actuels",
+    "Date": "Date",
+    "Odometer (km)": "Kilométrage (km)",
+    "unknown": "inconnu",
+    "Save": "Enregistrer",
+    "Saving…": "Enregistrement…",
+    "Saved": "Enregistré",
+    "Leave a field blank if it is still unknown — half an answer is worth saving.": "Laissez un champ vide s'il reste inconnu — une réponse partielle vaut la peine d'être enregistrée.",
 
     // ── Maintenance & Service ──
     "Maintenance & Service": "Maintenance et entretien",

@@ -2246,6 +2246,109 @@ hr {
   color: var(--text);
 }
 
+/* ── Service baseline editor ────────────────────────────────────
+   Opened from a chevron in the truck cell and rendered as a row that
+   spans every column. It is not a column because it cannot be one: the
+   fleet table is table-layout:fixed inside half of a 1fr/1fr grid, and
+   measurement showed a 76px column takes Driver to 0px at 1280 and 43px
+   at 1366 — the same collapse the 2026-09-03 colgroup pass was fixing.
+   Spanning the row costs no width at all.
+
+   Achromatic like the rest of the chrome here. The one exception is the
+   recorded/not-recorded dot on the toggle, which is genuinely a state
+   worth seeing at a glance across ninety rows — and it is a state of the
+   RECORD, not of the truck, so it uses the cream text ramp rather than
+   spending one of the five vehicle hues. */
+/* The truck id doubles as the disclosure control, because the cell has
+   no room for a separate one — see the comment at its call site. It
+   inherits the cell's mono/cyan treatment so the table still reads as a
+   table, and only announces itself on hover and focus. */
+.sbl-idbtn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.sbl-idbtn:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sbl-idbtn.is-open { text-decoration: underline; text-underline-offset: 2px; }
+
+.sbl-dot {
+  width: 4px;
+  height: 4px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-dim);
+  align-self: center;
+}
+
+.sbl-row { background: var(--panel-2); }
+.sbl-cell { padding: 12px 14px 13px; }
+
+.sbl-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 18px;
+}
+
+.sbl-set { border: none; padding: 0; margin: 0; min-width: 0; }
+.sbl-set:disabled { opacity: 0.55; }
+
+.sbl-legend {
+  padding: 0;
+  margin-bottom: 5px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sbl-pair { display: flex; gap: 8px; }
+.sbl-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+.sbl-label {
+  font-size: 0.62rem;
+  color: var(--text-faint);
+}
+
+/* Outguns the global input rule, which is specificity (0,2,1) — a single
+   class would silently lose to it and these would keep the app's default
+   field styling at the wrong size for a table row. */
+.sbl-cell input.sbl-input {
+  width: 128px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+.sbl-cell input.sbl-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.sbl-actions { display: flex; align-items: center; gap: 10px; }
+
+.sbl-status { min-height: 1em; font-size: 0.72rem; }
+.sbl-ok { color: var(--green); }
+.sbl-error { color: var(--red); }
+
+.sbl-hint {
+  margin-top: 9px;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
 /* ── Maintenance & Service ──────────────────────────────────────
    A placeholder page, so it is quiet on purpose: the two sections are
    surface steps with a hairline, and the "coming soon" tag is an

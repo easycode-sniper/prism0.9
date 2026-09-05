@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { checkPositionForDispatch } from "@/lib/supabase/positions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
@@ -10,6 +10,8 @@ import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { formatAge } from "@/lib/format";
 import UnloadedPanel from "@/components/monitoring/UnloadedPanel";
+import ServiceBaselineRow from "@/components/monitoring/ServiceBaselineRow";
+import { listServiceBaselines, type ServiceBaseline } from "@/lib/supabase/serviceBaselines";
 
 type FilterType = "all" | "dispatched" | "moving" | "idle" | "offline";
 
@@ -26,6 +28,22 @@ export default function MonitoringPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [checkResults, setCheckResults] = useState<Map<string, PositionCheckResult>>(new Map());
   const [checking, setChecking] = useState<string | null>(null);
+
+  // Service baselines, loaded once for the whole table. One request for
+  // ~90 small rows beats one per expanded truck, and the map is what
+  // lets a row show whether its baseline is already recorded without
+  // opening it.
+  const [baselines, setBaselines] = useState<Map<string, ServiceBaseline>>(new Map());
+  const [openTruck, setOpenTruck] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await listServiceBaselines();
+      if (!cancelled) setBaselines(new Map(data.map((b) => [b.truckId, b])));
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const trucks = useMemo(
     () => joinFleetWithDispatches(fleetData.trucks, dispatches),
@@ -178,13 +196,25 @@ export default function MonitoringPage() {
           </thead>
           <tbody className="divide-y divide-token">
             {filteredTrucks.map((tr) => (
-              <MonitoringRow
-                key={tr.truck_id}
-                truck={tr}
-                check={tr.dispatch_id ? checkResults.get(tr.dispatch_id) : undefined}
-                checking={checking === tr.truck_id}
-                onCheckPosition={() => tr.dispatch_id && handleCheckPosition(tr.dispatch_id, tr.truck_id)}
-              />
+              <Fragment key={tr.truck_id}>
+                <MonitoringRow
+                  truck={tr}
+                  check={tr.dispatch_id ? checkResults.get(tr.dispatch_id) : undefined}
+                  checking={checking === tr.truck_id}
+                  onCheckPosition={() => tr.dispatch_id && handleCheckPosition(tr.dispatch_id, tr.truck_id)}
+                  hasBaseline={baselines.has(tr.truck_id)}
+                  open={openTruck === tr.truck_id}
+                  onToggle={() => setOpenTruck((cur) => (cur === tr.truck_id ? null : tr.truck_id))}
+                />
+                {openTruck === tr.truck_id && (
+                  <ServiceBaselineRow
+                    truckId={tr.truck_id}
+                    baseline={baselines.get(tr.truck_id)}
+                    colSpan={6}
+                    onSaved={(next) => setBaselines((prev) => new Map(prev).set(next.truckId, next))}
+                  />
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -209,11 +239,17 @@ function MonitoringRow({
   check,
   checking,
   onCheckPosition,
+  hasBaseline,
+  open,
+  onToggle,
 }: {
   truck: MonitoringTruck;
   check: PositionCheckResult | undefined;
   checking: boolean;
   onCheckPosition: () => void;
+  hasBaseline: boolean;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const { t } = useTranslation();
   const isOffRoute = truck.dispatched && truck.last_on_route === false;
@@ -234,8 +270,24 @@ function MonitoringRow({
   return (
     <tr className="text-sm bg-raised-hover">
       <td className="px-3 py-2 font-mono c-cyan" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {/* The id IS the control, rather than a chevron beside it.
+            Measured: this cell is 148px with a 124px content box, and a
+            13-char mono id already fills 99px of it. A 12px chevron plus
+            its gap took the span to 120px and truncated the id to
+            "00085-523-35…" — the exact failure the 2026-09-03 colgroup
+            pass existed to fix. Making the id itself the button costs
+            nothing, and the state dot after it is 4px. */}
         <span className="inline-flex items-center gap-1.5">
-          {truck.truck_id}
+          <button
+            type="button"
+            onClick={onToggle}
+            className={`sbl-idbtn${open ? " is-open" : ""}`}
+            aria-expanded={open}
+            title={hasBaseline ? t("Service baseline recorded") : t("Service baseline not recorded")}
+          >
+            {truck.truck_id}
+            <BaselineDot recorded={hasBaseline} />
+          </button>
           {truck.category === "staff" && (
             <span className="vehicle-tag" title={t("Staff car — excluded from notifications")}>{t("staff")}</span>
           )}
@@ -267,4 +319,12 @@ function MonitoringRow({
       </td>
     </tr>
   );
+}
+
+/* Whether this truck's service baseline is on file. It is a state of the
+   RECORD, not of the vehicle, so it stays on the cream ramp rather than
+   spending one of the five hues reserved for what a truck is doing. */
+function BaselineDot({ recorded }: { recorded: boolean }) {
+  if (!recorded) return null;
+  return <span className="sbl-dot" aria-hidden="true" />;
 }

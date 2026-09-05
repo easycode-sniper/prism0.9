@@ -2246,6 +2246,83 @@ hr {
   color: var(--text);
 }
 
+/* ── Clients ────────────────────────────────────────────────────
+   A directory, not an operations panel: it answers "who do I ring and
+   is the gate open". Achromatic throughout — whether a client is open is
+   not one of the five vehicle states, and a coloured pixel in this app
+   means something about a truck. Open/closed is carried by a cream dot
+   and by dimming the closed rows' hours instead. */
+.cl-name {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.cl-code {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+}
+.cl-site {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+/* A delivery point with no site row has no geofence and therefore no
+   arrival detection — dashed underline rather than a colour, because
+   this is a gap in our data, not a state of a vehicle. */
+.cl-site--unlinked {
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+  color: var(--text-faint);
+}
+.cl-rep {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cl-hours { display: inline-flex; align-items: center; gap: 6px; }
+.cl-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.cl-dot.is-open { background: var(--text); }
+.cl-fri {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.cl-phones { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
+.cl-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.cl-phone:hover { color: var(--text); text-decoration: underline; }
+.cl-openflag {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
 /* ── Service baseline editor ────────────────────────────────────
    Opened from a chevron in the truck cell and rendered as a row that
    spans every column. It is not a column because it cannot be one: the

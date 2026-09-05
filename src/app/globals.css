@@ -2246,6 +2246,124 @@ hr {
   color: var(--text);
 }
 
+/* ── Maintenance & Service ──────────────────────────────────────
+   A placeholder page, so it is quiet on purpose: the two sections are
+   surface steps with a hairline, and the "coming soon" tag is an
+   achromatic outline. No hue is spent here — all five belong to vehicle
+   state, and a section that is merely unbuilt is not a truck reporting
+   anything. */
+.mnt-page {
+  padding: 24px 28px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.mnt-head { margin-bottom: 18px; }
+
+.mnt-title {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mnt-sub {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+/* Two equal cards side by side, stacking before they get too narrow to
+   hold the "what's needed" sentence on a sensible number of lines. */
+.mnt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  max-width: 900px;
+}
+
+.mnt-card { padding: 16px 18px 18px; }
+
+.mnt-card__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.mnt-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+}
+
+.mnt-card__title {
+  min-width: 0;
+  margin-right: auto;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mnt-card__soon {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 3px 8px;
+}
+
+.mnt-card__blurb {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* Dashed, like .panel-empty: this is the part that is not filled in yet,
+   and the border says so without spending a colour on it. */
+.mnt-card__need {
+  margin-top: 14px;
+  padding: 11px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+}
+
+.mnt-card__need-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+
+.mnt-card__need-text {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.mnt-foot {
+  max-width: 900px;
+  margin-top: 14px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text-faint);
+}
+
 .panel-empty {
   padding: 26px 14px;
   text-align: center;

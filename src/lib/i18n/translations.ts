@@ -51,6 +51,8 @@ export const RUNTIME_KEYS = new Set<string>([
 
 export const SAME_IN_FRENCH = new Set<string>([
   "nav.admin",
+  // French spells it the same way.
+  "nav.maintenance",
   "admin.title",
   "notifications.title",
   "Destination",
@@ -72,6 +74,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "nav.reports": "Reports",
     "nav.drivers": "Drivers",
     "nav.carburant": "Fuel",
+    "nav.maintenance": "Maintenance",
     "nav.notifications": "Notifications",
     "nav.admin": "Admin",
     "common.signOut": "Sign Out",
@@ -86,6 +89,19 @@ export const translations: Record<Language, Record<string, string>> = {
     "reports.subtitle": "Trucks that entered PARC OMD.",
     "notifications.title": "Notifications",
     "admin.title": "Admin",
+
+    // ── Maintenance & Service ──
+    "Maintenance & Service": "Maintenance & Service",
+    "Service intervals per truck, from the distance Prism already measures.": "Service intervals per truck, from the distance Prism already measures.",
+    "Coming soon": "Coming soon",
+    "Oil change & filters": "Oil change & filters",
+    "Tyres": "Tyres",
+    "Will show which trucks are due or overdue for an oil change, and by how many kilometres.": "Will show which trucks are due or overdue for an oil change, and by how many kilometres.",
+    "Will show tyre age and distance since fitting, and flag sets due for replacement.": "Will show tyre age and distance since fitting, and flag sets due for replacement.",
+    "What's needed to switch it on": "What's needed to switch it on",
+    "One starting point per truck: the date and odometer of its last oil change.": "One starting point per truck: the date and odometer of its last oil change.",
+    "One starting point per truck: the date and odometer when its current tyres were fitted.": "One starting point per truck: the date and odometer when its current tyres were fitted.",
+    "Prism already measures the distance each truck covers, so nothing else has to be entered by hand — only the starting point is missing.": "Prism already measures the distance each truck covers, so nothing else has to be entered by hand — only the starting point is missing.",
 
     // ── Sign in ──
     "OMD Fleet Operations": "OMD Fleet Operations",
@@ -273,6 +289,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "nav.reports": "Rapports",
     "nav.drivers": "Chauffeurs",
     "nav.carburant": "Carburant",
+    "nav.maintenance": "Maintenance",
     "nav.notifications": "Notifications",
     "nav.admin": "Admin",
     "common.signOut": "Déconnexion",
@@ -287,6 +304,19 @@ export const translations: Record<Language, Record<string, string>> = {
     "reports.subtitle": "Camions entrés au PARC OMD.",
     "notifications.title": "Notifications",
     "admin.title": "Admin",
+
+    // ── Maintenance & Service ──
+    "Maintenance & Service": "Maintenance et entretien",
+    "Service intervals per truck, from the distance Prism already measures.": "Intervalles d'entretien par camion, à partir de la distance que Prism mesure déjà.",
+    "Coming soon": "Bientôt disponible",
+    "Oil change & filters": "Vidange et filtres",
+    "Tyres": "Pneus",
+    "Will show which trucks are due or overdue for an oil change, and by how many kilometres.": "Indiquera quels camions doivent passer à la vidange ou l'ont dépassée, et de combien de kilomètres.",
+    "Will show tyre age and distance since fitting, and flag sets due for replacement.": "Indiquera l'âge des pneus et la distance depuis leur montage, et signalera les trains à remplacer.",
+    "What's needed to switch it on": "Ce qu'il faut pour l'activer",
+    "One starting point per truck: the date and odometer of its last oil change.": "Un point de départ par camion : la date et le kilométrage de la dernière vidange.",
+    "One starting point per truck: the date and odometer when its current tyres were fitted.": "Un point de départ par camion : la date et le kilométrage de montage des pneus actuels.",
+    "Prism already measures the distance each truck covers, so nothing else has to be entered by hand — only the starting point is missing.": "Prism mesure déjà la distance parcourue par chaque camion : rien d'autre n'est à saisir, seul le point de départ manque.",
 
     // ── Sign in ──
     "OMD Fleet Operations": "Opérations de flotte OMD",

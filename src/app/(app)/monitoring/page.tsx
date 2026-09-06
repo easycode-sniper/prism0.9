@@ -138,7 +138,6 @@ export default function MonitoringPage() {
       </div>
 
       <div
-        className="mt-4"
         // EQUAL WIDTH IS RIGHT — THE COLUMN WIDTHS WERE NOT.
         //
         // An earlier pass here narrowed the right panel to 380px, on the
@@ -169,11 +168,25 @@ export default function MonitoringPage() {
         // holds the truck id intact and the row at 43px from 1280 to
         // 2560, with no horizontal scroll at any width. Long names still
         // ellipsise, which is what the title attribute is for.
-        style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 16, alignItems: "stretch" }}
+        //
+        // BELOW 1280 THE SPLIT HAS TO GO, and that was missing until a
+        // phone found it. Both tables are table-layout:fixed with one
+        // auto column, so when a panel is narrower than the fixed columns
+        // total — 514px here, 462px in UnloadedPanel — the auto column is
+        // handed ZERO and disappears. At a ~900px viewport each panel is
+        // 418px, and Driver and Dernier site were not truncated, they
+        // were gone from the page entirely. The grid is a class now
+        // rather than an inline style so .mon-grid can drop to one
+        // column; see globals.css.
+        className="mt-4 mon-grid"
       >
       <div className="flex flex-col overflow-hidden rounded-lg border bd" style={{ height: 704, minHeight: 0 }}>
-        <div className="min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
-        <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+        <div className="min-h-0 flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain", overflowX: "auto" }}>
+        {/* minWidth is the floor at which the auto Driver column still
+            gets real width: 514px of fixed columns plus ~90px. Under it
+            the table scrolls sideways inside the panel instead of
+            silently dropping a column. */}
+        <table className="w-full text-sm" style={{ tableLayout: "fixed", minWidth: 600 }}>
           <colgroup>
             {/* Truck, then the four bounded columns, at the width their
                 own content and header need; Driver absorbs the rest. */}

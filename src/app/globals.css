@@ -2246,6 +2246,27 @@ hr {
   color: var(--text);
 }
 
+/* Monitoring's two panels.
+   
+   Side by side each panel is (viewport - 64) / 2, and both tables are
+   table-layout:fixed whose fixed columns total 514px (fleet) and 462px
+   (Déchargés). A panel narrower than that hands its one auto column zero
+   width, and the column does not truncate — it disappears. At 1280 the
+   panels are 608px and everything fits, which is why the split was only
+   ever measured from 1280 up; on a ~900px screen both tables silently
+   lost a column. Below 1280 they stack instead, so each gets the whole
+   page width. */
+.mon-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 1279px) {
+  .mon-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Déchargés' third column: the site leads, the company sits under it. */
 .unl-site {
   overflow: hidden;

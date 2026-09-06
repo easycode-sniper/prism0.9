@@ -104,7 +104,7 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
         </p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto border-t bd" style={{ overscrollBehavior: "contain" }}>
+      <div className="min-h-0 flex-1 overflow-y-auto border-t bd" style={{ overscrollBehavior: "contain", overflowX: "auto" }}>
       {error && <p className="p-4 text-xs c-red">{t(error)}</p>}
 
       {rows === null && !error && (
@@ -118,7 +118,11 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
       )}
 
       {rows && rows.length > 0 && (
-        <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+        // minWidth is the floor at which the auto site column still gets
+        // real width: 462px of fixed columns plus ~140. Under it the
+        // table scrolls sideways inside the panel rather than silently
+        // dropping the column, which is what a ~900px screen was doing.
+        <table className="w-full text-sm" style={{ tableLayout: "fixed", minWidth: 600 }}>
           {/* Every column that holds a bounded value is fixed at what
               that value needs — 80px holds "23h 59", 124px holds the
               widest age this panel can print, "il y a 59 min" at 121 —

@@ -48,11 +48,6 @@ export function formatTime(value: Date | string | number): string {
   return asDate(value).toLocaleTimeString(LOCALE, TIME);
 }
 
-/** 14:05 */
-export function formatTimeShort(value: Date | string | number): string {
-  return asDate(value).toLocaleTimeString(LOCALE, TIME_SHORT);
-}
-
 /** 17/08/2026 */
 export function formatDate(value: Date | string | number): string {
   return asDate(value).toLocaleDateString(LOCALE, DATE);

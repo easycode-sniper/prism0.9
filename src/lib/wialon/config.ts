@@ -10,7 +10,7 @@
 // session, so it resolves the config with the service role instead.
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { loadWialonConfig, fetchFleetData, findUnit } from "@/lib/fleet/wialon";
+import { loadWialonConfig, findUnit } from "@/lib/fleet/wialon";
 import type {
   ResolvedWialonConfig,
   WialonPosition,
@@ -50,18 +50,6 @@ async function resolveWialonConfig(): Promise<ResolvedWialonConfig | null> {
  */
 export async function isWialonConfigured(): Promise<boolean> {
   return (await resolveWialonConfig())?.token != null;
-}
-
-export async function getFleetData(): Promise<FleetData> {
-  const config = await resolveWialonConfig();
-  if (!config) {
-    return {
-      trucks: [],
-      lastUpdated: null,
-      error: "Wialon is not configured — set the API token in Admin → Settings.",
-    };
-  }
-  return fetchFleetData(config);
 }
 
 export async function findWialonUnit(

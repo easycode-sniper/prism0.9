@@ -103,3 +103,21 @@ export function formatDuration(totalSeconds: number | null | undefined): string 
   if (h === 0) return `${m} min`;
   return `${h}h ${m}min`;
 }
+
+/**
+ * A latitude or longitude typed into an admin form, or null if it is not
+ * one. Accepts the comma decimal separator, because that is what a French
+ * or Arabic keyboard produces and what people paste out of Wialon.
+ *
+ * Lives here rather than beside either caller: the sites and stations
+ * admin actions had a byte-identical copy each, and a validator that
+ * exists twice is one that can come to disagree with itself about what a
+ * valid coordinate is.
+ */
+export function parseCoordinate(raw: string, kind: "lat" | "lng"): number | null {
+  const n = Number(String(raw).trim().replace(",", "."));
+  if (!Number.isFinite(n)) return null;
+  const limit = kind === "lat" ? 90 : 180;
+  if (n < -limit || n > limit) return null;
+  return n;
+}

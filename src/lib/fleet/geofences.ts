@@ -3,39 +3,8 @@
 // keeps the session-scoped server action that pages call.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { GeofenceRecord, GeofenceKind } from "@/lib/supabase/geofences";
-
-interface GeofenceRow {
-  id: string;
-  name: string;
-  kind: GeofenceKind;
-  site_id: string | null;
-  center_lat: number | null;
-  center_lng: number | null;
-  radius_meters: number | null;
-  polygon_geojson: string | null;
-}
-
-function geojsonToRing(geojson: string | null): [number, number][] | null {
-  if (!geojson) return null;
-  const parsed = JSON.parse(geojson) as { type: string; coordinates: [number, number][][] };
-  if (parsed.type !== "Polygon") return null;
-  // GeoJSON coordinates are [lng, lat]; this codebase uses [lat, lng].
-  return parsed.coordinates[0].map(([lng, lat]) => [lat, lng] as [number, number]);
-}
-
-export function rowsToGeofences(rows: GeofenceRow[]): GeofenceRecord[] {
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    kind: row.kind,
-    siteId: row.site_id,
-    ring: geojsonToRing(row.polygon_geojson),
-    centerLat: row.center_lat,
-    centerLng: row.center_lng,
-    radiusMeters: row.radius_meters,
-  }));
-}
+import { rowsToGeofences } from "@/lib/supabase/geofenceShape";
+import type { GeofenceRecord, GeofenceRow } from "@/lib/supabase/geofenceShape";
 
 /**
  * The factory geofence that "arrived at the factory" is tested against.

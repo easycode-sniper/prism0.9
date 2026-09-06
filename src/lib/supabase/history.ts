@@ -103,44 +103,6 @@ export async function getHistoryData(): Promise<{ data: HistoryRecord[]; error: 
   return { data: records, error: null };
 }
 
-// ── Driver Ratings ──
-// Score = % of completed runs with NEITHER a route deviation NOR a
-// speeding violation. A run only counts as "clean" if both are true.
-
-export interface DriverRating {
-  name: string;
-  totalRuns: number;
-  deviations: number;
-  speedingCount: number;
-  cleanRuns: number;
-  score: number;
-}
-
-export async function getDriverRatings(): Promise<{ data: DriverRating[]; error: string | null }> {
-  const supabase = await createClient();
-
-  // Aggregated in Postgres. This used to select every completed and
-  // stopped dispatch and reduce them here, which PostgREST silently
-  // truncates at 1000 rows — so past a thousand runs the ratings would
-  // have quietly become "the oldest thousand" while still looking like
-  // a current score. See migration 031.
-  const { data, error } = await supabase.rpc("driver_ratings");
-  if (error) return { data: [], error: error.message };
-
-  const rows = (data ?? []) as Record<string, unknown>[];
-  return {
-    data: rows.map((r) => ({
-      name: String(r.name ?? "—"),
-      totalRuns: Number(r.total_runs ?? 0),
-      deviations: Number(r.deviations ?? 0),
-      speedingCount: Number(r.speeding_count ?? 0),
-      cleanRuns: Number(r.clean_runs ?? 0),
-      score: Number(r.score ?? 100),
-    })),
-    error: null,
-  };
-}
-
 // ── Notifications ──
 
 export interface NotificationRecord {
@@ -193,57 +155,3 @@ export async function markAllNotificationsRead(): Promise<{ error: string | null
   return { error: error?.message ?? null };
 }
 
-// ── Routes ──
-
-export interface RouteData {
-  dispatch_id: string;
-  truck_id: string;
-  site_name: string | null;
-  route_geometry: [number, number][] | null;
-  total_distance_meters: number | null;
-  total_time_seconds: number | null;
-  last_lat: number | null;
-  last_lng: number | null;
-  site_lat: number | null;
-  site_lng: number | null;
-}
-
-export async function getDispatchRoute(dispatchId: string): Promise<{ data: RouteData | null; error: string | null }> {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("dispatches")
-    .select(
-      `
-      id,
-      truck_id,
-      route_geometry,
-      route_total_distance_meters,
-      route_total_time_seconds,
-      last_lat,
-      last_lng,
-      site:construction_sites(name, lat, lng)
-    `
-    )
-    .eq("id", dispatchId)
-    .single();
-
-  if (error) return { data: null, error: error.message };
-
-  const site = data.site as any;
-  return {
-    data: {
-      dispatch_id: data.id,
-      truck_id: data.truck_id,
-      site_name: Array.isArray(site) ? site[0]?.name : site?.name || null,
-      route_geometry: data.route_geometry,
-      total_distance_meters: data.route_total_distance_meters,
-      total_time_seconds: data.route_total_time_seconds,
-      last_lat: data.last_lat,
-      last_lng: data.last_lng,
-      site_lat: Array.isArray(site) ? site[0]?.lat : site?.lat ?? null,
-      site_lng: Array.isArray(site) ? site[0]?.lng : site?.lng ?? null,
-    },
-    error: null,
-  };
-}

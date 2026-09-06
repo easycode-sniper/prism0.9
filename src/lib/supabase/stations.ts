@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { parseCoordinate } from "@/lib/geometry";
 import { isAdmin } from "@/lib/supabase/auth";
 
 export interface GasStation {
@@ -44,14 +45,6 @@ export async function listGasStations(): Promise<{ data: GasStation[]; error: st
 /** Algeria sits well inside these, but the check is the global range —
  *  the point is to reject a transposed pair or a stray digit, not to
  *  refuse a station the operator really does have somewhere unexpected. */
-function parseCoordinate(raw: string, kind: "lat" | "lng"): number | null {
-  const n = Number(String(raw).trim().replace(",", "."));
-  if (!Number.isFinite(n)) return null;
-  const limit = kind === "lat" ? 90 : 180;
-  if (n < -limit || n > limit) return null;
-  return n;
-}
-
 export async function createGasStation(
   name: string,
   latRaw: string,

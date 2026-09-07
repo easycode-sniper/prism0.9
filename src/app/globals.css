@@ -608,18 +608,16 @@ input::placeholder, textarea::placeholder {
   border: 1px solid var(--line);
 }
 
-.brand-title {
-  font-family: var(--font-mono);
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
+/* The operator name is the whole wordmark now. The app's own title used
+   to sit above it at 1rem mono and was the widest thing in the header
+   that told an operator nothing they did not know — it is still in the
+   DOM for the document outline (see TopbarNav), just not drawn. Sized
+   as a label rather than a heading, because next to the mark it is
+   identification, not a title. */
 .brand-sub {
   display: block;
-  margin-top: 1px;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 600;
   color: var(--text-dim);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -656,10 +654,17 @@ input::placeholder, textarea::placeholder {
 .ops-pill { padding: 7px 14px; border-radius: var(--r-pill); }
 
 /* Each boundary is the width the tier below it actually needs, measured
-   against this font stack rather than guessed: 1589, 1477, 1398 and 959
-   px of viewport for the four steps, rounded up for margin. Set any of
-   them lower and the tab strip is clipped at the top of its own tier. */
-@media (max-width: 1599px) {
+   against this font stack rather than guessed. Set any of them lower and
+   the tab strip is clipped at the top of its own tier — which is exactly
+   what happened here.
+
+   RE-MEASURED 2026-09-07 for ELEVEN tabs. The old numbers were taken
+   when the comment above still said "nine tabs"; Clients was added
+   later and an admin also sees Admin, so every tier was one or two tabs
+   short of the truth and 1600px was clipping. At full size the strip
+   now needs 1102px and the header leaves it 1052px at 1600, so the
+   first step starts at 1699 rather than 1599. */
+@media (max-width: 1699px) {
   #tabs .seg-item { padding: 6px 10px; font-size: 0.78rem; gap: 5px; }
   #topbar-stats { gap: 10px; }
 }
@@ -695,6 +700,58 @@ input::placeholder, textarea::placeholder {
    1366x768 laptop ended up with no logo and no name at all. */
 @media (max-width: 1279px) {
   .brand-text { display: none; }
+}
+
+/* THE TABS TAKE A ROW OF THEIR OWN, AND WRAP. Below about 1180 the
+   labelled strip needs 832px and the first row has less than that, and
+   every tier above has already spent what padding and type had to give.
+   The next saving would be the labels — icons alone fit to 700px — but
+   the owner ruled that out on 2026-09-07: an icon without its word is
+   not a tab you can find, and a header that fits by becoming unreadable
+   has not been fixed. DO NOT re-introduce an icon-only tier.
+
+   So the width comes from the layout instead. The strip moves to its own
+   full-width row and is allowed to wrap onto a second and third, which
+   keeps every label legible and — the actual ask — means nothing is ever
+   reached by scrolling sideways. The header grows taller on a narrow
+   screen, which is the right thing to spend: vertical space is what a
+   phone has. */
+@media (max-width: 1179px) {
+  .topbar {
+    grid-template-columns: auto 1fr;
+    row-gap: 9px;
+  }
+
+  .topbar > .brand { grid-column: 1; grid-row: 1; }
+  .topbar > #topbar-stats { grid-column: 2; grid-row: 1; justify-self: end; }
+
+  /* Both columns, so the strip is measured against the whole header
+     rather than against what the first row happened to leave over. */
+  .topbar > #tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+  }
+
+  #tabs {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 2px;
+    /* The pill shape is for a single line. Two or three rows of tabs in
+       a 999px-radius capsule pinches the corner items; a panel radius
+       reads as the block it has become. */
+    border-radius: var(--r-md);
+  }
+}
+
+/* Phones: the shell's own margins are the cheapest width to give back to
+   a strip that is now wrapping, and every 8px saved is roughly one
+   fewer wrapped row over the course of eleven tabs. */
+@media (max-width: 699px) {
+  .topbar {
+    padding: 10px 12px;
+    margin: 10px 8px 0;
+  }
 }
 
 /* Belt and braces. The fit above is measured, but it is measured

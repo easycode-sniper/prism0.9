@@ -69,6 +69,11 @@ export const SAME_IN_FRENCH = new Set<string>([
   "clients.title",
   "clients.filter.all",
   "Client",
+  // The operator's own name, so it does not translate. It used to differ
+  // only in the half that was dropped on 2026-09-07 ("· Amouda Line" /
+  // "· Ligne Amouda"), which is why this needed listing then and not
+  // before.
+  "brand.subtitle",
   // Units and words French spells the same way.
   "Litres",
   "L/100km",
@@ -79,7 +84,7 @@ export const SAME_IN_FRENCH = new Set<string>([
 export const translations: Record<Language, Record<string, string>> = {
   en: {
     "brand.title": "Fleet Route Monitor",
-    "brand.subtitle": "OMD Transport · Amouda Line",
+    "brand.subtitle": "OMD Transport",
     "nav.dashboard": "Dashboard",
     "nav.dispatch": "Dispatch",
     "nav.monitoring": "Monitoring",
@@ -328,7 +333,7 @@ export const translations: Record<Language, Record<string, string>> = {
   },
   fr: {
     "brand.title": "Suivi des itinéraires",
-    "brand.subtitle": "OMD Transport · Ligne Amouda",
+    "brand.subtitle": "OMD Transport",
     "nav.dashboard": "Tableau de bord",
     "nav.dispatch": "Répartition",
     "nav.monitoring": "Surveillance",
@@ -575,7 +580,7 @@ export const translations: Record<Language, Record<string, string>> = {
   },
   ar: {
     "brand.title": "مراقبة مسارات الأسطول",
-    "brand.subtitle": "OMD للنقل · خط أموداء",
+    "brand.subtitle": "OMD للنقل",
     "nav.dashboard": "لوحة التحكم",
     "nav.dispatch": "الإرسال",
     "nav.monitoring": "المراقبة",

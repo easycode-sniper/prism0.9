@@ -20,6 +20,7 @@
 
 import { useMemo } from "react";
 import type { OpsRange } from "@/lib/dashboard/range";
+import { monthStart, monthEnd, addMonths } from "@/lib/dashboard/range";
 import { opsToday, opsNowLocalValue, OPS_TIMEZONE } from "@/lib/format";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 
@@ -29,24 +30,10 @@ function opsDayOffset(days: number): string {
   return opsNowLocalValue(days).slice(0, 10);
 }
 
-function monthStart(iso: string): string {
-  return `${iso.slice(0, 7)}-01`;
-}
-
-/** The last day of the month `iso` falls in. Day 0 of the NEXT month is
- *  the last of this one, and Date does the roll-over, so December needs
- *  no special case. Built in UTC to keep it off the local calendar. */
-function monthEnd(iso: string): string {
-  const [y, m] = iso.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m, 0));
-  return d.toISOString().slice(0, 10);
-}
-
-function addMonths(iso: string, delta: number): string {
-  const [y, m] = iso.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-  return d.toISOString().slice(0, 10);
-}
+// monthStart, monthEnd and addMonths come from lib/dashboard/range now.
+// They were written here first and previousRange needed the same three;
+// two copies of a month boundary is how the presets and the comparison
+// under them come to disagree about when a month ends.
 
 export interface Preset {
   key: string;
@@ -95,6 +82,25 @@ interface Props {
   /** Shown beside the control: how many days actually carry data in the
    *  chosen window, so the page never promises more than it has. */
   daysWithData?: number | null;
+}
+
+/**
+ * Which preset a range IS, if any — the one drawn as pressed.
+ *
+ * Exported because the dashboard needs the same answer to pick a
+ * comparison window: "This month" and "7 days" are the same range on the
+ * 7th of a month, and the delta under the scorecards has to describe
+ * whichever of the two the control is showing as active rather than
+ * disagreeing with the button the reader can see.
+ *
+ * First match wins, which is why that is the answer: `buildPresets`
+ * lists 7d before month, so on the 7th both this and the highlight say
+ * "7 days".
+ */
+export function presetKeyFor(range: OpsRange): string | undefined {
+  return buildPresets().find(
+    (p) => p.range.from === range.from && p.range.to === range.to
+  )?.key;
 }
 
 export default function RangeBar({ value, onChange, daysWithData }: Props) {

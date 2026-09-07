@@ -1489,6 +1489,41 @@ hr {
    glyph and the words instead. */
 .dash-delta { font-family: var(--font-mono); color: var(--text); }
 
+/* The period-over-period line, under the foot rather than replacing it:
+   "344 fills" and "up 12% on last week" answer different questions and
+   the strip has room for both.
+
+   ACHROMATIC, for the reason above and one more: kilometres up 12% is
+   not good or bad on its own, so colouring it would assert a judgement
+   the number does not carry. The glyph does the work. */
+.dash-kpi__delta {
+  margin-top: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 0.66rem;
+  line-height: 1.25;
+  font-family: var(--font-mono);
+  color: var(--text);
+  min-width: 0;
+}
+
+/* Slightly dimmer than the figure it points at: the arrow is a
+   modifier, and at full cream two glyphs of equal weight sit beside the
+   percentage arguing about which to read first. */
+.dash-kpi__delta-glyph { color: var(--text-dim); flex: none; }
+
+/* The one part allowed to disappear. In a fifth of the strip's width
+   the percentage is the message and "vs the previous 7 days" is the
+   footnote — and it is the same footnote on all five cards, so losing it
+   at a narrow width costs nothing that is not repeated four times over. */
+.dash-kpi__delta-vs {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Sortable table header ────────────────────────────────────
    A column you can sort has to look like one before it is clicked, or
    the only way to find out is to click every header. The label carries a

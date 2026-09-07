@@ -48,8 +48,10 @@ import {
   crosshairPlugin,
   doughnutCentrePlugin,
 } from "@/lib/chartTheme";
-import RangeBar, { buildPresets, describeRange } from "@/components/dashboard/RangeBar";
+import RangeBar, { buildPresets, describeRange, presetKeyFor } from "@/components/dashboard/RangeBar";
 import type { OpsRange } from "@/lib/dashboard/range";
+import { previousRange, daysInRange } from "@/lib/dashboard/range";
+import { periodDelta } from "@/lib/dashboard/delta";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
 import { opsToday } from "@/lib/format";
@@ -324,6 +326,12 @@ export default function DashboardPage() {
   const { fleetData, notifications, dispatches } = useFleet();
 
   const [fuel, setFuel] = useState<FuelPeriodStats | null>(null);
+  // The same five figures for the window before this one, for the deltas
+  // under the scorecards. Held separately rather than folded into `fuel`
+  // so a comparison that cannot be made — All time has nothing before it
+  // — is `null` rather than a set of zeroes that would read as a 100%
+  // collapse.
+  const [prevFuel, setPrevFuel] = useState<FuelPeriodStats | null>(null);
   const [series, setSeries] = useState<DashboardSeries | null>(null);
   // Defaults to the last 30 ops days: the widest window the old control
   // offered, so a returning reader sees roughly what they saw before
@@ -348,15 +356,27 @@ export default function DashboardPage() {
   useEffect(() => {
     let cancelled = false;
     setDataError(null);
+    // Six now: the sixth is the same scorecard query over the previous
+    // window. In the same Promise.all deliberately — a delta that
+    // arrived after the number it sits under would make every range
+    // change flicker through a state where the figure is right and the
+    // comparison beneath it still describes the last window.
+    const comparison = previousRange(range, { calendar: presetKeyFor(range) === "month" });
     void Promise.all([
       getFuelPeriodStats(range),
       getDashboardSeries(range),
       getDriverVariance(500, range),
       getTruckVariance(500, range),
       getDriverSpeeding(100, range),
+      comparison ? getFuelPeriodStats(comparison) : Promise.resolve({ stats: undefined, error: undefined }),
     ])
-      .then(([f, s, dv, tv, sp]) => {
+      .then(([f, s, dv, tv, sp, pf]) => {
         if (cancelled) return;
+        // The comparison's own error is NOT folded into dataError below:
+        // the page is still correct without a delta, and failing the
+        // whole dashboard because the previous week would not load would
+        // trade a working page for a missing footnote.
+        setPrevFuel(pf.stats ?? null);
         // First error wins. They share a range and a round trip, so if
         // one signature is wrong they all are — reporting five copies of
         // the same sentence would only bury it.
@@ -374,6 +394,28 @@ export default function DashboardPage() {
       cancelled = true;
     };
   }, [range]);
+
+  /**
+   * What the deltas are measured against, in the reader's words.
+   *
+   * Named from the PRESET rather than built from the dates, because
+   * "vs 25 Aug → 31 Aug" makes someone do the arithmetic to find out it
+   * means last week. Falls back to the day count for a typed range,
+   * where there is no name to use.
+   */
+  const comparisonLabel = useMemo(() => {
+    const comparison = previousRange(range, { calendar: presetKeyFor(range) === "month" });
+    if (!comparison || !comparison.from || !comparison.to) return "";
+    switch (presetKeyFor(range)) {
+      case "today": return t("vs yesterday");
+      case "yesterday": return t("vs the day before");
+      case "7d": return t("vs the previous 7 days");
+      case "30d": return t("vs the previous 30 days");
+      case "month": return t("vs the same days last month");
+      case "lastMonth": return t("vs the month before");
+      default: return t("vs the previous {n} days", { n: daysInRange(comparison.from, comparison.to) });
+    }
+  }, [range, t]);
 
   const trucks = fleetData.trucks;
 
@@ -592,14 +634,22 @@ export default function DashboardPage() {
           four gutters were most of what made this strip look heavy — the
           numbers were never the problem. */}
       <div className="kpi-strip">
-        <Kpi label={t("Kilometres driven")} value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? t("{n} fills", { n: nf(fuel.fills) }) : ""}  failed={dataError != null} />
-        <Kpi label={t("Litres consumed")} value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? t("incl. {n} L with no km logged", { n: nf(fuel.unpairedLitres) }) : ""}  failed={dataError != null} />
-        <Kpi label={t("Amount filled")} value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? t("{n} fills logged amount only", { n: nf(fuel.unpairedFills) }) : t("paid at the pump")}  failed={dataError != null} />
+        <Kpi label={t("Kilometres driven")} value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? t("{n} fills", { n: nf(fuel.fills) }) : ""}
+          delta={periodDelta(fuel?.km, prevFuel?.km, "km", nf, t)} deltaLabel={comparisonLabel} failed={dataError != null} />
+        <Kpi label={t("Litres consumed")} value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? t("incl. {n} L with no km logged", { n: nf(fuel.unpairedLitres) }) : ""}
+          delta={periodDelta(fuel?.litres, prevFuel?.litres, "L", nf, t)} deltaLabel={comparisonLabel} failed={dataError != null} />
+        <Kpi label={t("Amount filled")} value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? t("{n} fills logged amount only", { n: nf(fuel.unpairedFills) }) : t("paid at the pump")}
+          delta={periodDelta(fuel?.amountDa, prevFuel?.amountDa, "DA", nf, t)} deltaLabel={comparisonLabel} failed={dataError != null} />
         <Kpi
           label={t("Average consumption")}
           value={fuel?.litresPer100Km != null ? fuel.litresPer100Km.toFixed(2) : null}
           unit="L/100km"
           foot={fuel ? t("{n} fills with km logged", { n: nf(fuel.fills - fuel.unpairedFills) }) : ""}
+          // Two decimals, not nf's thousands separator: this figure is
+          // 45.68, and rounding the CHANGE in it to a whole number would
+          // report every real movement as zero.
+          delta={periodDelta(fuel?.litresPer100Km, prevFuel?.litresPer100Km, "L/100km", (n) => n.toFixed(2), t)}
+          deltaLabel={comparisonLabel}
           failed={dataError != null}
         />
         <Kpi
@@ -607,6 +657,8 @@ export default function DashboardPage() {
           value={fuel ? nf(fuel.varianceDa) : null}
           unit="DA"
           foot={fuel ? (fuel.varianceDa > 0 ? t("▲ over the assumed rate") : t("▼ under the assumed rate")) : ""}
+          delta={periodDelta(fuel?.varianceDa, prevFuel?.varianceDa, "DA", nf, t)}
+          deltaLabel={comparisonLabel}
           failed={dataError != null}
         />
       </div>
@@ -1096,12 +1148,20 @@ function Kpi({
   value,
   unit,
   foot,
+  delta,
+  deltaLabel,
   failed,
 }: {
   label: string;
   value: string | null;
   unit: string;
   foot: string;
+  /** Null when there is no comparable window — All time, or a load that
+   *  failed. The line is then absent rather than showing a dash, which
+   *  would read as "no change". */
+  delta?: { glyph: string; text: string } | null;
+  /** What the comparison is against, e.g. "vs previous 7 days". */
+  deltaLabel?: string;
   /** True when the load finished and failed. A skeleton then is a lie:
    *  nothing is still coming. */
   failed?: boolean;
@@ -1128,6 +1188,21 @@ function Kpi({
           {value === null ? (failed ? t("unavailable") : t("reading the sheet…")) : foot}
         </span>
       </div>
+      {/* ACHROMATIC, per the note on .dash-delta in globals.css: green
+          up / red down is what every dashboard does and what this one
+          cannot, because green already means a truck that is moving and
+          red one that is off route. The glyph carries the direction.
+
+          It is also the right call on the merits here — "kilometres up
+          12%" is not good or bad on its own, and colouring it would
+          assert a judgement the number does not support. */}
+      {value !== null && delta && (
+        <div className="dash-kpi__delta">
+          <span className="dash-kpi__delta-glyph">{delta.glyph}</span>
+          <span>{delta.text}</span>
+          {deltaLabel && <span className="dash-kpi__delta-vs">{deltaLabel}</span>}
+        </div>
+      )}
     </div>
   );
 }

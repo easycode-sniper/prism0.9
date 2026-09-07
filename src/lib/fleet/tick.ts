@@ -290,7 +290,15 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
       // up in the tick's warnings rather than costing an alert.
       const mailWarnings = await runBlacklistedStationCheck(
         supabase,
-        trucks.filter((t) => t.status === "idle"),
+        // EVERY vehicle, unfiltered — the check owns the status rules now.
+        // This used to pass `status === "idle"`, and that filter was the
+        // bug: a truck that drove away was never in the list the
+        // departure branch loops over, so it was never seen to leave and
+        // stayed flagged, and a flagged truck returning to the same
+        // station raises nothing. Splitting the rule between here and
+        // there is what allowed the two halves to disagree, so the
+        // decision lives in one place.
+        trucks,
         (stationRows ?? []).map((r) => ({
           id: r.id as string,
           name: r.name as string,

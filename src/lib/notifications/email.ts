@@ -226,3 +226,61 @@ export async function sendStationStopEmails(alerts: StationStopAlert[]): Promise
 
   return warnings;
 }
+
+/**
+ * Send one test message to ALERT_EMAIL_TO, and say plainly what happened.
+ *
+ * UNLIKE sendStationStopEmails, this reports failure loudly. That
+ * function swallows errors into warnings because it runs behind an alert
+ * that must not be lost; this one exists precisely so an admin can find
+ * out whether the credentials work, so the mail server's own words are
+ * the whole point of calling it.
+ *
+ * It exists because the alert it verifies is rare — four in the first ten
+ * days — so without it a wrong password is discovered days later, as a
+ * line in a log nobody is watching.
+ */
+export async function sendTestEmail(): Promise<{ ok: boolean; to?: string[]; error?: string }> {
+  const read = readConfig();
+  if ("reason" in read) return { ok: false, error: `Email is ${read.reason}` };
+  const { config } = read;
+
+  const at = new Date();
+  const transport = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: { user: config.user, pass: config.pass },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 15_000,
+  });
+
+  try {
+    await transport.sendMail({
+      from: config.from,
+      to: config.to,
+      subject: "Prism test — blacklisted-station alerts are configured",
+      text: [
+        "This is a test from Prism's admin settings. Nothing has happened to a truck.",
+        "",
+        "It confirms that when a truck does stop at a blacklisted station, the alert",
+        "will reach this address.",
+        "",
+        `Sent:   ${stampAlgiers(at)} (Africa/Algiers)`,
+        `From:   ${config.from}`,
+        `Server: ${config.host}:${config.port}`,
+        "",
+        "— Prism, automatically. Nobody is monitoring replies to this address.",
+      ].join("\n"),
+    });
+    return { ok: true, to: config.to };
+  } catch (err) {
+    // Handed back verbatim. A wrong app password, a blocked port and a
+    // refused relay are three different problems with three different
+    // fixes, and only the server can tell them apart.
+    return { ok: false, error: (err as Error).message };
+  } finally {
+    transport.close();
+  }
+}

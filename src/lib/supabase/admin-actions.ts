@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { sendTestEmail } from "@/lib/notifications/email";
 import { loadWialonConfig, probeWialonZones, type WialonResourceShape } from "@/lib/fleet/wialon";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { MIN_PASSWORD_LENGTH } from "@/lib/constants";
@@ -278,4 +279,21 @@ export async function adminProbeWialonZones(): Promise<{
   if (!config) return { resources: [], error: "Wialon is not configured" };
 
   return probeWialonZones(config);
+}
+
+/**
+ * Send a test alert email, so an admin can verify the SMTP credentials
+ * without waiting for a truck to stop at a blacklisted station.
+ *
+ * That wait is the reason this exists: the alert fired four times in its
+ * first ten days, so a wrong password would otherwise surface days later
+ * as a warning in a log nobody reads. The failure text is the mail
+ * server's own — a wrong app password, a blocked port and a refused
+ * relay need different fixes and only it can tell them apart.
+ */
+export async function adminSendTestAlertEmail(): Promise<{ ok: boolean; to?: string[]; error?: string }> {
+  const check = await requireAdmin();
+  if (check.error) return { ok: false, error: check.error };
+
+  return sendTestEmail();
 }

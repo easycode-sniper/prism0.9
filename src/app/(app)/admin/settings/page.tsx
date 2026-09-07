@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { adminGetSettings, adminSaveSettings, adminProbeWialonZones } from "@/lib/supabase/admin-actions";
+import {
+  adminGetSettings,
+  adminSaveSettings,
+  adminProbeWialonZones,
+  adminSendTestAlertEmail,
+} from "@/lib/supabase/admin-actions";
 import type { AppSettings } from "@/lib/supabase/admin-actions";
 import type { WialonResourceShape } from "@/lib/fleet/wialon";
 
@@ -17,6 +22,16 @@ export default function AdminSettingsPage() {
   const [probe, setProbe] = useState<WialonResourceShape[] | null>(null);
   const [probing, setProbing] = useState(false);
   const [probeError, setProbeError] = useState<string | null>(null);
+
+  const [mailTesting, setMailTesting] = useState(false);
+  const [mailResult, setMailResult] = useState<{ ok: boolean; to?: string[]; error?: string } | null>(null);
+
+  async function runMailTest() {
+    setMailTesting(true);
+    setMailResult(null);
+    setMailResult(await adminSendTestAlertEmail());
+    setMailTesting(false);
+  }
 
   async function runProbe() {
     setProbing(true);
@@ -134,6 +149,34 @@ export default function AdminSettingsPage() {
           {saving ? "Saving..." : "Save Settings"}
         </button>
       </form>
+
+      {/* The blacklisted-station alert is emailed as well as shown in the
+          app, and it fires rarely — four times in its first ten days — so
+          without this a wrong password is found days later, in a log
+          nobody is watching. Sends a real message; changes nothing. */}
+      <div className="rounded-lg border bd bg-panel p-6 mt-6">
+        <h2 className="text-lg font-medium t-primary">Alert email</h2>
+        <p className="mt-1 text-sm t-dim">
+          Sends one test message to the alert address, to confirm a truck stopping at a
+          blacklisted station will actually reach it. No truck data is touched.
+        </p>
+
+        <button type="button" onClick={runMailTest} disabled={mailTesting}
+          className="btn-sm mt-4" style={{ width: "auto" }}>
+          {mailTesting ? "Sending…" : "Send test email"}
+        </button>
+
+        {mailResult?.ok && (
+          <div className="mt-3 rounded-md tint-green p-3 text-sm c-green">
+            Sent to {mailResult.to?.join(", ")}. If it does not arrive within a minute, check the spam folder.
+          </div>
+        )}
+        {mailResult && !mailResult.ok && (
+          <div className="mt-3 rounded-md tint-red p-3 text-sm c-red">
+            {mailResult.error}
+          </div>
+        )}
+      </div>
 
       {/* Read-only diagnostic. Answers whether Wialon's geofences already
           arrive in the resource search the Drivers page runs — the flags

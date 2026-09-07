@@ -7,15 +7,22 @@
 // file becomes a public HTTP endpoint, and these take a Supabase client
 // as their first argument — which cannot cross that boundary, and
 // shouldn't be callable from a browser regardless.
+//
+// Imports are RELATIVE, with the .ts extension, the way lib/fleet/
+// siteZones.ts does it: the "@/" alias is a tsconfig path that bare node
+// cannot resolve, and scripts/check-station-transitions.mts loads this
+// module directly to test the arrival/departure transitions. The type
+// imported from supabase/geofenceShape rather than supabase/geofences is
+// the same rule — the latter is "use server" and drags in next/headers.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence, pointInPolygon } from "@/lib/geometry";
-import type { GeofenceRecord } from "@/lib/supabase/geofences";
-import { selectFactoryGeofence } from "@/lib/fleet/geofences";
-import { sendStationStopEmails } from "@/lib/notifications/email";
-import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH, stationWatchRadius } from "@/lib/constants";
-import { boundSiteZone, siteZoneAt, type SiteZone, type BoundedSiteZone } from "@/lib/fleet/siteZones";
-export type { SiteZone } from "@/lib/fleet/siteZones";
+import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence, pointInPolygon } from "../geometry/index.ts";
+import type { GeofenceRecord } from "../supabase/geofenceShape.ts";
+import { selectFactoryGeofence } from "./geofences.ts";
+import { sendStationStopEmails } from "../notifications/email.ts";
+import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH, stationWatchRadius } from "../constants.ts";
+import { boundSiteZone, siteZoneAt, type SiteZone, type BoundedSiteZone } from "./siteZones.ts";
+export type { SiteZone } from "./siteZones.ts";
 
 export interface PositionCheckResult {
   truckId: string;
@@ -344,6 +351,10 @@ export interface ZoneTruck {
    *  which is a fleet-wide transition like the zones but tests the
    *  truck's speed rather than where it is. */
   speed?: number;
+  /** Needed by the blacklisted-station check, which alerts only on a
+   *  truck that has STOPPED but must watch a moving one to notice it
+   *  leave. Optional because the zone checks do not care. */
+  status?: "moving" | "idle" | "offline";
 }
 
 /** A truck that survived the position filter, so its fix is real. */
@@ -873,6 +884,24 @@ export interface BlacklistStation {
  * zone shape does not survive 51 stations. Moving from one blacklisted
  * station to another is therefore a real transition and alerts again.
  *
+ * ARRIVAL IS IDLE-ONLY; DEPARTURE IS NOT. This used to receive only idle
+ * trucks, which made a truck that DROVE AWAY invisible to the departure
+ * branch — it was never in the list, so it was never seen to leave and
+ * its flag stayed set. Found live on 2026-09-07: 00032-523-35 was 49km
+ * from GD YOUB DAOUD, moving, and still flagged as being there. The flag
+ * only cleared when the truck next happened to go idle somewhere else,
+ * and until it did, a return to the SAME station hit the
+ * `now?.id === before` guard and raised nothing — the silent miss this
+ * function's own note warns about ("a truck that never leaves can never
+ * be seen to arrive again").
+ *
+ * So the caller now passes EVERY truck and this function decides. The
+ * split rule — caller filters for the alert, callee assumes it — is what
+ * let the two halves disagree without anything noticing. Offline is
+ * dropped here, on the reasoning the speeding check uses: a truck that
+ * stopped reporting has not been seen to leave, and clearing its flag
+ * would re-alert the moment its tracker came back.
+ *
  * Also emails the fuel desk, because this is the one alert that is only
  * useful while the truck is still on the forecourt and nobody is
  * watching the screen at 06:00. Returns the mail warnings rather than
@@ -887,14 +916,27 @@ export async function runBlacklistedStationCheck(
   const warnings: string[] = [];
   const watched = stations.filter((s) => s.blacklisted);
 
+  // OFFLINE IS EXCLUDED HERE, not by the caller. A truck whose tracker
+  // went quiet has not been seen to leave, and clearing its flag would
+  // re-alert the moment it reported again — the flapping the speeding
+  // check avoids the same way. It is done here because the caller used
+  // to do the filtering, got it wrong, and nothing could notice: one
+  // place decides which trucks this check considers.
   const positioned = freshestPerTruck(
-    trucks.filter((t): t is PositionedTruck => t.lat != null && t.lng != null)
+    trucks.filter(
+      (t): t is PositionedTruck =>
+        t.lat != null && t.lng != null && t.status !== "offline"
+    )
   );
 
-  // Where each truck is stopped now: the NEAREST blacklisted station
-  // whose watch radius contains it. Nearest rather than first, so two
-  // overlapping watch circles cannot make the answer depend on row
-  // order — and moving between them stays a clean transition.
+  // Where each truck is now: the NEAREST blacklisted station whose watch
+  // radius contains it. Nearest rather than first, so two overlapping
+  // watch circles cannot make the answer depend on row order — and
+  // moving between them stays a clean transition.
+  //
+  // Computed for every truck with a fix, not just stopped ones, so that
+  // a truck edging across the forecourt still reads as being there and
+  // does not look like a departure.
   const nowAt = new Map<string, BlacklistStation>();
   for (const t of positioned) {
     let best: { station: BlacklistStation; metres: number } | null = null;
@@ -927,6 +969,13 @@ export async function runBlacklistedStationCheck(
     const before = wasAt.get(t.truck_id) ?? null;
     if (now?.id === before) continue;
     if (now) {
+      // PRESENCE IS NOT ARRIVAL. nowAt is computed for every truck with a
+      // fix so that a truck creeping across the forecourt still counts as
+      // being there, but only a STOPPED truck raises the alert — a truck
+      // driving through a watch circle is the case the idle rule exists
+      // to ignore. It is also not flagged, so it still alerts properly if
+      // it comes back and parks.
+      if (t.status !== undefined && t.status !== "idle") continue;
       const list = arrivedByStation.get(now.id) ?? [];
       list.push(t.truck_id);
       arrivedByStation.set(now.id, list);

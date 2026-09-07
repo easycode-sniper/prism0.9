@@ -3,8 +3,8 @@
 // keeps the session-scoped server action that pages call.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { rowsToGeofences } from "@/lib/supabase/geofenceShape";
-import type { GeofenceRecord, GeofenceRow } from "@/lib/supabase/geofenceShape";
+import { rowsToGeofences } from "../supabase/geofenceShape.ts";
+import type { GeofenceRecord, GeofenceRow } from "../supabase/geofenceShape.ts";
 
 /**
  * The factory geofence that "arrived at the factory" is tested against.

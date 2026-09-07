@@ -241,3 +241,105 @@ export async function getReportableTrucks(): Promise<{
   if (error) return { data: [], error: error.message };
   return { data: (data ?? []) as { truck_id: string; name: string | null }[], error: null };
 }
+
+// ── Rapport Livraisons ────────────────────────────────────────
+//
+// The same zone_visits log Geo reads, turned ninety degrees: Geo is one
+// truck across every zone, this is every truck across the client sites
+// only. The plant is excluded in SQL rather than filtered here — across
+// 46 trucks every delivery is bracketed by an Attente and a Chargement
+// row, so a fleet-wide read that included them would be two thirds
+// plant and the cap would be spent on rows nobody asked for.
+
+export interface FleetSiteVisit {
+  truck_id: string;
+  /** Stamped per visit, so a truck that changed hands mid-period shows
+   *  both drivers on the rows they actually drove. */
+  driver_name: string | null;
+  zone_name: string;
+  /** From public.clients, falling back to construction_sites.client.
+   *  Null for a site in neither — 8 of the 130 delivery points have no
+   *  site row at all (migration 051). */
+  client_name: string | null;
+  site_id: string | null;
+  entered_at: string;
+  /** Null while the truck is still on site. */
+  exited_at: string | null;
+  /** Null for the same reason: an open visit has no duration yet. */
+  seconds_on_site: number | null;
+}
+
+export interface FleetSiteTotalRow {
+  truck_id: string;
+  deliveries: number;
+  /** Distinct site_id, not distinct name — the Wialon export carries
+   *  typos on both sides and two spellings of one site would count as
+   *  two places. */
+  sites: number;
+  closed_visits: number;
+  total_seconds: number;
+  last_site: string | null;
+  last_entered: string | null;
+  /** Distinct sites across the WHOLE fleet in the range — the same value
+   *  on every row. Not the sum of `sites` above, which counts a site once
+   *  per truck that went there: over one week that read 152 against a
+   *  true 36. Computed in SQL rather than from the visit list because
+   *  that list is capped. */
+  fleet_sites: number;
+}
+
+/** Every client-site visit the fleet made in the range, grouped by truck.
+ *
+ *  OVERLAP, not entry time — 042's rule, so this and Geo cannot disagree
+ *  about which day a delivery belongs to. */
+export async function getFleetSiteVisits(
+  fromIso: string,
+  toIso: string
+): Promise<{ data: FleetSiteVisit[]; truncated: boolean; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], truncated: false, error: "Not authenticated" };
+
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], truncated: false, error: invalid };
+
+  // Asked for explicitly, and it matters more here than it does on Geo:
+  // this is the whole fleet, so the cap is reachable on a wide range,
+  // and PostgREST truncates at its own limit without erroring. A
+  // silently partial report is the failure this codebase keeps paying
+  // for.
+  const { data, error } = await supabase
+    .rpc("fleet_site_visits", { p_from: fromIso, p_to: toIso })
+    .limit(MAX_ROWS + 1);
+
+  if (error) return { data: [], truncated: false, error: error.message };
+
+  const rows = (data ?? []) as FleetSiteVisit[];
+  return { data: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS, error: null };
+}
+
+/** One row per truck, for the strip above the table.
+ *
+ *  Aggregated in Postgres for the reason 041 exists — a total summed
+ *  from the capped list above would be wrong without saying so. One row
+ *  per truck is ~50 rows and cannot itself be truncated, so the page may
+ *  safely add these up for the fleet-wide figures. */
+export async function getFleetSiteTotals(
+  fromIso: string,
+  toIso: string
+): Promise<{ data: FleetSiteTotalRow[]; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], error: "Not authenticated" };
+
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], error: invalid };
+
+  const { data, error } = await supabase.rpc("fleet_site_totals", {
+    p_from: fromIso,
+    p_to: toIso,
+  });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as FleetSiteTotalRow[], error: null };
+}

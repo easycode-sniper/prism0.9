@@ -6,9 +6,13 @@ import {
   getGeoVisits,
   getGeoTotals,
   getReportableTrucks,
+  getFleetSiteVisits,
+  getFleetSiteTotals,
   type ParcEntry,
   type GeoVisit,
   type GeoTotalRow,
+  type FleetSiteVisit,
+  type FleetSiteTotalRow,
 } from "@/lib/supabase/reports";
 import {
   formatOpsDateTime,
@@ -41,7 +45,12 @@ import TruckCombobox from "@/components/forms/TruckCombobox";
 // Geo brings it back for that template alone: the whole question it
 // answers is "where did THIS truck spend its time", so the truck is not
 // a filter over the report, it is the report's subject.
-type Report = "parc" | "geo";
+// Livraisons was added 2026-09-07: the same zone_visits log as Geo, read
+// across the fleet with the plant left out. It is the fleet-wide report
+// Rapport Usine used to be and is not a revival of it — Usine asked what
+// the whole fleet did AT AMOUDA and could not see a client site, which
+// is the exact half this one keeps.
+type Report = "parc" | "geo" | "livraisons";
 type QuickRange = "today" | "yesterday" | "week" | "month";
 
 function startOfRange(range: QuickRange): { from: string; to: string } {
@@ -101,6 +110,30 @@ const GEO_COLUMNS = [
 // in every exported row.
 const GEO_COPY_AFTER = "Heure sortie";
 
+// Truck first, because the question is "where did each truck deliver"
+// and the rows arrive grouped that way. Client sits under the site
+// rather than beside it in the table, but stays its own column here —
+// the export is read in a spreadsheet, where a merged cell is worse
+// than a repeated one.
+const LIV_COLUMNS = [
+  "Truck ID", "Driver", "Site", "Client", "Heure d'entrée", "Heure sortie", "Temps passé",
+] as const;
+
+function livRows(visits: FleetSiteVisit[]): string[][] {
+  return visits.map((v) => [
+    v.truck_id,
+    v.driver_name || "—",
+    v.zone_name,
+    v.client_name || "—",
+    formatOpsDateTime(v.entered_at),
+    // Blank, not a dash: the truck has not left, so there is no time to
+    // report and inventing one reads as a zero-length delivery. Same
+    // rule Geo's open rows follow.
+    v.exited_at ? formatOpsDateTime(v.exited_at) : "",
+    v.seconds_on_site == null ? "" : hms(v.seconds_on_site),
+  ]);
+}
+
 const GEO_ZONE_LABEL: Record<GeoVisit["zone_kind"], string> = {
   factory: "Attente",
   factory_loading: "Chargement",
@@ -150,6 +183,9 @@ export default function ReportsPage() {
   const [geoVisits, setGeoVisits] = useState<GeoVisit[] | null>(null);
   const [geoTotals, setGeoTotals] = useState<GeoTotalRow[] | null>(null);
 
+  const [livVisits, setLivVisits] = useState<FleetSiteVisit[] | null>(null);
+  const [livTotals, setLivTotals] = useState<FleetSiteTotalRow[] | null>(null);
+
   // Fetched once on mount rather than when Geo is selected: the list is
   // ~40 rows, and loading it on switch would put a spinner inside the
   // selector at the moment someone reaches for it.
@@ -185,6 +221,8 @@ export default function ReportsPage() {
     setEntries(null);
     setGeoVisits(null);
     setGeoTotals(null);
+    setLivVisits(null);
+    setLivTotals(null);
     setError(null);
     setCopied(false);
   }
@@ -202,7 +240,24 @@ export default function ReportsPage() {
       return;
     }
 
-    if (report === "geo") {
+    if (report === "livraisons") {
+      // Both together, for the reason Geo fetches both together: the
+      // strip describes the same answer as the table, and a second round
+      // trip would paint a filled table over an empty strip.
+      const [v, t] = await Promise.all([
+        getFleetSiteVisits(fromIso, toIso),
+        getFleetSiteTotals(fromIso, toIso),
+      ]);
+      if (v.error || t.error) {
+        setError(v.error ?? t.error);
+        setLivVisits(null);
+        setLivTotals(null);
+      } else {
+        setLivVisits(v.data);
+        setLivTotals(t.data);
+        setTruncated(v.truncated);
+      }
+    } else if (report === "geo") {
       // Both together: the strip sits above the table and describes the
       // same answer, so a second round trip would show a filled table
       // over an empty strip.
@@ -239,6 +294,8 @@ export default function ReportsPage() {
     setEntries(null);
     setGeoVisits(null);
     setGeoTotals(null);
+    setLivVisits(null);
+    setLivTotals(null);
     setError(null);
     setCopied(false);
   }
@@ -247,7 +304,9 @@ export default function ReportsPage() {
   // screen. Exporting the detail while looking at the summary is the
   // kind of thing nobody notices until the figures are in a meeting.
   const active: { columns: readonly string[]; rows: string[][]; slug: string } =
-    report === "geo"
+    report === "livraisons"
+      ? { columns: LIV_COLUMNS, rows: livRows(livVisits ?? []), slug: "rapport-livraisons" }
+      : report === "geo"
       ? {
           columns: GEO_COLUMNS,
           rows: geoRows(geoVisits ?? []),
@@ -351,16 +410,21 @@ export default function ReportsPage() {
     position: "absolute", width: 1, height: 1, padding: 0, margin: -1,
     overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0,
   };
-  const hasRun = report === "parc" ? entries !== null : geoVisits !== null;
+  const hasRun =
+    report === "parc" ? entries !== null
+    : report === "livraisons" ? livVisits !== null
+    : geoVisits !== null;
 
   return (
     <div className="mx-auto max-w-6xl p-6">
       <h1 className="text-2xl font-semibold t-primary">
-        {report === "parc" ? "Rapport Parc" : report === "geo" ? "Rapport Geo" : "Rapport Usine"}
+        {report === "parc" ? "Rapport Parc" : report === "geo" ? "Rapport Geo" : "Rapport Livraisons"}
       </h1>
       <p className="mt-1 text-sm t-dim">
         {report === "parc"
           ? "Trucks that entered PARC OMD — headquarters & parking."
+          : report === "livraisons"
+          ? "Every truck, every client site it stopped at — the plant is left out, so what remains is the deliveries."
           : "One truck, every zone it entered — the plant's waiting area and loading bay alongside the client sites."}{" "}
         Times in Algeria local time ({OPS_TIMEZONE}).
       </p>
@@ -382,7 +446,7 @@ export default function ReportsPage() {
 
       <div className="panel mt-5 p-4">
         <div className="seg" style={{ width: "fit-content" }}>
-          {(["parc", "geo"] as Report[]).map((r) => (
+          {(["parc", "geo", "livraisons"] as Report[]).map((r) => (
             <button
               key={r}
               type="button"
@@ -390,7 +454,7 @@ export default function ReportsPage() {
               className={`seg-item${report === r ? " is-active" : ""}`}
               aria-pressed={report === r}
             >
-              {r === "parc" ? "Parc" : "Geo"}
+              {r === "parc" ? "Parc" : r === "geo" ? "Geo" : "Livraisons"}
             </button>
           ))}
         </div>
@@ -451,6 +515,49 @@ export default function ReportsPage() {
         <div className="mt-4 rounded-md p-3 text-sm tint-red c-red">{error}</div>
       )}
 
+      {report === "livraisons" && livTotals && livTotals.length > 0 && (
+        // FOUR FLEET FIGURES, not one card per truck: there are 46 of
+        // them, and a strip that long stops being a summary. The
+        // per-truck detail is the table underneath.
+        //
+        // Summed from livTotals rather than from the visit list, and the
+        // distinction is the point: the list is capped at MAX_ROWS and a
+        // total taken from a truncated list is wrong without saying so.
+        // fleet_site_totals returns one row per truck, which cannot be
+        // truncated, so adding these up is safe.
+        //
+        // Achromatic throughout. Time on a client site is productive
+        // time, and green means "moving, on-route" in this palette — it
+        // is not free to spend on a truck standing still, however
+        // usefully.
+        <div className="kpi-strip mt-5" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+          <div className="kpi-card">
+            <div className="kpi-value">{livTotals.reduce((n, t) => n + t.deliveries, 0)}</div>
+            <div className="kpi-label">Livraisons</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-value">{livTotals.length}</div>
+            <div className="kpi-label">
+              {livTotals.length === 1 ? "Camion" : "Camions"}
+            </div>
+          </div>
+          <div className="kpi-card">
+            {/* Straight off the RPC, which carries the same fleet-wide
+                figure on every row. Counting it here from livVisits
+                would be a total taken from the capped list; summing the
+                per-truck `sites` column would count a site once per
+                truck that went there, which over one week read 152
+                against a true 36. */}
+            <div className="kpi-value">{livTotals[0].fleet_sites}</div>
+            <div className="kpi-label">Sites</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-value">{hms(livTotals.reduce((n, t) => n + t.total_seconds, 0))}</div>
+            <div className="kpi-label">Temps sur site</div>
+          </div>
+        </div>
+      )}
+
       {report === "geo" && geoTotals && geoTotals.length > 0 && (
         // One card per zone actually visited, so the strip is as long as
         // the truck's day rather than a fixed set of slots — a truck
@@ -487,6 +594,8 @@ export default function ReportsPage() {
               {active.rows.length}{" "}
               {report === "parc"
                 ? active.rows.length === 1 ? "entry" : "entries"
+                : report === "livraisons"
+                ? active.rows.length === 1 ? "livraison" : "livraisons"
                 : active.rows.length === 1 ? "passage" : "passages"}
               {truncated && " (showing the first 5000 — narrow the range)"}
             </span>
@@ -507,6 +616,8 @@ export default function ReportsPage() {
             <p className="mt-8 text-center text-sm t-dim">
               {report === "parc"
                 ? "No trucks entered the parc in this period."
+                : report === "livraisons"
+                ? "No truck reached a client site in this period."
                 : `${truckId} entered no zone in this period.`}
             </p>
           ) : report === "geo" ? (
@@ -564,6 +675,48 @@ export default function ReportsPage() {
                     </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          ) : report === "livraisons" ? (
+            <div className="mt-3 table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    {/* Site and Client are one column on screen — the
+                        client sits under the site, dimmed — because the
+                        two are the same fact at different resolutions and
+                        side by side they doubled the row width. The CSV
+                        keeps them separate; a spreadsheet is not read the
+                        same way. */}
+                    {["Truck ID", "Driver", "Site", "Heure d'entrée", "Heure sortie", "Temps passé"].map((c) => (
+                      <th key={c}>{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {livVisits!.map((v, i) => (
+                    // Truck and entry time are not unique together: a
+                    // truck can leave and re-enter one site inside a
+                    // minute, and both rows carry that tick's timestamp.
+                    <tr key={`${v.truck_id}-${v.entered_at}-${i}`}>
+                      <td className="truck-id">{v.truck_id}</td>
+                      <td style={{ color: v.driver_name ? "var(--text)" : "var(--text-dim)" }}>
+                        {v.driver_name || "—"}
+                      </td>
+                      <td>
+                        <div>{v.zone_name}</div>
+                        {v.client_name && (
+                          <div className="text-xs t-dim" title={v.client_name}>{v.client_name}</div>
+                        )}
+                      </td>
+                      <td style={monoCell}>{formatOpsDateTime(v.entered_at)}</td>
+                      <td style={monoCell}>
+                        {v.exited_at ? formatOpsDateTime(v.exited_at) : "encore sur place"}
+                      </td>
+                      <td style={monoCell}>{hms(v.seconds_on_site)}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

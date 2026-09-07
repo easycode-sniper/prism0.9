@@ -20,6 +20,7 @@ import {
   opsNowLocalValue,
   OPS_TIMEZONE,
 } from "@/lib/format";
+import { UNLOADED_MIN_SECONDS } from "@/lib/constants";
 import { Copy, Download, Check } from "lucide-react";
 import TruckCombobox from "@/components/forms/TruckCombobox";
 
@@ -424,7 +425,7 @@ export default function ReportsPage() {
         {report === "parc"
           ? "Trucks that entered PARC OMD — headquarters & parking."
           : report === "livraisons"
-          ? "Every truck, every client site it stopped at — the plant is left out, so what remains is the deliveries."
+          ? `Every truck, every client site it stopped at for more than ${UNLOADED_MIN_SECONDS / 60} minutes — the plant is left out, so what remains is the deliveries.`
           : "One truck, every zone it entered — the plant's waiting area and loading bay alongside the client sites."}{" "}
         Times in Algeria local time ({OPS_TIMEZONE}).
       </p>
@@ -436,6 +437,19 @@ export default function ReportsPage() {
           waiting area, so a truck at the pump is in both zones at once
           and its Attente row spans the whole stay. Adding the two
           durations together double-counts the loading. */}
+      {/* Said plainly, because the alternative is someone comparing this
+          against Wialon's own zone report, finding it short, and
+          deciding the app undercounts. It does not — it counts
+          deliveries, and Wialon counts boundary crossings. */}
+      {report === "livraisons" && (
+        <p className="mt-1 text-xs t-faint">
+          A stop under <strong>{UNLOADED_MIN_SECONDS / 60} minutes</strong> is not counted: a site
+          polygon logs a truck that merely drove past, and on this fleet&rsquo;s first week 43 of 193
+          site visits were that — several of them under two minutes. Same threshold as{" "}
+          <strong>Déchargés</strong> on Monitoring, so the two agree on what a delivery is.
+        </p>
+      )}
+
       {report === "geo" && (
         <p className="mt-1 text-xs t-faint">
           The loading bay sits inside the waiting area, so an <strong>Attente</strong> row is the

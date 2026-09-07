@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { UNLOADED_MIN_SECONDS } from "@/lib/constants";
 
 export interface ParcEntry {
   id: string;
@@ -309,7 +310,14 @@ export async function getFleetSiteVisits(
   // silently partial report is the failure this codebase keeps paying
   // for.
   const { data, error } = await supabase
-    .rpc("fleet_site_visits", { p_from: fromIso, p_to: toIso })
+    .rpc("fleet_site_visits", {
+      p_from: fromIso,
+      p_to: toIso,
+      // Passed rather than left to the SQL default, so the number is
+      // greppable from the app and cannot drift from the sentence the
+      // page prints under the heading.
+      p_min_seconds: UNLOADED_MIN_SECONDS,
+    })
     .limit(MAX_ROWS + 1);
 
   if (error) return { data: [], truncated: false, error: error.message };
@@ -335,9 +343,13 @@ export async function getFleetSiteTotals(
   const invalid = validateRange(fromIso, toIso);
   if (invalid) return { data: [], error: invalid };
 
+  // The same threshold as the detail, necessarily: a summary counting a
+  // different set of visits from the table under it is wrong in the way
+  // nobody checks.
   const { data, error } = await supabase.rpc("fleet_site_totals", {
     p_from: fromIso,
     p_to: toIso,
+    p_min_seconds: UNLOADED_MIN_SECONDS,
   });
 
   if (error) return { data: [], error: error.message };

@@ -91,6 +91,14 @@ export function stationWatchRadius(radiusMeters: number | null | undefined, blac
  * is "use server" and may only export async functions — and because the
  * panel renders this number in its own subtitle, so the rule and the
  * sentence explaining it cannot drift apart.
+ *
+ * ALSO the threshold for Rapport Livraisons, since 2026-09-07. Same rule
+ * and therefore the same number: both answer "has this truck actually
+ * stopped to unload", and two constants would let the report and the
+ * panel disagree about what counts as a delivery while being read
+ * against each other. Livraisons' first week showed the same spread —
+ * 43 of 193 site visits were under 25 minutes, several of them 61 and
+ * 119 seconds.
  */
 export const UNLOADED_MIN_SECONDS = 25 * 60;
 

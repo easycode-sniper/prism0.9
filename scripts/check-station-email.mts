@@ -103,6 +103,29 @@ withEnv({ ...FULL, SMTP_PORT: "not-a-port" }, () => {
   check("a non-numeric port is refused, not coerced to NaN", "reason" in r);
 });
 
+// A Google app password is shown as four space-separated groups and is
+// pasted into a dashboard field, so it reaches the environment wrapped in
+// whitespace. The server answers a trailing newline with the same
+// "authentication failed" it gives a wrong password, which is the least
+// diagnosable failure this feature has.
+withEnv({ ...FULL, SMTP_PASSWORD: "  abcd efgh ijkl mnop\n" }, () => {
+  const r = readConfig();
+  check(
+    "a pasted app password is trimmed at the ends",
+    "config" in r && r.config.pass === "abcd efgh ijkl mnop",
+    "config" in r ? JSON.stringify(r.config.pass) : "unconfigured",
+  );
+  check(
+    "but its internal spaces survive",
+    "config" in r && r.config.pass.includes(" "),
+  );
+});
+
+withEnv({ ...FULL, SMTP_PASSWORD: "   \n  " }, () => {
+  const r = readConfig();
+  check("a whitespace-only password reads as unset", "reason" in r);
+});
+
 withEnv({ ...FULL, ALERT_EMAIL_TO: "a@omd-dz.com, b@omd-dz.com ,, c@omd-dz.com" }, () => {
   const r = readConfig();
   check(

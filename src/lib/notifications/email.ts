@@ -47,7 +47,16 @@ export interface MailConfig {
 export function readConfig(): { config: MailConfig } | { reason: string } {
   const host = process.env.SMTP_HOST?.trim();
   const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASSWORD;
+  // Trimmed, and the surrounding whitespace is the whole reason: a
+  // Google app password is DISPLAYED as "abcd efgh ijkl mnop", so it
+  // arrives pasted with spaces and often a trailing newline from the
+  // dashboard field. Google accepts the internal spaces; nothing accepts
+  // the trailing newline, and the server's answer to it is an
+  // indistinguishable "authentication failed". Leading/trailing space in
+  // a password supplied through an env var is always a paste artefact —
+  // this does NOT touch the inside of the value, so a password that
+  // genuinely contains spaces still works.
+  const pass = process.env.SMTP_PASSWORD?.trim();
   const to = (process.env.ALERT_EMAIL_TO ?? "")
     .split(",")
     .map((a) => a.trim())

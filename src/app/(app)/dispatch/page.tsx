@@ -187,6 +187,21 @@ export default function DispatchPage() {
     [fleetData.trucks, dispatches]
   );
 
+  // Where each truck is right now, for the run cards' Locate button.
+  // Built from the LIVE feed rather than from the dispatch row, because
+  // dispatches.last_lat is only rewritten when the position check runs
+  // against that dispatch, while the snapshot is the whole fleet every
+  // minute. The dispatch row is the fallback, for a truck that has
+  // dropped out of the feed entirely — a stale fix still puts the map
+  // somewhere true, and "No position" is only for having neither.
+  const livePositions = useMemo(() => {
+    const m = new Map<string, [number, number]>();
+    for (const t of fleetTrucks) {
+      if (t.lat != null && t.lng != null) m.set(t.truck_id, [t.lat, t.lng]);
+    }
+    return m;
+  }, [fleetTrucks]);
+
   // Off-route count drives the tab badge, so a truck leaving its route is
   // visible from the form without switching to look for it.
   const offRouteCount = useMemo(
@@ -693,6 +708,16 @@ export default function DispatchPage() {
                     <ActiveRunCard
                       key={d.id}
                       dispatch={d}
+                      locateAt={
+                        livePositions.get(d.truck_id) ??
+                        (d.last_lat != null && d.last_lng != null ? [d.last_lat, d.last_lng] : null)
+                      }
+                      // A FRESH ARRAY EVERY PRESS, deliberately: MapView
+                      // centres in an effect keyed on focusPoint, so
+                      // handing back the same reference would make the
+                      // second press on an already-centred truck do
+                      // nothing — which reads as a broken button.
+                      onLocate={(point) => setTruckFocus([point[0], point[1]])}
                       check={checkResults.get(d.id)}
                       checking={checking === d.truck_id || checking === d.id}
                       routeShown={routeRunId === d.id}
@@ -757,6 +782,8 @@ export default function DispatchPage() {
 
 function ActiveRunCard({
   dispatch,
+  locateAt,
+  onLocate,
   check,
   checking,
   routeShown,
@@ -767,6 +794,8 @@ function ActiveRunCard({
   onStop,
 }: {
   dispatch: DispatchRecord;
+  locateAt: [number, number] | null;
+  onLocate: (point: [number, number]) => void;
   check: PositionCheckResult | undefined;
   checking: boolean;
   routeShown: boolean;
@@ -828,9 +857,41 @@ function ActiveRunCard({
       </div>
 
       <div className="run-card__actions">
-        <button type="button" onClick={onCheckPosition} disabled={checking} className="btn-sm">
+        {/* FIRST, before Check position, because it answers the question
+            asked most often — "where is it" — and answers it instantly
+            from the snapshot the page already has. Check position is the
+            heavier neighbour: it goes out to Wialon and comes back with
+            on-route and an ETA. Locate just moves the map.
+
+            Same control as the trailing button on the fleet browser
+            rows, deliberately: one gesture for "put that truck on the
+            map", wherever the truck's name appears. */}
+        <button
+          type="button"
+          onClick={() => locateAt && onLocate(locateAt)}
+          disabled={!locateAt}
+          className="btn-sm"
+          title={locateAt ? `Centre the map on ${dispatch.truck_id}` : "No position for this truck yet"}
+        >
+          <Crosshair size={12} strokeWidth={2} />
+          Locate
+        </button>
+        {/* "Check", not "Check position", since Locate joined the row:
+            the two labelled together ran to a second line in a 358px
+            panel, and a run card that is two rows of buttons tall costs
+            real estate on a page whose whole point is seeing many runs
+            at once. The radar icon and the title carry what the missing
+            word did, and the manual fallback below has always said just
+            "Check". */}
+        <button
+          type="button"
+          onClick={onCheckPosition}
+          disabled={checking}
+          className="btn-sm"
+          title={`Check ${dispatch.truck_id} against its route — position, ETA and on-route status`}
+        >
           <Radar size={12} strokeWidth={2} />
-          {checking ? "Checking…" : "Check position"}
+          {checking ? "Checking…" : "Check"}
         </button>
         <button
           type="button"

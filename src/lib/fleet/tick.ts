@@ -285,7 +285,10 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     if (stationError) {
       warnings.push(`stations: ${stationError.message}`);
     } else if ((stationRows ?? []).length > 0) {
-      await runBlacklistedStationCheck(
+      // Returns the email warnings. The alert itself is already written
+      // by the time these come back, so a mail server that is down shows
+      // up in the tick's warnings rather than costing an alert.
+      const mailWarnings = await runBlacklistedStationCheck(
         supabase,
         trucks.filter((t) => t.status === "idle"),
         (stationRows ?? []).map((r) => ({
@@ -297,6 +300,7 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
           blacklisted: true,
         }))
       );
+      warnings.push(...mailWarnings);
     }
   } catch (err) {
     warnings.push(`stations: ${(err as Error).message}`);

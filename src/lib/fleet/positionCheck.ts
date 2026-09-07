@@ -12,6 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence, pointInPolygon } from "@/lib/geometry";
 import type { GeofenceRecord } from "@/lib/supabase/geofences";
 import { selectFactoryGeofence } from "@/lib/fleet/geofences";
+import { sendStationStopEmails } from "@/lib/notifications/email";
 import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH, stationWatchRadius } from "@/lib/constants";
 import { boundSiteZone, siteZoneAt, type SiteZone, type BoundedSiteZone } from "@/lib/fleet/siteZones";
 export type { SiteZone } from "@/lib/fleet/siteZones";
@@ -871,12 +872,19 @@ export interface BlacklistStation {
  * not a boolean per station, because at_hq/at_factory's one-column-per-
  * zone shape does not survive 51 stations. Moving from one blacklisted
  * station to another is therefore a real transition and alerts again.
+ *
+ * Also emails the fuel desk, because this is the one alert that is only
+ * useful while the truck is still on the forecourt and nobody is
+ * watching the screen at 06:00. Returns the mail warnings rather than
+ * throwing them: see sendStationStopEmails for why an email failure must
+ * not cost an alert.
  */
 export async function runBlacklistedStationCheck(
   supabase: SupabaseClient,
   trucks: ZoneTruck[],
   stations: BlacklistStation[]
-): Promise<void> {
+): Promise<string[]> {
+  const warnings: string[] = [];
   const watched = stations.filter((s) => s.blacklisted);
 
   const positioned = freshestPerTruck(
@@ -961,6 +969,19 @@ export async function runBlacklistedStationCheck(
         `station stop alert insert failed (flags already set, so these will not retry): ${notifyError.message}`
       );
     }
+
+    // Only once the row is in. The app is the system of record and the
+    // email is a copy of it, so there must be no case where the fuel desk
+    // is emailed about a stop that /notifications cannot show them.
+    warnings.push(
+      ...(await sendStationStopEmails(
+        toNotify.map((truck_id) => ({
+          truckId: truck_id,
+          driverName: driverOf.get(truck_id) ?? null,
+          stationName: station,
+        }))
+      ))
+    );
   }
 
   if (left.length > 0) {
@@ -973,6 +994,8 @@ export async function runBlacklistedStationCheck(
     // to arrive again.
     if (error) throw new Error(`station departure write failed: ${error.message}`);
   }
+
+  return warnings;
 }
 
 async function runZoneArrivalCheck(

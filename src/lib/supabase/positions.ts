@@ -14,6 +14,12 @@ import type { PositionCheckResult } from "@/lib/fleet/positionCheck";
 // checkPositionAuto used to live here too — the per-dispatch sweep the
 // browser ran every 60s. The scheduled tick owns that now, which also
 // retires an exported server action that had no auth check on it at all.
+//
+// checkPositionManual went the same way on 2026-09-07, at the owner's
+// request: the run card's "Enter coordinates manually" form was removed,
+// and every export of a "use server" file is a callable HTTP endpoint —
+// so leaving the action behind an absent button would keep the endpoint
+// and lose the only thing that explained it.
 
 export type { PositionCheckResult };
 
@@ -47,35 +53,6 @@ export async function checkPositionForDispatch(
     unit.driverName,
     geofences
   );
-
-  return { result };
-}
-
-// Fallback for when the live Wialon fetch fails — lets the dispatcher paste
-// a coordinate pair (from a phone call with the driver, another tracking
-// tool, etc.) and still get a real on-route/off-route + ETA check.
-export async function checkPositionManual(
-  dispatchId: string,
-  lat: number,
-  lng: number
-): Promise<{ result?: PositionCheckResult; error?: string }> {
-  const supabase = await createClient();
-  const user = await supabase.auth.getUser();
-  if (!user.data.user) return { error: "Not authenticated" };
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return { error: "Enter valid numeric coordinates" };
-  }
-
-  const loaded = await loadDispatchAndSite(supabase, dispatchId);
-  if ("error" in loaded) return { error: loaded.error };
-  const { dispatch, site } = loaded;
-
-  // No live speed available from a manual paste — speeding simply won't
-  // fire for this check, which is correct: this is a live-fetch-failed
-  // fallback, not a speed source.
-  const { data: geofences } = await listGeofences();
-  const result = await runPositionCheck(supabase, dispatch, site, [lat, lng], 0, null, geofences);
 
   return { result };
 }

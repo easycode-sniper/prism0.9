@@ -2269,26 +2269,6 @@ hr {
   padding: 6px 11px;
 }
 
-.run-card__manual {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--line);
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.run-card__manual input {
-  width: 100%;
-  padding: 5px 8px;
-  font-size: 0.7rem;
-  font-family: var(--font-mono);
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  color: var(--text);
-}
-
 /* Monitoring's two panels.
    
    Side by side each panel is (viewport - 64) / 2, and both tables are

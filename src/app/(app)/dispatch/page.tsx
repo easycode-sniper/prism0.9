@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { createBatchDispatch, stopDispatch, ensureDispatchRoute } from "@/lib/supabase/actions";
-import { checkPositionForDispatch, checkPositionManual } from "@/lib/supabase/positions";
+import { checkPositionForDispatch } from "@/lib/supabase/positions";
 import { FACTORY_NAME } from "@/lib/constants";
 import type { RouteOverlayData, TrackOverlayData } from "@/components/map/MapView";
 import { getTruckTrack } from "@/lib/supabase/track";
@@ -15,7 +15,7 @@ import { joinFleetWithDispatches } from "@/lib/fleetJoin";
 import type { SiteRecord, DispatchRecord } from "@/lib/supabase/actions";
 import type { PositionCheckResult } from "@/lib/supabase/positions";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
-import { Radar, Check, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, ArrowRight, MapPin, Square, Route as RouteIcon } from "lucide-react";
+import { Radar, Check, AlertTriangle, ChevronLeft, ChevronRight, Crosshair, ArrowRight, Square, Route as RouteIcon } from "lucide-react";
 import { formatDateTime, formatAge } from "@/lib/format";
 import { setStationBlacklisted, canBlacklistStations } from "@/lib/supabase/stations";
 import { stationWatchRadius } from "@/lib/constants";
@@ -318,18 +318,6 @@ export default function DispatchPage() {
     setChecking(truckId);
     setError(null);
     const result = await checkPositionForDispatch(truckId, dispatchId);
-    if (result.error) { setError(result.error); setChecking(null); return; }
-    if (result.result) {
-      setCheckResults(prev => new Map(prev).set(dispatchId, result.result!));
-    }
-    setChecking(null);
-    await refreshDispatches();
-  }
-
-  async function handleManualCheck(dispatchId: string, lat: number, lng: number) {
-    setChecking(dispatchId);
-    setError(null);
-    const result = await checkPositionManual(dispatchId, lat, lng);
     if (result.error) { setError(result.error); setChecking(null); return; }
     if (result.result) {
       setCheckResults(prev => new Map(prev).set(dispatchId, result.result!));
@@ -724,7 +712,6 @@ export default function DispatchPage() {
                       routeLoading={routeLoading === d.id}
                       onToggleRoute={() => handleToggleRoute(d.id)}
                       onCheckPosition={() => handleCheckPosition(d.id, d.truck_id)}
-                      onManualCheck={(lat, lng) => handleManualCheck(d.id, lat, lng)}
                       onStop={() => handleStop(d.id)}
                     />
                   ))}
@@ -790,7 +777,6 @@ function ActiveRunCard({
   routeLoading,
   onToggleRoute,
   onCheckPosition,
-  onManualCheck,
   onStop,
 }: {
   dispatch: DispatchRecord;
@@ -802,24 +788,11 @@ function ActiveRunCard({
   routeLoading: boolean;
   onToggleRoute: () => void;
   onCheckPosition: () => void;
-  onManualCheck: (lat: number, lng: number) => void;
   onStop: () => void;
 }) {
-  // The manual-coordinate path is a fallback for when the telemetry feed
-  // goes stale, not something a dispatcher reaches for on every run — so
-  // it stays closed behind one icon instead of a <details> on every card.
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualLat, setManualLat] = useState("");
-  const [manualLng, setManualLng] = useState("");
   const siteName = dispatch.site?.name ?? "Unknown destination";
   const c = runCompliance(dispatch, check);
   const staleMinutes = minutesSince(c.checkedAt);
-
-  function submitManual() {
-    const lat = parseFloat(manualLat);
-    const lng = parseFloat(manualLng);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) onManualCheck(lat, lng);
-  }
 
   return (
     <div className={`run-card${c.onRoute === false ? " run-card--alert" : ""}`}>
@@ -881,8 +854,7 @@ function ActiveRunCard({
             panel, and a run card that is two rows of buttons tall costs
             real estate on a page whose whole point is seeing many runs
             at once. The radar icon and the title carry what the missing
-            word did, and the manual fallback below has always said just
-            "Check". */}
+            word did. */}
         <button
           type="button"
           onClick={onCheckPosition}
@@ -911,39 +883,7 @@ function ActiveRunCard({
           <Square size={10} strokeWidth={3} />
           Stop
         </button>
-        <button
-          type="button"
-          onClick={() => setManualOpen((v) => !v)}
-          className="icon-btn"
-          aria-expanded={manualOpen}
-          title="Enter coordinates manually"
-          aria-label="Enter coordinates manually"
-        >
-          <MapPin size={12} strokeWidth={2} />
-        </button>
       </div>
-
-      {manualOpen && (
-        <div className="run-card__manual">
-          <input
-            type="text"
-            inputMode="decimal"
-            placeholder="Latitude"
-            value={manualLat}
-            onChange={(e) => setManualLat(e.target.value)}
-          />
-          <input
-            type="text"
-            inputMode="decimal"
-            placeholder="Longitude"
-            value={manualLng}
-            onChange={(e) => setManualLng(e.target.value)}
-          />
-          <button type="button" onClick={submitManual} disabled={checking} className="btn-sm" style={{ flex: "none" }}>
-            Check
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -140,38 +140,62 @@ console.log("\ndeltas — against the real 7-day numbers:");
 //   current  01-07 Sep   km 209370  L 96601  DA 3017267  45.81  var 52670
 //   previous 25-31 Aug   km 225094  L 105266 DA 3281855  46.62  var 113194
 eq("kilometres down 7%",
-  periodDelta(209370, 225094, "km", nf, t), { glyph: "▼", text: "7%" });
+  periodDelta(209370, 225094, "km", nf, t), { glyph: "▼", text: "7%", tone: "bad" });
 eq("litres down 8.2%",
-  periodDelta(96601, 105266, "L", nf, t), { glyph: "▼", text: "8.2%" });
+  periodDelta(96601, 105266, "L", nf, t), { glyph: "▼", text: "8.2%", tone: "bad" });
 eq("amount down 8.1%",
-  periodDelta(3017267, 3281855, "DA", nf, t), { glyph: "▼", text: "8.1%" });
+  periodDelta(3017267, 3281855, "DA", nf, t), { glyph: "▼", text: "8.1%", tone: "bad" });
 // Under 10% keeps a decimal — 1.7 and 2.4 are different answers and
 // rounding both to 2% throws away the only precision that mattered.
 // 6.985% rounds to 7.0 and prints as 7 — a trailing zero is a digit
 // that says nothing.
 eq("a whole percentage drops its trailing zero",
-  periodDelta(209370, 225094, "km", nf, t), { glyph: "▼", text: "7%" });
+  periodDelta(209370, 225094, "km", nf, t), { glyph: "▼", text: "7%", tone: "bad" });
 eq("consumption down 1.7%",
-  periodDelta(45.81, 46.62, "L/100km", (n) => n.toFixed(2), t), { glyph: "▼", text: "1.7%" });
+  periodDelta(45.81, 46.62, "L/100km", (n) => n.toFixed(2), t, true), { glyph: "▼", text: "1.7%", tone: "good" });
 eq("variance down 53%",
-  periodDelta(52670, 113194, "DA", nf, t), { glyph: "▼", text: "53%" });
+  periodDelta(52670, 113194, "DA", nf, t, true), { glyph: "▼", text: "53%", tone: "good" });
 
 console.log("\ndeltas — the cases a percentage would lie about:");
 // THE REASON variance is not always a percentage. A fleet that was 5,000
 // UNDER the assumed rate and is now 12,000 OVER has not improved by
 // 340%; it has swung by 17,000 DA and the sign is the story.
 eq("a sign flip is reported in the unit, not as a percentage",
-  periodDelta(12000, -5000, "DA", nf, t), { glyph: "▲", text: "17,000 DA" });
+  periodDelta(12000, -5000, "DA", nf, t, true), { glyph: "▲", text: "17,000 DA", tone: "bad" });
 eq("a flip the other way too",
-  periodDelta(-5000, 12000, "DA", nf, t), { glyph: "▼", text: "17,000 DA" });
+  periodDelta(-5000, 12000, "DA", nf, t, true), { glyph: "▼", text: "17,000 DA", tone: "good" });
 // Both negative is a real comparison: deeper under the rate is still a
 // like-for-like move.
 eq("both under the rate compares normally",
-  periodDelta(-12000, -6000, "DA", nf, t), { glyph: "▼", text: "100%" });
+  periodDelta(-12000, -6000, "DA", nf, t, true), { glyph: "▼", text: "100%", tone: "good" });
 eq("dividing by a zero previous falls back to the unit",
-  periodDelta(4200, 0, "km", nf, t), { glyph: "▲", text: "4,200 km" });
+  periodDelta(4200, 0, "km", nf, t), { glyph: "▲", text: "4,200 km", tone: "good" });
 eq("an absurd multiple falls back to the unit",
-  periodDelta(500000, 100, "km", nf, t), { glyph: "▲", text: "499,900 km" });
+  periodDelta(500000, 100, "km", nf, t), { glyph: "▲", text: "499,900 km", tone: "good" });
+
+console.log("\ntone — green good, red bad, and it is NOT the arrow:");
+// The whole point of the flag. The SAME movement is good news on four
+// cards and bad news on the two where more means worse.
+eq("kilometres rising is good news",
+  periodDelta(110, 100, "km", nf, t), { glyph: "▲", text: "10%", tone: "good" });
+eq("the same rise in consumption is bad news",
+  periodDelta(110, 100, "L/100km", nf, t, true), { glyph: "▲", text: "10%", tone: "bad" });
+eq("variance rising is money lost",
+  periodDelta(110, 100, "DA", nf, t, true), { glyph: "▲", text: "10%", tone: "bad" });
+eq("variance falling is money saved",
+  periodDelta(90, 100, "DA", nf, t, true), { glyph: "▼", text: "10%", tone: "good" });
+// A truck fleet that drove less is doing less work — down is bad on the
+// four normal cards, which is what makes the arrow alone insufficient.
+eq("kilometres falling is bad news",
+  periodDelta(90, 100, "km", nf, t), { glyph: "▼", text: "10%", tone: "bad" });
+
+{
+  const up = periodDelta(110, 100, "km", nf, t)!;
+  const down = periodDelta(110, 100, "L/100km", nf, t, true)!;
+  check("two cards can share an arrow and disagree about the colour",
+    up.glyph === down.glyph && up.tone !== down.tone,
+    `${up.glyph}/${up.tone} vs ${down.glyph}/${down.tone}`);
+}
 
 console.log("\ndeltas — nothing to say:");
 eq("no previous window means no line", periodDelta(100, null, "km", nf, t), null);
@@ -180,10 +204,10 @@ eq("no current figure means no line", periodDelta(null, 100, "km", nf, t), null)
 eq("a null average on either side means no line",
   periodDelta(null, null, "L/100km", nf, t), null);
 eq("identical figures read as no change",
-  periodDelta(1000, 1000, "km", nf, t), { glyph: "=", text: "no change" });
+  periodDelta(1000, 1000, "km", nf, t), { glyph: "=", text: "no change", tone: null });
 // Float sums: 45.68 and 45.680000000001 are the same number.
 eq("float noise is not a change",
-  periodDelta(45.68, 45.680000000001, "L/100km", nf, t), { glyph: "=", text: "no change" });
+  periodDelta(45.68, 45.680000000001, "L/100km", nf, t, true), { glyph: "=", text: "no change", tone: null });
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);

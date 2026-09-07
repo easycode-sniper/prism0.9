@@ -52,6 +52,7 @@ import RangeBar, { buildPresets, describeRange, presetKeyFor } from "@/component
 import type { OpsRange } from "@/lib/dashboard/range";
 import { previousRange, daysInRange } from "@/lib/dashboard/range";
 import { periodDelta } from "@/lib/dashboard/delta";
+import type { PeriodDelta } from "@/lib/dashboard/delta";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
 import { opsToday } from "@/lib/format";
@@ -634,21 +635,23 @@ export default function DashboardPage() {
           four gutters were most of what made this strip look heavy — the
           numbers were never the problem. */}
       <div className="kpi-strip">
-        <Kpi label={t("Kilometres driven")} value={fuel ? nf(fuel.km) : null} unit="km" foot={fuel ? t("{n} fills", { n: nf(fuel.fills) }) : ""}
+        <Kpi label={t("Kilometres driven")} value={fuel ? nf(fuel.km) : null} unit="km"
           delta={periodDelta(fuel?.km, prevFuel?.km, "km", nf, t)} deltaLabel={comparisonLabel} failed={dataError != null} />
-        <Kpi label={t("Litres consumed")} value={fuel ? nf(fuel.litres) : null} unit="L" foot={fuel ? t("incl. {n} L with no km logged", { n: nf(fuel.unpairedLitres) }) : ""}
+        <Kpi label={t("Litres consumed")} value={fuel ? nf(fuel.litres) : null} unit="L"
           delta={periodDelta(fuel?.litres, prevFuel?.litres, "L", nf, t)} deltaLabel={comparisonLabel} failed={dataError != null} />
-        <Kpi label={t("Amount filled")} value={fuel ? nf(fuel.amountDa) : null} unit="DA" foot={fuel ? t("{n} fills logged amount only", { n: nf(fuel.unpairedFills) }) : t("paid at the pump")}
+        <Kpi label={t("Amount filled")} value={fuel ? nf(fuel.amountDa) : null} unit="DA"
           delta={periodDelta(fuel?.amountDa, prevFuel?.amountDa, "DA", nf, t)} deltaLabel={comparisonLabel} failed={dataError != null} />
         <Kpi
           label={t("Average consumption")}
           value={fuel?.litresPer100Km != null ? fuel.litresPer100Km.toFixed(2) : null}
           unit="L/100km"
-          foot={fuel ? t("{n} fills with km logged", { n: nf(fuel.fills - fuel.unpairedFills) }) : ""}
           // Two decimals, not nf's thousands separator: this figure is
-          // 45.68, and rounding the CHANGE in it to a whole number would
+          // 45.81, and rounding the CHANGE in it to a whole number would
           // report every real movement as zero.
-          delta={periodDelta(fuel?.litresPer100Km, prevFuel?.litresPer100Km, "L/100km", (n) => n.toFixed(2), t)}
+          //
+          // HIGHER IS WORSE. More litres per 100km is the fleet burning
+          // more to cover the same ground, so a rise goes red.
+          delta={periodDelta(fuel?.litresPer100Km, prevFuel?.litresPer100Km, "L/100km", (n) => n.toFixed(2), t, true)}
           deltaLabel={comparisonLabel}
           failed={dataError != null}
         />
@@ -656,8 +659,11 @@ export default function DashboardPage() {
           label={t("Total variance")}
           value={fuel ? nf(fuel.varianceDa) : null}
           unit="DA"
-          foot={fuel ? (fuel.varianceDa > 0 ? t("▲ over the assumed rate") : t("▼ under the assumed rate")) : ""}
-          delta={periodDelta(fuel?.varianceDa, prevFuel?.varianceDa, "DA", nf, t)}
+          // HIGHER IS WORSE, and this is the card the rule came from:
+          // the écart is what was paid less what the assumed rate says
+          // the distance should have cost, so positive is money lost and
+          // negative is money saved.
+          delta={periodDelta(fuel?.varianceDa, prevFuel?.varianceDa, "DA", nf, t, true)}
           deltaLabel={comparisonLabel}
           failed={dataError != null}
         />
@@ -682,11 +688,6 @@ export default function DashboardPage() {
               <div style={{ minWidth: 0 }}>
                 <div className="dash-panel__title">{t("Distance per day")}</div>
                 <div className="dash-panel__sub">
-                  {/* The last point is always today, and today is always
-                      partial — at 02:00 it is a hundredth of a day's
-                      distance, which draws as a dive to the floor. Said
-                      plainly rather than hidden by dropping the point:
-                      the current day is the one people look for. */}
                   {/* Today is always partial — at 02:00 it is a
                       hundredth of a day's distance, which draws as a
                       dive to the floor. Said plainly rather than hidden
@@ -1147,7 +1148,6 @@ function Kpi({
   label,
   value,
   unit,
-  foot,
   delta,
   deltaLabel,
   failed,
@@ -1155,12 +1155,11 @@ function Kpi({
   label: string;
   value: string | null;
   unit: string;
-  foot: string;
   /** Null when there is no comparable window — All time, or a load that
    *  failed. The line is then absent rather than showing a dash, which
    *  would read as "no change". */
-  delta?: { glyph: string; text: string } | null;
-  /** What the comparison is against, e.g. "vs previous 7 days". */
+  delta?: PeriodDelta | null;
+  /** What the comparison is against, e.g. "vs the previous 7 days". */
   deltaLabel?: string;
   /** True when the load finished and failed. A skeleton then is a lie:
    *  nothing is still coming. */
@@ -1183,26 +1182,29 @@ function Kpi({
           <span className="dash-kpi__unit">{unit}</span>
         </div>
       )}
-      <div className="dash-kpi__foot">
-        <span className="dash-delta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {value === null ? (failed ? t("unavailable") : t("reading the sheet…")) : foot}
-        </span>
-      </div>
-      {/* ACHROMATIC, per the note on .dash-delta in globals.css: green
-          up / red down is what every dashboard does and what this one
-          cannot, because green already means a truck that is moving and
-          red one that is off route. The glyph carries the direction.
 
-          It is also the right call on the merits here — "kilometres up
-          12%" is not good or bad on its own, and colouring it would
-          assert a judgement the number does not support. */}
-      {value !== null && delta && (
-        <div className="dash-kpi__delta">
+      {/* The card's third line is the comparison, or — while there is no
+          figure yet — what is happening instead. The fill counts that used
+          to sit here were removed at the owner's request on 2026-09-07:
+          five cards each carrying a count nobody was reading made the
+          strip busier than the five numbers it exists for. */}
+      {value === null ? (
+        <div className="dash-kpi__delta" style={{ color: "var(--text-dim)" }}>
+          {failed ? t("unavailable") : t("reading the sheet…")}
+        </div>
+      ) : delta ? (
+        // GREEN GOOD, RED BAD — the owner's call on 2026-09-07, and note
+        // it is TONE, not direction. Two of these five inverted: a rise
+        // in variance is an overspend and a rise in litres-per-100km is
+        // the fleet burning more to cover the same ground, so both go red
+        // when they climb. Colouring by ▲/▼ instead would put the
+        // friendliest colour on the two figures that cost the most money.
+        <div className={`dash-kpi__delta${delta.tone ? ` is-${delta.tone}` : ""}`}>
           <span className="dash-kpi__delta-glyph">{delta.glyph}</span>
           <span>{delta.text}</span>
           {deltaLabel && <span className="dash-kpi__delta-vs">{deltaLabel}</span>}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

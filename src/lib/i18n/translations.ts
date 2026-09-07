@@ -257,10 +257,15 @@ export const translations: Record<Language, Record<string, string>> = {
     ", first to last fill {period}": ", first to last fill {period}",
     "The figures below could not be loaded: {reason}": "The figures below could not be loaded: {reason}",
     "Kilometres driven": "Kilometres driven",
-    "{n} fills": "{n} fills",
     // The period-over-period line under the scorecards. Named from the
     // preset rather than the dates: "vs 25 Aug → 31 Aug" makes the
     // reader do arithmetic to discover it means last week.
+    //
+    // The fill counts that used to sit on these cards ("344 fills",
+    // "incl. 613 L with no km logged") went with their keys on
+    // 2026-09-07 — the owner asked for the line removed, and a
+    // translation for a string nothing renders is a thing to maintain
+    // for no reader.
     "no change": "no change",
     "vs yesterday": "vs yesterday",
     "vs the day before": "vs the day before",
@@ -270,15 +275,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "vs the month before": "vs the month before",
     "vs the previous {n} days": "vs the previous {n} days",
     "Litres consumed": "Litres consumed",
-    "incl. {n} L with no km logged": "incl. {n} L with no km logged",
     "Amount filled": "Amount filled",
-    "{n} fills logged amount only": "{n} fills logged amount only",
-    "paid at the pump": "paid at the pump",
     "Average consumption": "Average consumption",
-    "{n} fills with km logged": "{n} fills with km logged",
     "Total variance": "Total variance",
-    "▲ over the assumed rate": "▲ over the assumed rate",
-    "▼ under the assumed rate": "▼ under the assumed rate",
     "Distance per day": "Distance per day",
     "Fleet kilometres, staff cars included.": "Fleet kilometres, staff cars included.",
     "Today is still counting.": "Today is still counting.",
@@ -517,7 +516,6 @@ export const translations: Record<Language, Record<string, string>> = {
     ", first to last fill {period}": ", du premier au dernier plein {period}",
     "The figures below could not be loaded: {reason}": "Impossible de charger les chiffres ci-dessous : {reason}",
     "Kilometres driven": "Kilomètres parcourus",
-    "{n} fills": "{n} pleins",
     "no change": "sans changement",
     "vs yesterday": "vs hier",
     "vs the day before": "vs l'avant-veille",
@@ -527,15 +525,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "vs the month before": "vs le mois précédent",
     "vs the previous {n} days": "vs les {n} jours précédents",
     "Litres consumed": "Litres consommés",
-    "incl. {n} L with no km logged": "dont {n} L sans km enregistrés",
     "Amount filled": "Montant des pleins",
-    "{n} fills logged amount only": "{n} pleins avec le montant seul",
-    "paid at the pump": "payé à la pompe",
     "Average consumption": "Consommation moyenne",
-    "{n} fills with km logged": "{n} pleins avec km enregistrés",
     "Total variance": "Écart total",
-    "▲ over the assumed rate": "▲ au-dessus du taux de référence",
-    "▼ under the assumed rate": "▼ en dessous du taux de référence",
     "Distance per day": "Distance par jour",
     "Fleet kilometres, staff cars included.": "Kilomètres de la flotte, véhicules de service inclus.",
     "Today is still counting.": "La journée est encore en cours.",

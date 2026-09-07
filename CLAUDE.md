@@ -87,6 +87,23 @@ leaving the good half achromatic was the inconsistent choice. It applies
 to a signed value against a known baseline, not to chrome, and not to a
 quantity that is merely large or small.
 
+**Widened on 2026-09-07, at the owner's request**, to the whole KPI
+strip: every scorecard's period-over-period delta is green for good news
+and red for bad. The `.dash-kpi__delta` note in `globals.css` used to
+say the opposite — that green up / red down could not be done here — and
+that note is now void. It still sits inside the limit above: these are
+signed changes against a known baseline (the previous window), never
+chrome.
+
+The trap in it is that **tone is not direction**. Four of the five cards
+are better when they rise; **total variance** and **average
+consumption** are worse — a bigger écart is money lost, and more litres
+per 100km is the fleet burning more to cover the same ground. Colouring
+by ▲/▼ would put the friendliest colour on the two figures that cost the
+most. `periodDelta` in `lib/dashboard/delta.ts` takes `higherIsWorse`
+for exactly those two and returns a `tone`, which is what the class
+keys on.
+
 Other rules that are easy to break by accident:
 
 - **No drop shadows.** Depth is a surface step (`--bg` → `--panel` →

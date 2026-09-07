@@ -1481,21 +1481,24 @@ hr {
   min-width: 0;
 }
 
-/* The delta arrow is achromatic on purpose. The reference this layout
-   comes from paints it green up / red down, and those two colours are
-   already spoken for here — green is a truck that is moving, red is one
-   off route. A green arrow beside a green status dot would make the
-   palette mean two different things at once. Direction is carried by the
-   glyph and the words instead. */
-.dash-delta { font-family: var(--font-mono); color: var(--text); }
+/* The period-over-period line — now the card's whole third row. The fill
+   counts that shared it were removed on 2026-09-07: five cards each
+   carrying a count nobody read made the strip busier than the five
+   figures it exists for.
 
-/* The period-over-period line, under the foot rather than replacing it:
-   "344 fills" and "up 12% on last week" answer different questions and
-   the strip has room for both.
+   COLOURED, and this REVERSES the note that used to sit here. It said
+   green up / red down could not be done because green is a moving truck
+   and red one off route. The owner overruled that on 2026-09-07, and it
+   is a smaller change than it looks: CLAUDE.md already carved out this
+   exact exception for the fuel variance — "on a money column where a
+   number can be good or bad, red marks an overspend and green marks a
+   saving" — and this extends the same rule to the four figures beside
+   it. It stays inside the stated limit: a signed value against a known
+   baseline, never chrome, never a quantity that is merely large.
 
-   ACHROMATIC, for the reason above and one more: kilometres up 12% is
-   not good or bad on its own, so colouring it would assert a judgement
-   the number does not carry. The glyph does the work. */
+   IT IS TONE, NOT DIRECTION. Variance and litres-per-100km are both
+   worse when they rise, so they go red climbing. Painting by ▲/▼ would
+   put green on the two figures that cost the most money. */
 .dash-kpi__delta {
   margin-top: 2px;
   display: flex;
@@ -1508,10 +1511,12 @@ hr {
   min-width: 0;
 }
 
-/* Slightly dimmer than the figure it points at: the arrow is a
-   modifier, and at full cream two glyphs of equal weight sit beside the
-   percentage arguing about which to read first. */
-.dash-kpi__delta-glyph { color: var(--text-dim); flex: none; }
+/* The glyph inherits the tone with the figure — they are one statement,
+   and an achromatic arrow beside a green percentage reads as two. */
+.dash-kpi__delta-glyph { flex: none; }
+
+.dash-kpi__delta.is-good { color: var(--green); }
+.dash-kpi__delta.is-bad { color: var(--red); }
 
 /* The one part allowed to disappear. In a fifth of the strip's width
    the percentage is the message and "vs the previous 7 days" is the

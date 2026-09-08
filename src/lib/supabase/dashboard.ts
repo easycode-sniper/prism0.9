@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/server";
 // constant from here compiled fine — nothing outside crossed a client
 // boundary with it — and then broke the render at runtime.
 import { type OpsRange, ALL_TIME } from "@/lib/dashboard/range";
+// Passed to the RPC explicitly rather than leaning on its SQL default,
+// exactly as reports.ts does: the panel prints "over 25 minutes" in its
+// own subtitle, and a threshold living only in the database could drift
+// from that sentence without anything failing.
+import { UNLOADED_MIN_SECONDS } from "@/lib/constants";
 
 // Everything the redesigned dashboard reads, in one module so the page
 // makes one round trip per section rather than a query per tile.
@@ -135,6 +140,21 @@ export interface DashboardSeries {
    *  kilometres, and counting it would inflate the rate. Same subset as
    *  consumption, so the two rates describe the same fills. */
   daPerKm: DayPoint[];
+  /** Client-site deliveries per day — the fleet's OUTPUT, against the
+   *  cost every other series here measures. Counted from zone_visits on
+   *  the same 25-minute rule as Rapport Livraisons and the Déchargés
+   *  panel (see UNLOADED_MIN_SECONDS), the plant excluded because it is
+   *  zone_kind 'factory' rather than 'site'.
+   *
+   *  Bucketed by ARRIVAL, one day per visit — unlike Rapport Livraisons,
+   *  which reports an overnight stay in both days it touches. A series
+   *  whose columns did not sum to its own total would be worse than the
+   *  small edge disagreement this costs. Migration 056 has the argument.
+   *
+   *  Null, never zero, before site logging began on 2026-09-01: there
+   *  were no 'site' rows to count, which is not the same as a fleet that
+   *  delivered nothing. Same rule as km — see DayPoint. */
+  deliveries: DayPoint[];
   /** How many days of history actually exist behind the longest series,
    *  so the page can show a range control that does not promise more
    *  than it has. */
@@ -156,15 +176,17 @@ export async function getDashboardSeries(
   const { data, error } = await supabase.rpc("dashboard_daily_series", {
     p_from: range.from,
     p_to: range.to,
+    p_min_seconds: UNLOADED_MIN_SECONDS,
   });
   if (error) return { error: error.message };
 
   const rows = (data ?? []) as { day: string; km: string | number; litres: string | number;
                                  consumption: string | number | null; alerts: string | number;
-                                 amount_da: string | number; da_per_km: string | number | null }[];
+                                 amount_da: string | number; da_per_km: string | number | null;
+                                 deliveries: string | number | null }[];
   const point = (
     r: typeof rows[number],
-    field: "km" | "litres" | "consumption" | "alerts" | "amount_da" | "da_per_km"
+    field: "km" | "litres" | "consumption" | "alerts" | "amount_da" | "da_per_km" | "deliveries"
   ) => ({
     day: r.day,
     // Null is carried through rather than floored to zero — see DayPoint.
@@ -179,6 +201,7 @@ export async function getDashboardSeries(
       consumption: rows.map((r) => point(r, "consumption")),
       amountDa: rows.map((r) => point(r, "amount_da")),
       daPerKm: rows.map((r) => point(r, "da_per_km")),
+      deliveries: rows.map((r) => point(r, "deliveries")),
       // Days that actually carry a distance reading, so the panel can say
       // how much history is really behind a 30-day frame.
       daysAvailable: rows.filter((r) => Number(r.km ?? 0) > 0).length,

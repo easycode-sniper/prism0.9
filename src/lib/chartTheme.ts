@@ -162,9 +162,18 @@ export function timeSeriesOptions(opts?: {
    * day in full instead of repeating that abbreviation back.
    */
   days?: string[];
+  /**
+   * What the tooltip says on a null point. A null means different things
+   * to different series — no fill was logged, or the measurement did not
+   * exist yet — and the tooltip has to agree with the break in the line
+   * or hovering quietly reinstates the zero the null exists to avoid.
+   * Defaults to the fuel series' reading, which is the common case.
+   */
+  nullLabel?: string;
 }) {
   const unit = opts?.unit ?? "";
   const days = opts?.days;
+  const nullLabel = opts?.nullLabel ?? "no fill logged";
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -208,7 +217,7 @@ export function timeSeriesOptions(opts?: {
           // line, or hovering quietly reinstates the zero.
           label: (ctx: { parsed: { y: number | null } }) =>
             ctx.parsed.y == null
-              ? "no fill logged"
+              ? nullLabel
               : `${ctx.parsed.y.toLocaleString("en-GB")}${unit}`,
         },
       },

@@ -521,6 +521,18 @@ export default function DashboardPage() {
     return km.find((p) => p.value != null)?.day ?? null;
   }, [series]);
 
+  // The same sentence for deliveries, and for the same reason: client
+  // sites were not logged at all before runSiteZoneCheck shipped, so the
+  // early days of a long range are a gap rather than a fleet that
+  // delivered nothing. Only shown while the range actually reaches back
+  // past that boundary — inside the logged period there is nothing on
+  // screen to explain.
+  const deliveryGapDay = useMemo(() => {
+    const d = series?.deliveries;
+    if (!d || d.length === 0 || d[0].value != null) return null;
+    return d.find((p) => p.value != null)?.day ?? null;
+  }, [series]);
+
   // The ISO days behind each series, handed to the tooltip so it can name
   // the day in full where the axis only has room to abbreviate it. The
   // RPC returns every series dense over the same range, so these are the
@@ -531,6 +543,7 @@ export default function DashboardPage() {
   const litreDays = (series?.litres ?? []).map((p) => p.day);
   const consumptionDays = (series?.consumption ?? []).map((p) => p.day);
   const costDays = (series?.amountDa ?? []).map((p) => p.day);
+  const deliveryDays = (series?.deliveries ?? []).map((p) => p.day);
 
   const kmChart = {
     labels,
@@ -542,6 +555,15 @@ export default function DashboardPage() {
           areaFill(ctx.chart.ctx, ctx.chart.chartArea?.top ?? 0, ctx.chart.chartArea?.bottom ?? 0),
       },
     ],
+  };
+
+  // What the fleet DELIVERED, against the cost every other panel here
+  // measures. Bars rather than a line: this is a count of discrete
+  // events, the same shape as the alerts panel, and a line between two
+  // days would draw a slope through hours in which nothing happened.
+  const deliveriesChart = {
+    labels: (series?.deliveries ?? []).map((p) => axisLabel(p.day)),
+    datasets: [{ data: (series?.deliveries ?? []).map((p) => p.value), ...BAR_SERIES }],
   };
 
   const alertsChart = {
@@ -818,6 +840,63 @@ export default function DashboardPage() {
                       units: [" DA", " DA/km"],
                       days: costDays,
                       compactLeft: true,
+                    })}
+                    plugins={[crosshairPlugin]}
+                  />
+                ) : (
+                  <ChartWaiting />
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Third, straight after the money — because it is the other
+              half of it. Every other panel on this page measures what the
+              fleet SPENDS: kilometres, litres, dinars at the pump,
+              variance by truck, variance by driver. None of them said
+              what it delivered, which left every figure above a numerator
+              with no denominator — 40,000 DA of variance reads one way
+              over a 60-delivery week and another over a 200-delivery one.
+              Reading the two panels adjacently is the whole point: a day
+              that cost the same as yesterday for six fewer deliveries is
+              the question this panel exists to raise.
+
+              No new query. Migration 056 adds the count to
+              dashboard_daily_series, which this page already fetches. */}
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div style={{ minWidth: 0 }}>
+                <div className="dash-panel__title">{t("Deliveries per day")}</div>
+                <div className="dash-panel__sub">
+                  {/* Names the rule rather than leaving it implied. Site
+                      visits are logged with strict containment and no
+                      edge buffer, so a road clipping a geofence logs a
+                      truck that merely drove past — 67 of 264 rows are
+                      under the threshold, several of them about a minute.
+                      The same 25 minutes as Rapport Livraisons and the
+                      Déchargés panel, from one constant, so the three
+                      cannot disagree about what a delivery is. */}
+                  {t("A stop of more than 25 minutes at a client site. The plant is not a delivery.")}
+                  {range.to == null || range.to >= opsToday() ? " " + t("Today is still counting.") : ""}
+                  {deliveryGapDay ? " " + t("No site tracking before {day} — those days are a gap, not zero.", { day: deliveryGapDay }) : ""}
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              <div className="dash-chart dash-chart--tall">
+                {series ? (
+                  <Bar
+                    data={deliveriesChart}
+                    options={timeSeriesOptions({
+                      // No unit suffix, like the alerts panel: this is a
+                      // bare count, and "29 deliveries" in a tooltip is
+                      // an English word on a page that ships in French.
+                      days: deliveryDays,
+                      // The default reading is the fuel series'. A null
+                      // here is a day before client sites were logged at
+                      // all, and the tooltip has to say so or hovering an
+                      // empty slot reinstates the zero the gap avoids.
+                      nullLabel: t("not tracked yet"),
                     })}
                     plugins={[crosshairPlugin]}
                   />

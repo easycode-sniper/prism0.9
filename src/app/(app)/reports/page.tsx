@@ -8,19 +8,25 @@ import {
   getReportableTrucks,
   getFleetSiteVisits,
   getFleetSiteTotals,
+  getVoyageReport,
   type ParcEntry,
   type GeoVisit,
   type GeoTotalRow,
   type FleetSiteVisit,
   type FleetSiteTotalRow,
+  type VoyageRow,
 } from "@/lib/supabase/reports";
 import {
   formatOpsDateTime,
   opsLocalToInstant,
   opsNowLocalValue,
   OPS_TIMEZONE,
+  signedClass,
+  signedValue,
+  consumptionClassAgainst,
 } from "@/lib/format";
 import { UNLOADED_MIN_SECONDS } from "@/lib/constants";
+import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
 import { Copy, Download, Check } from "lucide-react";
 import TruckCombobox from "@/components/forms/TruckCombobox";
 
@@ -51,7 +57,7 @@ import TruckCombobox from "@/components/forms/TruckCombobox";
 // Rapport Usine used to be and is not a revival of it — Usine asked what
 // the whole fleet did AT AMOUDA and could not see a client site, which
 // is the exact half this one keeps.
-type Report = "parc" | "geo" | "livraisons";
+type Report = "parc" | "geo" | "livraisons" | "voyages";
 type QuickRange = "today" | "yesterday" | "week" | "month";
 
 function startOfRange(range: QuickRange): { from: string; to: string } {
@@ -119,6 +125,40 @@ const GEO_COPY_AFTER = "Heure sortie";
 const LIV_COLUMNS = [
   "Truck ID", "Driver", "Site", "Client", "Heure d'entrée", "Heure sortie", "Temps passé",
 ] as const;
+
+// The owner's order, from the CSV he specified it with, and it is the
+// order the question is asked in: which truck, who drove it, what it
+// cost, how far, how much fuel, at what rate, how far off the assumed
+// rate that put it — and then the number the report exists for.
+//
+// Number of voyages LAST despite being the subject, because the seven
+// columns before it are what make it mean anything: nine voyages on
+// 42 L/100km and nine on 52 are different weeks.
+const VOYAGE_COLUMNS = [
+  "Truck ID", "Driver", "Amount (DA)", "Distance (km)", "Litres",
+  "L/100km", "Variance (DA)", "Voyages",
+] as const;
+
+const nfr = (v: number) => v.toLocaleString("en-GB");
+
+function voyageRows(rows: VoyageRow[]): string[][] {
+  return rows.map((r) => [
+    r.truck_id,
+    // The whole list in the export. On screen the extra names collapse
+    // to a "+2" the reader can hover; a spreadsheet has no hover, and a
+    // truncated name there is the kind of thing that gets pasted into a
+    // meeting.
+    r.drivers,
+    nfr(r.amount_da),
+    nfr(r.km),
+    nfr(r.litres),
+    r.litres_per_100km == null ? "" : r.litres_per_100km.toFixed(2),
+    nfr(r.variance_da),
+    // Spelled out rather than left blank: a blank cell in a spreadsheet
+    // is indistinguishable from a zero somebody deleted.
+    r.voyages == null ? "Not available" : String(r.voyages),
+  ]);
+}
 
 function livRows(visits: FleetSiteVisit[]): string[][] {
   return visits.map((v) => [
@@ -202,6 +242,7 @@ export default function ReportsPage() {
   // The flag AND the real number. The flag alone could only say "some
   // rows are missing"; the count comes from Postgres over the whole
   // matching set, so the notice can say how many there actually were.
+  const [voyages, setVoyages] = useState<VoyageRow[] | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -228,6 +269,7 @@ export default function ReportsPage() {
     setGeoTotals(null);
     setLivVisits(null);
     setLivTotals(null);
+    setVoyages(null);
     setError(null);
     setCopied(false);
   }
@@ -245,7 +287,20 @@ export default function ReportsPage() {
       return;
     }
 
-    if (report === "livraisons") {
+    if (report === "voyages") {
+      // One round trip: the RPC already joins the fuel sheet to the zone
+      // log, so there is no summary strip that could disagree with the
+      // table under it.
+      const result = await getVoyageReport(fromIso, toIso);
+      if (result.error) {
+        setError(result.error);
+        setVoyages(null);
+      } else {
+        setVoyages(result.data);
+        setTruncated(result.truncated);
+        setTotal(result.total);
+      }
+    } else if (report === "livraisons") {
       // Both together, for the reason Geo fetches both together: the
       // strip describes the same answer as the table, and a second round
       // trip would paint a filled table over an empty strip.
@@ -304,6 +359,7 @@ export default function ReportsPage() {
     setGeoTotals(null);
     setLivVisits(null);
     setLivTotals(null);
+    setVoyages(null);
     setError(null);
     setCopied(false);
   }
@@ -312,7 +368,9 @@ export default function ReportsPage() {
   // screen. Exporting the detail while looking at the summary is the
   // kind of thing nobody notices until the figures are in a meeting.
   const active: { columns: readonly string[]; rows: string[][]; slug: string } =
-    report === "livraisons"
+    report === "voyages"
+      ? { columns: VOYAGE_COLUMNS, rows: voyageRows(voyages ?? []), slug: "rapport-voyages" }
+      : report === "livraisons"
       ? { columns: LIV_COLUMNS, rows: livRows(livVisits ?? []), slug: "rapport-livraisons" }
       : report === "geo"
       ? {
@@ -414,23 +472,38 @@ export default function ReportsPage() {
   const monoCell: React.CSSProperties = { fontFamily: "var(--font-mono)", color: "var(--text-dim)" };
   // The copy column's heading is empty to the eye but not to a screen
   // reader, which would otherwise announce an unlabelled column.
+  // Figures compare down a column by their last digit. Monospace so the
+  // digits line up as columns of their own, which is the same reasoning
+  // the truck id already uses.
+  const numCell: React.CSSProperties = {
+    textAlign: "right",
+    fontFamily: "var(--font-mono)",
+    whiteSpace: "nowrap",
+  };
+
   const srOnly: React.CSSProperties = {
     position: "absolute", width: 1, height: 1, padding: 0, margin: -1,
     overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0,
   };
   const hasRun =
     report === "parc" ? entries !== null
+    : report === "voyages" ? voyages !== null
     : report === "livraisons" ? livVisits !== null
     : geoVisits !== null;
 
   return (
     <div className="mx-auto max-w-6xl p-6">
       <h1 className="text-2xl font-semibold t-primary">
-        {report === "parc" ? "Rapport Parc" : report === "geo" ? "Rapport Geo" : "Rapport Livraisons"}
+        {report === "parc" ? "Rapport Parc"
+          : report === "geo" ? "Rapport Geo"
+          : report === "voyages" ? "Rapport Voyages"
+          : "Rapport Livraisons"}
       </h1>
       <p className="mt-1 text-sm t-dim">
         {report === "parc"
           ? "Trucks that entered PARC OMD — headquarters & parking."
+          : report === "voyages"
+          ? "One row per truck: what it burned, what that cost against the assumed rate, and how many loaded trips it ran from the plant to a client."
           : report === "livraisons"
           ? `Every truck, every client site it stopped at for more than ${UNLOADED_MIN_SECONDS / 60} minutes — the plant is left out, so what remains is the deliveries.`
           : "One truck, every zone it entered — the plant's waiting area and loading bay alongside the client sites."}{" "}
@@ -457,6 +530,19 @@ export default function ReportsPage() {
         </p>
       )}
 
+      {report === "voyages" && (
+        <p className="mt-1 text-xs t-faint">
+          A <strong>voyage</strong> is a load at the plant that reached a client — a stop of more
+          than {UNLOADED_MIN_SECONDS / 60} minutes at a site, with a loading at Amouda between it
+          and that truck&rsquo;s previous delivery. Trucks reading{" "}
+          <strong>Not available</strong> are not trucks that did nothing: this app watches one
+          plant, so a truck that loaded elsewhere is invisible to the count, and a zero there would
+          claim more than the data knows. The fuel columns cover the fills that logged a distance —
+          the same set the dashboard&rsquo;s variance table uses — so litres, L/100km and variance
+          all describe the same fills and divide into each other correctly.
+        </p>
+      )}
+
       {report === "geo" && (
         <p className="mt-1 text-xs t-faint">
           The loading bay sits inside the waiting area, so an <strong>Attente</strong> row is the
@@ -467,7 +553,7 @@ export default function ReportsPage() {
 
       <div className="panel mt-5 p-4">
         <div className="seg" style={{ width: "fit-content" }}>
-          {(["parc", "geo", "livraisons"] as Report[]).map((r) => (
+          {(["parc", "geo", "livraisons", "voyages"] as Report[]).map((r) => (
             <button
               key={r}
               type="button"
@@ -475,7 +561,7 @@ export default function ReportsPage() {
               className={`seg-item${report === r ? " is-active" : ""}`}
               aria-pressed={report === r}
             >
-              {r === "parc" ? "Parc" : r === "geo" ? "Geo" : "Livraisons"}
+              {r === "parc" ? "Parc" : r === "geo" ? "Geo" : r === "voyages" ? "Voyages" : "Livraisons"}
             </button>
           ))}
         </div>
@@ -615,6 +701,11 @@ export default function ReportsPage() {
               {active.rows.length}{" "}
               {report === "parc"
                 ? active.rows.length === 1 ? "entry" : "entries"
+                : report === "voyages"
+                // The row count is TRUCKS here, not voyages — this
+                // report is one row per truck, and calling them
+                // "voyages" would read as a total that is not on screen.
+                ? active.rows.length === 1 ? "truck" : "trucks"
                 : report === "livraisons"
                 ? active.rows.length === 1 ? "livraison" : "livraisons"
                 : active.rows.length === 1 ? "passage" : "passages"}
@@ -741,6 +832,63 @@ export default function ReportsPage() {
                         {v.exited_at ? formatOpsDateTime(v.exited_at) : "encore sur place"}
                       </td>
                       <td style={monoCell}>{hms(v.seconds_on_site)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : report === "voyages" ? (
+            <div className="mt-3 table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    {VOYAGE_COLUMNS.map((c) => (
+                      // Every column but the first two is a number, so
+                      // they are right-aligned: figures compare down a
+                      // column by their last digit, not their first.
+                      <th key={c} style={c === "Truck ID" || c === "Driver" ? undefined : { textAlign: "right" }}>
+                        {c}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {voyages!.map((r) => (
+                    <tr key={r.truck_id}>
+                      <td className="truck-id">{r.truck_id}</td>
+                      <td>
+                        {/* One name plus a count, not a wrapped list: at
+                            0.87rem three Algerian names is 40 characters
+                            and would set the row height for the whole
+                            table. The full list is in the title and in
+                            the export. */}
+                        <span title={r.drivers}>{r.drivers.split(", ")[0]}</span>
+                        {r.driver_count > 1 && (
+                          <span className="text-xs t-dim" title={r.drivers}> +{r.driver_count - 1}</span>
+                        )}
+                      </td>
+                      <td style={numCell}>{nfr(r.amount_da)}</td>
+                      <td style={numCell}>{nfr(r.km)}</td>
+                      <td style={numCell}>{nfr(r.litres)}</td>
+                      {/* Red above the rate the sheet prices the écart
+                          from, green below it — the same signed-against-
+                          a-known-baseline rule the variance column uses,
+                          and the same one the dashboard's consumption
+                          column already follows. */}
+                      <td style={numCell} className={consumptionClassAgainst(r.litres_per_100km, ASSUMED_L_PER_100KM)}>
+                        {r.litres_per_100km == null ? "—" : r.litres_per_100km.toFixed(2)}
+                      </td>
+                      <td style={numCell} className={signedClass(r.variance_da)}>
+                        {signedValue(r.variance_da, "DA")}
+                      </td>
+                      {/* NOT ZERO. This app watches one plant, so a truck
+                          with no voyages either made none or loaded
+                          somewhere it cannot see — and printing 0 would
+                          assert the first. The owner asked for exactly
+                          this wording. */}
+                      <td style={numCell} className={r.voyages == null ? "t-dim" : undefined}>
+                        {r.voyages == null ? "Not available" : r.voyages}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

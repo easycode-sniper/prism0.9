@@ -166,3 +166,30 @@ export function opsToday(): string {
     day: "2-digit",
   }).format(new Date());
 }
+
+// ── Money and consumption, coloured ───────────────────────────
+//
+// The design system's one chromatic exception, and the rule is narrow
+// enough to be worth restating where it is applied: on a SIGNED value
+// against a KNOWN BASELINE, red is the bad half and green the good one.
+// Not on chrome, and not on a quantity that is merely large or small.
+//
+// Lived in dashboard/page.tsx until Rapport Voyages needed the same
+// variance column. Two copies of "which way is bad" is exactly the drift
+// that put three different statusColor functions in this codebase, so
+// they moved here rather than being pasted a second time.
+
+/** Overspend is red, a saving is green. Positive variance means the
+ *  fleet paid more than the assumed rate predicted for the distance. */
+export const signedClass = (v: number | null) =>
+  v == null ? "t-dim" : v > 0 ? "c-red" : v < 0 ? "c-green" : "t-dim";
+
+/** The same figure as text, with its sign made explicit — a bare
+ *  "-18,737 DA" reads as a debt rather than as money not spent. */
+export const signedValue = (v: number | null, unit: string) =>
+  v == null ? "—" : `${v > 0 ? "+" : ""}${v.toLocaleString("en-GB")} ${unit}`;
+
+/** Consumption against the baseline the sheet itself assumes. Above it
+ *  the truck burned more than the figure the écart was priced from. */
+export const consumptionClassAgainst = (v: number | null, assumed: number) =>
+  v == null ? "t-dim" : v > assumed ? "c-red" : "c-green";

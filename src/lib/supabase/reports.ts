@@ -421,3 +421,84 @@ export async function getFleetSiteTotals(
   if (error) return { data: [], error: error.message };
   return { data: (data ?? []) as FleetSiteTotalRow[], error: null };
 }
+
+// ── Rapport Voyages ───────────────────────────────────────────
+//
+// One row per truck: what it cost to run, and how many trips it made for
+// the money. The owner's spec, 2026-09-08, given as a hand-made CSV —
+// truck, driver, amount, kilometres, litres, L/100km, variance, voyages,
+// in that order.
+//
+// It is the only report that joins the two halves of this app. Every
+// other one reads either the fuel sheet or the zone log; this one puts a
+// truck's fuel beside the work it did for it, which is the comparison
+// the fuel desk actually makes.
+
+export interface VoyageRow {
+  truck_id: string;
+  /** Every driver who fuelled this truck in the range, most fills first.
+   *  A LIST rather than a name: over a month 38 of 74 trucks carry two
+   *  drivers and 9 carry three, and picking one would make him answer
+   *  for another man's fuel. */
+  drivers: string;
+  driver_count: number;
+  amount_da: number;
+  km: number;
+  litres: number;
+  litres_per_100km: number | null;
+  variance_da: number;
+  fills: number;
+  /** NULL, NEVER 0 — the report prints "Not available".
+   *
+   *  The owner called this before it was built: the fuel sheet covers
+   *  the whole fleet, but voyages can only be counted from the one plant
+   *  this app watches. A truck with no voyages either made none or
+   *  loaded somewhere Amouda's geofence cannot see, and 0 asserts the
+   *  first when the data cannot separate them. 28 of 74 trucks today. */
+  voyages: number | null;
+}
+
+export async function getVoyageReport(
+  fromIso: string,
+  toIso: string
+): Promise<{ data: VoyageRow[]; truncated: boolean; total: number; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], truncated: false, total: 0, error: "Not authenticated" };
+
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], truncated: false, total: 0, error: invalid };
+
+  // One row per truck, so this is ~78 rows and the cap is nowhere near.
+  // Counted exactly anyway, on the same reasoning as the others: the
+  // ceiling that bites is the transport's, not ours.
+  const { data, error, count } = await supabase
+    .rpc("fuel_voyage_report", {
+      p_from: fromIso,
+      p_to: toIso,
+      // The same constant Livraisons and Déchargés pass, so all three
+      // agree on what counts as reaching a client.
+      p_min_seconds: UNLOADED_MIN_SECONDS,
+      p_limit: MAX_ROWS,
+    }, { count: "exact" })
+    .limit(MAX_ROWS);
+
+  if (error) return { data: [], truncated: false, total: 0, error: error.message };
+
+  const rows = ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    truck_id: String(r.truck_id ?? "—"),
+    drivers: String(r.drivers ?? "—"),
+    driver_count: Number(r.driver_count ?? 0),
+    amount_da: Number(r.amount_da ?? 0),
+    km: Number(r.km ?? 0),
+    litres: Number(r.litres ?? 0),
+    litres_per_100km: r.litres_per_100km == null ? null : Number(r.litres_per_100km),
+    variance_da: Number(r.variance_da ?? 0),
+    fills: Number(r.fills ?? 0),
+    // The one field that must survive as null. Number(null) is 0, which
+    // would turn "we cannot tell" into "it made no trips".
+    voyages: r.voyages == null ? null : Number(r.voyages),
+  }));
+
+  return finish(rows, count);
+}

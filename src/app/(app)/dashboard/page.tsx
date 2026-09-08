@@ -51,6 +51,7 @@ import {
   areaFill,
   crosshairPlugin,
   doughnutCentrePlugin,
+  doughnutSliceLabelPlugin,
 } from "@/lib/chartTheme";
 import RangeBar, { buildPresets, describeRange, presetKeyFor } from "@/components/dashboard/RangeBar";
 import type { OpsRange } from "@/lib/dashboard/range";
@@ -1041,106 +1042,100 @@ export default function DashboardPage() {
         </div>
 
         <aside className="dash-rail">
-          {/* TWO DONUTS ON ONE ROW, at the owner's request: the fleet
-              status chart gives up half its width so "where we fill up"
-              can sit beside it. They are separate <section>s rather than
-              one panel with two charts — the subjects are unrelated, one
-              is live and one obeys the date range, and a shared heading
-              would have to lie about at least one of those. */}
-          <div className="dash-donuts">
-            <section className="panel dash-panel">
-              <header className="dash-panel__head">
-                <div>
-                  <div className="dash-panel__title">
-                    {t("What the fleet is doing")}
-                    <span className="vehicle-tag" style={{ marginLeft: 6, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span>
-                  </div>
-                  <div className="dash-panel__sub">
-                    {/* Says which population it counts, like the distance
-                        chart does. This one DOES include staff cars —
-                        they are vehicles that report, and where the fleet
-                        is right now is the one question they belong in —
-                        but the alert panels beside it exclude them, and a
-                        reader comparing the two should not have to guess
-                        which is which. */}
-                    {trucks.length > 0
-                      ? t("{n} vehicles, staff included.", { n: trucks.length })
-                      : t("Waiting for the first fleet snapshot.")}
-                  </div>
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">
+                  {t("What the fleet is doing")}
+                  <span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span>
                 </div>
-              </header>
-              <div className="dash-panel__body">
-                {trucks.length === 0 ? (
-                  <p className="dash-empty">
-                    <span>
-                      <MapPinOff size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-                      {t("No fleet snapshot yet — the monitoring job may not be running.")}
-                    </span>
-                  </p>
-                ) : (
-                  <div className="dash-chart dash-chart--donut">
-                    <Doughnut
-                      data={statusChart}
-                      options={doughnutOptions}
-                      plugins={[doughnutCentrePlugin]}
-                    />
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="panel dash-panel">
-              <header className="dash-panel__head">
-                <div>
-                  <div className="dash-panel__title">{t("Where we fill up")}</div>
-                  <div className="dash-panel__sub">
-                    {/* The remainder is most of the ring — the top six
-                        are about a third of fills — so it is named here
-                        rather than left for someone to infer from a grey
-                        arc they cannot hover on a touchscreen. */}
-                    {stationChart
-                      ? t("Top {n} of {total} stations by fills.", {
-                          n: stationChart.chart.labels.length - (stationChart.otherStations > 0 ? 1 : 0),
-                          total: stations?.totalStations ?? 0,
-                        })
-                      : t("From the fuel sheet.")}
-                  </div>
+                <div className="dash-panel__sub">
+                  {/* Says which population it counts, like the distance
+                      chart does. This one DOES include staff cars —
+                      they are vehicles that report, and where the fleet
+                      is right now is the one question they belong in —
+                      but the alert panels beside it exclude them, and a
+                      reader comparing the two should not have to guess
+                      which is which. */}
+                  {trucks.length > 0
+                    ? t("{n} vehicles reporting, staff cars included.", { n: trucks.length })
+                    : t("Waiting for the first fleet snapshot.")}
                 </div>
-              </header>
-              <div className="dash-panel__body">
-                {!stationChart ? (
-                  <p className="dash-empty">
-                    <span>
-                      <Fuel size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-                      {t("No fills logged in this period.")}
-                    </span>
-                  </p>
-                ) : (
-                  <div className="dash-chart dash-chart--donut">
-                    <Doughnut
-                      data={stationChart.chart}
-                      options={stationDoughnutOptions}
-                      plugins={[doughnutCentrePlugin]}
-                    />
-                  </div>
-                )}
               </div>
-              {/* The busiest station spelled out under the ring. The
-                  legend cannot carry these names — "SARL S/S ARAMI
-                  FONTAINE DES GAZELLES EL OUTAYA" is 46 characters in a
-                  170px column — so the chart shows the shape and this
-                  line answers the actual question. */}
-              {stationChart?.top && (
-                <div className="dash-panel__foot dash-station-top">
-                  <span className="dash-station-top__rank">1</span>
-                  <span className="dash-station-top__name" title={stationChart.top.station}>
-                    {stationChart.top.station}
+            </header>
+            <div className="dash-panel__body">
+              {trucks.length === 0 ? (
+                <p className="dash-empty">
+                  <span>
+                    <MapPinOff size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                    {t("No fleet snapshot yet — the monitoring job may not be running.")}
                   </span>
-                  <span className="dash-station-top__n">{nf(stationChart.top.fills)}</span>
+                </p>
+              ) : (
+                <div className="dash-chart dash-chart--donut">
+                  <Doughnut
+                    data={statusChart}
+                    options={doughnutOptions}
+                    plugins={[doughnutCentrePlugin]}
+                  />
                 </div>
               )}
-            </section>
-          </div>
+            </div>
+          </section>
+
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">{t("Where we fill up")}</div>
+                <div className="dash-panel__sub">
+                  {/* The remainder is most of the ring — the top six
+                      are about a third of fills — so it is named here
+                      rather than left for someone to infer from a grey
+                      arc they cannot hover on a touchscreen. */}
+                  {stationChart
+                    ? t("Top {n} of {total} stations by fills.", {
+                        n: stationChart.chart.labels.length - (stationChart.otherStations > 0 ? 1 : 0),
+                        total: stations?.totalStations ?? 0,
+                      })
+                    : t("From the fuel sheet.")}
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              {!stationChart ? (
+                <p className="dash-empty">
+                  <span>
+                    <Fuel size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                    {t("No fills logged in this period.")}
+                  </span>
+                </p>
+              ) : (
+                <div className="dash-chart dash-chart--donut">
+                  <Doughnut
+                    data={stationChart.chart}
+                    options={stationDoughnutOptions}
+                    plugins={[doughnutCentrePlugin, doughnutSliceLabelPlugin]}
+                  />
+                </div>
+              )}
+            </div>
+            {/* The busiest station spelled out under the ring. A legend
+                cannot carry these names even at the rail's full width —
+                "SARL S/S ARAMI FONTAINE DES GAZELLES EL OUTAYA" is 46
+                characters, and seven of those stacked under a ring is a
+                wall rather than a legend. The ring shows the shape, the
+                tooltip carries the name, and this line answers the
+                question that was actually asked. */}
+            {stationChart?.top && (
+              <div className="dash-panel__foot dash-station-top">
+                <span className="dash-station-top__rank">1</span>
+                <span className="dash-station-top__name" title={stationChart.top.station}>
+                  {stationChart.top.station}
+                </span>
+                <span className="dash-station-top__n">{nf(stationChart.top.fills)}</span>
+              </div>
+            )}
+          </section>
 
           <SpeedingPanel rows={speeding} />
 

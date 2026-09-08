@@ -104,6 +104,20 @@ most. `periodDelta` in `lib/dashboard/delta.ts` takes `higherIsWorse`
 for exactly those two and returns a `tone`, which is what the class
 keys on.
 
+A SECOND extension, 2026-09-08, also the owner's: the **station donut**
+on the dashboard ("Where we fill up") colours its slices to separate
+categories, not to name a state. It began as a single-hue cyan ramp for
+exactly the reason above and he asked for more colour.
+
+The limit on it is the part to keep. `STATION_RAMP` in `chartTheme.ts`
+uses **cyan, pink and amber, each at a full and a light step** — and
+deliberately **no green and no red**. Those two are the loudest words in
+the taxonomy, and a station slice in either would read as a truck status
+on a screen where every other pixel of those colours is one. No purple
+either; removing it was the point of the overhaul. If another
+categorical chart ever appears, build it from the same three hues on the
+same reasoning rather than reaching for the alarm colours.
+
 Other rules that are easy to break by accident:
 
 - **No drop shadows.** Depth is a surface step (`--bg` → `--panel` →

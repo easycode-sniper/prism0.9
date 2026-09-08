@@ -17,29 +17,41 @@ export const CHART_COLORS = {
 } as const;
 
 /**
- * The station donut's arcs: ONE HUE, SEVEN STEPS.
+ * The station donut's arcs.
  *
- * Categorical palettes are what a chart like this normally reaches for,
- * and this app cannot have one — every hue in globals.css is spoken for
- * by a vehicle state, so six stations in six colours would invent six
- * meanings and collide with all five. Cyan is already the taxonomy's
- * "parking, stations, informational", so the hue says STATION and the
- * ramp says how much. Nothing new enters the palette.
+ * CATEGORICAL, at the owner's request on 2026-09-08 — he did not like a
+ * single-hue cyan ramp, which is what this was. That makes it the one
+ * chart in the app where colour separates categories rather than naming
+ * a vehicle state, and the limit on it is deliberate:
  *
- * Descending luminance, so rank reads without the legend: the busiest
- * station is the brightest arc. The last entry is --line, the same
- * achromatic grey the "no data" arc uses, for the remainder — it is not
- * a station, it is everyone else.
+ *   NO GREEN AND NO RED. Those two are the loudest words in the
+ *   taxonomy — green is a truck that is moving, red is one off route or
+ *   speeding — and a station slice in either would read as a status on
+ *   a dashboard where every other pixel of those colours is one. The
+ *   palette is built from the three hues that are not alarms: cyan
+ *   (which already means "stations"), pink, and amber, each at a full
+ *   and a light step.
+ *
+ *   No purple either. The 2026-08 overhaul existed to remove it.
+ *
+ * Ordered so the top three take the saturated steps and the next three
+ * their lighter siblings, which keeps rank legible without a legend.
+ * The last entry is --line, the achromatic grey the no-data arc uses,
+ * for the remainder — it is not a station, it is everyone else.
  */
 export const STATION_RAMP = [
-  "#00cfff",
-  "#00b0e0",
-  "#0092c0",
-  "#0075a0",
-  "#005a80",
-  "#004060",
-  "#42433d",
+  "#00cfff", // cyan
+  "#ff2fd0", // pink
+  "#ffb300", // amber
+  "#7fe4ff", // cyan, light
+  "#ff8ae4", // pink, light
+  "#ffd98a", // amber, light
+  "#42433d", // --line, the remainder
 ] as const;
+
+/** Slices whose own colour is bright enough that dark text reads better
+ *  on them than cream. Everything in the ramp except the remainder. */
+const STATION_RAMP_IS_BRIGHT = new Set<string>(STATION_RAMP.slice(0, 6));
 
 const SURFACE = "#191919";   // --panel, the ground a chart sits on
 const CANVAS = "#0e100f";    // --bg
@@ -104,10 +116,7 @@ export const doughnutOptions = {
         pointStyle: "circle" as const,
         boxWidth: 7,
         boxHeight: 7,
-        // 9, not 14: the legend sits in one row at full width and stacks
-        // into three in the half-rail pair, where 14px of padding per
-        // entry was most of the height the third one needed.
-        padding: 9,
+        padding: 14,
         font: { size: 11 },
       },
     },
@@ -448,6 +457,69 @@ export const stationDoughnutOptions = {
         },
       },
     },
+  },
+};
+
+/**
+ * Percentages written into the arcs themselves.
+ *
+ * A PLUGIN RATHER THAN chartjs-plugin-datalabels, on the same reasoning
+ * that keeps this app talking to Wialon and Google over plain fetch: the
+ * job is "draw a string at the middle of each arc", the centre readout
+ * beside it is already a hand-written plugin, and a dependency for it
+ * would be one more thing to keep patched.
+ *
+ * SMALL SLICES ARE SKIPPED. Under about 4% the arc is narrower than the
+ * text, so the label would sit half outside its own slice and collide
+ * with its neighbours — which is worse than not labelling it, because
+ * the reader cannot tell which arc it belongs to. The tooltip still has
+ * the number for those.
+ */
+export const doughnutSliceLabelPlugin: Plugin<"doughnut"> = {
+  id: "prismDoughnutSliceLabels",
+  afterDatasetsDraw(chart) {
+    const dataset = chart.data.datasets[0];
+    if (!dataset) return;
+
+    const values = (dataset.data as (number | null)[]).map((n) => Number(n) || 0);
+    const total = values.reduce((sum, n) => sum + n, 0);
+    if (total === 0) return;
+
+    const palette = Array.isArray(dataset.backgroundColor)
+      ? (dataset.backgroundColor as string[])
+      : [];
+
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "600 11px 'IBM Plex Mono', ui-monospace, monospace";
+
+    chart.getDatasetMeta(0).data.forEach((element, i) => {
+      const share = values[i] / total;
+      if (share < 0.04) return;
+
+      const arc = element as unknown as {
+        x: number; y: number;
+        startAngle: number; endAngle: number;
+        innerRadius: number; outerRadius: number;
+      };
+
+      // Midway through the ring's thickness, halfway round the arc.
+      const angle = (arc.startAngle + arc.endAngle) / 2;
+      const radius = (arc.innerRadius + arc.outerRadius) / 2;
+
+      // Dark text on the saturated slices, cream on the grey remainder:
+      // cream on #ffb300 is barely there, and #42433d cannot carry dark.
+      ctx.fillStyle = STATION_RAMP_IS_BRIGHT.has(palette[i]) ? CANVAS : TEXT;
+      ctx.fillText(
+        `${Math.round(share * 100)}%`,
+        arc.x + Math.cos(angle) * radius,
+        arc.y + Math.sin(angle) * radius
+      );
+    });
+
+    ctx.restore();
   },
 };
 

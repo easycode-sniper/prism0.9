@@ -155,6 +155,17 @@ export interface DashboardSeries {
    *  were no 'site' rows to count, which is not the same as a fleet that
    *  delivered nothing. Same rule as km — see DayPoint. */
   deliveries: DayPoint[];
+  /** True when the requested range was longer than the series can
+   *  return and the START was moved forward — so the charts show the
+   *  newest days, not all of them. Migration 057 caps the span at 730
+   *  days, comfortably under the 1000-row ceiling the API truncates at
+   *  without erroring.
+   *
+   *  Surfaced rather than swallowed: the whole failure this replaces was
+   *  a chart that covered less than it was asked for and said nothing.
+   *  Unreachable until roughly August 2028 on today's record, which is
+   *  exactly why it has to announce itself — nobody will remember. */
+  daysClamped: boolean;
   /** How many days of history actually exist behind the longest series,
    *  so the page can show a range control that does not promise more
    *  than it has. */
@@ -171,8 +182,17 @@ export async function getDashboardSeries(
   // The RPC returns one row per day, already dense and already bucketed
   // to the Africa/Algiers operations day — so a fill logged at 00:12
   // local counts against the day the office worked it. One row per day
-  // in the range however many fills sit behind them; 047 caps the span
-  // at ~3 years so a mistyped year cannot generate 45,000 rows.
+  // in the range however many fills sit behind them.
+  //
+  // A NULL range means ALL TIME and is answered as such: 057 reads the
+  // first day any source has data rather than defaulting to the last 30.
+  // Until then "All time" gave genuinely all-time KPI tiles above charts
+  // that quietly covered a month, with nothing on screen saying so.
+  //
+  // The span cap is 730 days and it moves the START, keeping the newest
+  // days. 047 capped the END instead, which answered "2020 to today"
+  // with 2020-2022 — three years of history and not one recent day on a
+  // dashboard about now.
   const { data, error } = await supabase.rpc("dashboard_daily_series", {
     p_from: range.from,
     p_to: range.to,
@@ -183,7 +203,8 @@ export async function getDashboardSeries(
   const rows = (data ?? []) as { day: string; km: string | number; litres: string | number;
                                  consumption: string | number | null; alerts: string | number;
                                  amount_da: string | number; da_per_km: string | number | null;
-                                 deliveries: string | number | null }[];
+                                 deliveries: string | number | null;
+                                 days_clamped: boolean | null }[];
   const point = (
     r: typeof rows[number],
     field: "km" | "litres" | "consumption" | "alerts" | "amount_da" | "da_per_km" | "deliveries"
@@ -202,6 +223,9 @@ export async function getDashboardSeries(
       amountDa: rows.map((r) => point(r, "amount_da")),
       daPerKm: rows.map((r) => point(r, "da_per_km")),
       deliveries: rows.map((r) => point(r, "deliveries")),
+      // The same value on every row — read the first, and default to
+      // false for an empty range rather than to a missing-column crash.
+      daysClamped: rows[0]?.days_clamped === true,
       // Days that actually carry a distance reading, so the panel can say
       // how much history is really behind a 30-day frame.
       daysAvailable: rows.filter((r) => Number(r.km ?? 0) > 0).length,

@@ -199,7 +199,11 @@ export default function ReportsPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // The flag AND the real number. The flag alone could only say "some
+  // rows are missing"; the count comes from Postgres over the whole
+  // matching set, so the notice can say how many there actually were.
   const [truncated, setTruncated] = useState(false);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -257,6 +261,7 @@ export default function ReportsPage() {
         setLivVisits(v.data);
         setLivTotals(t.data);
         setTruncated(v.truncated);
+        setTotal(v.total);
       }
     } else if (report === "geo") {
       // Both together: the strip sits above the table and describes the
@@ -274,6 +279,7 @@ export default function ReportsPage() {
         setGeoVisits(v.data);
         setGeoTotals(t.data);
         setTruncated(v.truncated);
+        setTotal(v.total);
       }
     } else {
       const result = await getParcEntries(fromIso, toIso);
@@ -283,6 +289,7 @@ export default function ReportsPage() {
       } else {
         setEntries(result.data);
         setTruncated(result.truncated);
+        setTotal(result.total);
       }
     }
     setLoading(false);
@@ -611,7 +618,12 @@ export default function ReportsPage() {
                 : report === "livraisons"
                 ? active.rows.length === 1 ? "livraison" : "livraisons"
                 : active.rows.length === 1 ? "passage" : "passages"}
-              {truncated && " (showing the first 5000 — narrow the range)"}
+              {/* Names the real total, which is the whole reason the
+                  count is now taken in Postgres: the old notice could
+                  only say "the first 5000", and it never fired anyway
+                  because the response was capped at 1000 long before
+                  5001 rows could arrive to trigger it. */}
+              {truncated && ` of ${total.toLocaleString("en-GB")} — narrow the range to see the rest`}
             </span>
             {active.rows.length > 0 && (
               <div className="flex gap-2">

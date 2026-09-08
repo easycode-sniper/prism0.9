@@ -701,6 +701,23 @@ export default function DashboardPage() {
         <RangeBar value={range} onChange={setRange} daysWithData={series?.daysAvailable ?? null} />
       </div>
 
+      {/* The charts cover a shorter window than the tiles above them.
+          Only reachable on a range longer than 730 days, which today's
+          record cannot produce — it exists so that when it does, around
+          August 2028, the page says so rather than quietly drawing less
+          than it was asked for. That silence is the exact fault this
+          replaces: "All time" used to give genuinely all-time scorecards
+          over charts that covered thirty days, with nothing on screen
+          admitting the difference.
+
+          The tiles are unaffected — fuel_period_stats sums in Postgres
+          and returns one row whatever the span. */}
+      {series?.daysClamped && (
+        <div className="mt-3 text-xs t-dim">
+          {t("The scorecards cover the whole range. The charts below show the most recent {days} days of it.", { days: String(series.km.length) })}
+        </div>
+      )}
+
       {/* Shown verbatim rather than as "something went wrong". This is an
           operations tool read by the person who can act on it, and the
           message PostgREST returns for a stale schema cache names the

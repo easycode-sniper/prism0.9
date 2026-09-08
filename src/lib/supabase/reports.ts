@@ -12,22 +12,63 @@ export interface ParcEntry {
 
 // Cap so a careless range (or a year of data) can't try to render tens of
 // thousands of rows into the browser. The UI says when it has been hit.
+//
+// 5000 WAS NEVER REACHABLE, and that was the bug. Every query below asked
+// for MAX_ROWS + 1 and inferred "there was more" from getting the extra
+// row back — sound reasoning against a database, and wrong against this
+// one, because the API refuses to return more than 1000 rows in a
+// response and does not error when it truncates. Ask for 5001, get 1000,
+// count 1000, conclude "fewer than I asked for, so that is everything",
+// and print a row count that looks entirely normal. The same silent
+// ceiling had the fuel KPIs summing the first 1000 of 1147 fills before
+// migration 028.
+//
+// TWO INDEPENDENT FIXES, because either alone can be undermined:
+//
+//   1. MAX_RANGE_DAYS below keeps the row count small enough that the
+//      ceiling is never approached in the first place.
+//   2. The queries now ask PostgREST for an EXACT COUNT alongside the
+//      page of rows. That count is computed in Postgres over the whole
+//      matching set and is unaffected by any row limit, so "is there
+//      more than I am showing" is answered by the database rather than
+//      inferred from what survived the wire. It stays right whatever the
+//      API's ceiling turns out to be, and it lets the notice say how
+//      many rows were actually found instead of only that some are
+//      missing.
 const MAX_ROWS = 5000;
+
+/**
+ * The longest range a report will run, in days.
+ *
+ * THE OWNER'S NUMBER, 2026-09-08: "thirty days will do just fine — I'm
+ * not gonna look for a report that's over thirty days old", and a
+ * six-month pull is "crazy data" he would not read. So this is a product
+ * decision that happens to also be a safety one; it is not a workaround
+ * for the ceiling above, which is why the exact count ships alongside it
+ * rather than instead of it.
+ *
+ * 31 rather than 30 so that both a "last 30 days" preset (inclusive, so
+ * 30 days) and a whole calendar month (up to 31) fit without the operator
+ * having to shave a day off a date he typed correctly.
+ *
+ * For scale: at ~25 deliveries a day, 31 days of Rapport Livraisons is
+ * about 775 rows. Rapport Parc runs ~10 entries a day and Geo is one
+ * truck, so both are far smaller.
+ */
+const MAX_RANGE_DAYS = 31;
 
 export async function getParcEntries(
   fromIso: string,
   toIso: string
-): Promise<{ data: ParcEntry[]; truncated: boolean; error: string | null }> {
+): Promise<{ data: ParcEntry[]; truncated: boolean; total: number; error: string | null }> {
   const supabase = await createClient();
   const user = await supabase.auth.getUser();
-  if (!user.data.user) return { data: [], truncated: false, error: "Not authenticated" };
+  if (!user.data.user) return { data: [], truncated: false, total: 0, error: "Not authenticated" };
 
-  if (!fromIso || !toIso) {
-    return { data: [], truncated: false, error: "Choose a start and end time" };
-  }
-  if (new Date(fromIso) > new Date(toIso)) {
-    return { data: [], truncated: false, error: "The start time is after the end time" };
-  }
+  // Was two inline checks that predated validateRange and so never
+  // gained the span cap. One rule, one place.
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], truncated: false, total: 0, error: invalid };
 
   // Staff vehicles are left out, and the filter has to be in the QUERY
   // rather than applied to the result: MAX_ROWS is a cap on rows coming
@@ -47,7 +88,7 @@ export async function getParcEntries(
     .from("fleet_trucks")
     .select("truck_id")
     .eq("category", "staff");
-  if (staffError) return { data: [], truncated: false, error: staffError.message };
+  if (staffError) return { data: [], truncated: false, total: 0, error: staffError.message };
   const staffIds = (staffRows ?? []).map((r) => r.truck_id as string);
 
   let query = supabase
@@ -57,18 +98,32 @@ export async function getParcEntries(
     .lte("entered_at", toIso);
   if (staffIds.length > 0) query = query.not("truck_id", "in", `(${staffIds.join(",")})`);
 
-  const { data, error } = await query
+  const { data, error, count } = await query
     .order("entered_at", { ascending: true })
-    .limit(MAX_ROWS + 1);
+    .limit(MAX_ROWS);
 
-  if (error) return { data: [], truncated: false, error: error.message };
+  if (error) return { data: [], truncated: false, total: 0, error: error.message };
 
-  const rows = (data ?? []) as ParcEntry[];
-  return {
-    data: rows.slice(0, MAX_ROWS),
-    truncated: rows.length > MAX_ROWS,
-    error: null,
-  };
+  return finish((data ?? []) as ParcEntry[], count);
+}
+
+/**
+ * The one place a report decides whether it showed everything.
+ *
+ * `count` comes from PostgREST's exact count, computed over the whole
+ * matching set in Postgres, so it is right regardless of how many rows
+ * the response was actually allowed to carry. That is the entire point:
+ * the previous rule compared the rows that ARRIVED against the number
+ * asked for, which cannot detect a transport that quietly capped the
+ * response — and this one did, at 1000.
+ *
+ * A null count (the header missing, or a server that did not compute it)
+ * falls back to the old inference rather than claiming completeness it
+ * cannot prove.
+ */
+function finish<T>(rows: T[], count: number | null): { data: T[]; truncated: boolean; total: number; error: null } {
+  const total = count ?? rows.length;
+  return { data: rows, truncated: total > rows.length, total, error: null };
 }
 
 // ── Rapport Usine ────────────────────────────────────────────
@@ -93,7 +148,20 @@ export async function getParcEntries(
 
 function validateRange(fromIso: string, toIso: string): string | null {
   if (!fromIso || !toIso) return "Choose a start and end time";
-  if (new Date(fromIso) > new Date(toIso)) return "The start time is after the end time";
+  const from = new Date(fromIso);
+  const to = new Date(toIso);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    return "Those dates could not be read";
+  }
+  if (from > to) return "The start time is after the end time";
+  // Rejected here rather than clipped silently. A report that quietly
+  // narrowed the range it was given is the same class of lie as one that
+  // quietly drops rows — the operator has to be the one who decides
+  // which month he is looking at.
+  const days = (to.getTime() - from.getTime()) / 86_400_000;
+  if (days > MAX_RANGE_DAYS) {
+    return `That range is ${Math.ceil(days)} days. Reports cover up to ${MAX_RANGE_DAYS} days — narrow the dates.`;
+  }
   return null;
 }
 
@@ -165,27 +233,26 @@ export async function getGeoVisits(
   truckId: string,
   fromIso: string,
   toIso: string
-): Promise<{ data: GeoVisit[]; truncated: boolean; error: string | null }> {
+): Promise<{ data: GeoVisit[]; truncated: boolean; total: number; error: string | null }> {
   const supabase = await createClient();
   const user = await supabase.auth.getUser();
-  if (!user.data.user) return { data: [], truncated: false, error: "Not authenticated" };
+  if (!user.data.user) return { data: [], truncated: false, total: 0, error: "Not authenticated" };
 
-  if (!truckId) return { data: [], truncated: false, error: "Choose a truck" };
+  if (!truckId) return { data: [], truncated: false, total: 0, error: "Choose a truck" };
   const invalid = validateRange(fromIso, toIso);
-  if (invalid) return { data: [], truncated: false, error: invalid };
+  if (invalid) return { data: [], truncated: false, total: 0, error: invalid };
 
   // One truck rather than the fleet, so the cap is far out of reach in
-  // normal use — but asked for explicitly anyway, because PostgREST
-  // truncates at 1000 without erroring and a silently partial report is
-  // the failure this codebase keeps paying for.
-  const { data, error } = await supabase
-    .rpc("geo_zone_visits", { p_truck_id: truckId, p_from: fromIso, p_to: toIso })
-    .limit(MAX_ROWS + 1);
+  // normal use — but counted exactly anyway, because PostgREST truncates
+  // at 1000 without erroring and a silently partial report is the
+  // failure this codebase keeps paying for.
+  const { data, error, count } = await supabase
+    .rpc("geo_zone_visits", { p_truck_id: truckId, p_from: fromIso, p_to: toIso }, { count: "exact" })
+    .limit(MAX_ROWS);
 
-  if (error) return { data: [], truncated: false, error: error.message };
+  if (error) return { data: [], truncated: false, total: 0, error: error.message };
 
-  const rows = (data ?? []) as GeoVisit[];
-  return { data: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS, error: null };
+  return finish((data ?? []) as GeoVisit[], count);
 }
 
 /** One row per zone visited, for the strip above the table.
@@ -296,20 +363,20 @@ export interface FleetSiteTotalRow {
 export async function getFleetSiteVisits(
   fromIso: string,
   toIso: string
-): Promise<{ data: FleetSiteVisit[]; truncated: boolean; error: string | null }> {
+): Promise<{ data: FleetSiteVisit[]; truncated: boolean; total: number; error: string | null }> {
   const supabase = await createClient();
   const user = await supabase.auth.getUser();
-  if (!user.data.user) return { data: [], truncated: false, error: "Not authenticated" };
+  if (!user.data.user) return { data: [], truncated: false, total: 0, error: "Not authenticated" };
 
   const invalid = validateRange(fromIso, toIso);
-  if (invalid) return { data: [], truncated: false, error: invalid };
+  if (invalid) return { data: [], truncated: false, total: 0, error: invalid };
 
   // Asked for explicitly, and it matters more here than it does on Geo:
   // this is the whole fleet, so the cap is reachable on a wide range,
   // and PostgREST truncates at its own limit without erroring. A
   // silently partial report is the failure this codebase keeps paying
   // for.
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .rpc("fleet_site_visits", {
       p_from: fromIso,
       p_to: toIso,
@@ -317,13 +384,12 @@ export async function getFleetSiteVisits(
       // greppable from the app and cannot drift from the sentence the
       // page prints under the heading.
       p_min_seconds: UNLOADED_MIN_SECONDS,
-    })
-    .limit(MAX_ROWS + 1);
+    }, { count: "exact" })
+    .limit(MAX_ROWS);
 
-  if (error) return { data: [], truncated: false, error: error.message };
+  if (error) return { data: [], truncated: false, total: 0, error: error.message };
 
-  const rows = (data ?? []) as FleetSiteVisit[];
-  return { data: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS, error: null };
+  return finish((data ?? []) as FleetSiteVisit[], count);
 }
 
 /** One row per truck, for the strip above the table.

@@ -20,15 +20,17 @@ import type { ChartData } from "chart.js";
 // <Chart>, not <Bar>, for the mixed cost chart: <Bar> is typed to "bar"
 // datasets only, and that one carries a line dataset on a second axis.
 import { Bar, Chart, Doughnut, Line } from "react-chartjs-2";
-import { ArrowRight, Gauge, MapPinOff, Route, ShieldAlert } from "lucide-react";
+import { ArrowRight, Fuel, Gauge, MapPinOff, Route, ShieldAlert } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import {
   getFuelPeriodStats,
+  getFuelStationLeaders,
   getDashboardSeries,
   getDriverVariance,
   getTruckVariance,
   getDriverSpeeding,
   type FuelPeriodStats,
+  type StationLeaders,
   type DashboardSeries,
   type DriverVariance,
   type TruckVariance,
@@ -37,7 +39,9 @@ import {
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import {
   CHART_COLORS,
+  STATION_RAMP,
   doughnutOptions,
+  stationDoughnutOptions,
   installChartDefaults,
   timeSeriesOptions,
   dualAxisTimeSeriesOptions,
@@ -322,6 +326,11 @@ const signed = (v: number | null, unit: string) =>
 const consumptionClass = (v: number | null) =>
   v == null ? "t-dim" : v > ASSUMED_L_PER_100KM ? "c-red" : "c-green";
 
+/** Six named stations on the donut, plus a remainder arc. Lives here
+ *  rather than inline so the fetch and the chart cannot disagree about
+ *  how many the ramp has to colour. */
+const STATION_SLICES = 6;
+
 export default function DashboardPage() {
   const { t } = useTranslation();
   const { fleetData, notifications, dispatches } = useFleet();
@@ -333,6 +342,7 @@ export default function DashboardPage() {
   // — is `null` rather than a set of zeroes that would read as a 100%
   // collapse.
   const [prevFuel, setPrevFuel] = useState<FuelPeriodStats | null>(null);
+  const [stations, setStations] = useState<StationLeaders | null>(null);
   const [series, setSeries] = useState<DashboardSeries | null>(null);
   // Defaults to the last 30 ops days: the widest window the old control
   // offered, so a returning reader sees roughly what they saw before
@@ -370,18 +380,20 @@ export default function DashboardPage() {
       getTruckVariance(500, range),
       getDriverSpeeding(100, range),
       comparison ? getFuelPeriodStats(comparison) : Promise.resolve({ stats: undefined, error: undefined }),
+      getFuelStationLeaders(range, STATION_SLICES),
     ])
-      .then(([f, s, dv, tv, sp, pf]) => {
+      .then(([f, s, dv, tv, sp, pf, st]) => {
         if (cancelled) return;
         // The comparison's own error is NOT folded into dataError below:
         // the page is still correct without a delta, and failing the
         // whole dashboard because the previous week would not load would
         // trade a working page for a missing footnote.
         setPrevFuel(pf.stats ?? null);
+        setStations(st.data ?? null);
         // First error wins. They share a range and a round trip, so if
         // one signature is wrong they all are — reporting five copies of
         // the same sentence would only bury it.
-        setDataError(f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? null);
+        setDataError(f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? null);
         setFuel(f.stats ?? null);
         setSeries(s.series ?? null);
         setVariance(dv.drivers ?? null);
@@ -449,6 +461,53 @@ export default function DashboardPage() {
       },
     ],
   };
+
+  // ── Where the fleet fills up ──
+  //
+  // Six named stations and one remainder. Six because the tail is the
+  // shape of this data — 318 distinct stations, the top six about a
+  // third of fills — so more slices would not add a readable one, and
+  // fewer would make the remainder even more of the ring than it
+  // already is.
+  const stationChart = useMemo(() => {
+    if (!stations || stations.totalFills === 0) return null;
+    const named = stations.leaders;
+    const namedFills = named.reduce((n, l) => n + l.fills, 0);
+    // From the RPC's own total, NOT from summing a list that was
+    // limited to six — that subtraction is the whole point of asking
+    // SQL for the total separately.
+    const otherFills = Math.max(0, stations.totalFills - namedFills);
+    const otherStations = Math.max(0, stations.totalStations - named.length);
+
+    const labels = named.map((l) => l.station);
+    const data = named.map((l) => l.fills);
+    if (otherFills > 0) {
+      labels.push(t("{n} other stations", { n: otherStations }));
+      data.push(otherFills);
+    }
+
+    return {
+      chart: {
+        labels,
+        datasets: [
+          {
+            data,
+            // The ramp's last entry is the achromatic remainder, so a
+            // window with no tail must not take it for a station.
+            backgroundColor: data.map((_, i) =>
+              i === data.length - 1 && otherFills > 0
+                ? STATION_RAMP[STATION_RAMP.length - 1]
+                : STATION_RAMP[Math.min(i, STATION_RAMP.length - 2)]
+            ),
+            borderWidth: 0,
+            centreCaption: t("fills"),
+          },
+        ],
+      },
+      top: named[0] ?? null,
+      otherStations,
+    };
+  }, [stations, t]);
 
   const labels = (series?.km ?? []).map((p) => axisLabel(p.day));
 
@@ -982,43 +1041,106 @@ export default function DashboardPage() {
         </div>
 
         <aside className="dash-rail">
-          <section className="panel dash-panel">
-            <header className="dash-panel__head">
-              <div>
-                <div className="dash-panel__title">{t("What the fleet is doing")}<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span></div>
-                <div className="dash-panel__sub">
-                  {/* Says which population it counts, like the distance
-                      chart does. This one DOES include staff cars —
-                      they are vehicles that report, and where the fleet
-                      is right now is the one question they belong in —
-                      but the alert panels beside it exclude them, and a
-                      reader comparing the two should not have to guess
-                      which is which. */}
-                  {trucks.length > 0
-                    ? `${trucks.length} vehicles reporting, staff cars included.`
-                    : t("Waiting for the first fleet snapshot.")}
+          {/* TWO DONUTS ON ONE ROW, at the owner's request: the fleet
+              status chart gives up half its width so "where we fill up"
+              can sit beside it. They are separate <section>s rather than
+              one panel with two charts — the subjects are unrelated, one
+              is live and one obeys the date range, and a shared heading
+              would have to lie about at least one of those. */}
+          <div className="dash-donuts">
+            <section className="panel dash-panel">
+              <header className="dash-panel__head">
+                <div>
+                  <div className="dash-panel__title">
+                    {t("What the fleet is doing")}
+                    <span className="vehicle-tag" style={{ marginLeft: 6, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span>
+                  </div>
+                  <div className="dash-panel__sub">
+                    {/* Says which population it counts, like the distance
+                        chart does. This one DOES include staff cars —
+                        they are vehicles that report, and where the fleet
+                        is right now is the one question they belong in —
+                        but the alert panels beside it exclude them, and a
+                        reader comparing the two should not have to guess
+                        which is which. */}
+                    {trucks.length > 0
+                      ? t("{n} vehicles, staff included.", { n: trucks.length })
+                      : t("Waiting for the first fleet snapshot.")}
+                  </div>
                 </div>
+              </header>
+              <div className="dash-panel__body">
+                {trucks.length === 0 ? (
+                  <p className="dash-empty">
+                    <span>
+                      <MapPinOff size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                      {t("No fleet snapshot yet — the monitoring job may not be running.")}
+                    </span>
+                  </p>
+                ) : (
+                  <div className="dash-chart dash-chart--donut">
+                    <Doughnut
+                      data={statusChart}
+                      options={doughnutOptions}
+                      plugins={[doughnutCentrePlugin]}
+                    />
+                  </div>
+                )}
               </div>
-            </header>
-            <div className="dash-panel__body">
-              {trucks.length === 0 ? (
-                <p className="dash-empty">
-                  <span>
-                    <MapPinOff size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-                    No fleet snapshot yet — the monitoring job may not be running.
+            </section>
+
+            <section className="panel dash-panel">
+              <header className="dash-panel__head">
+                <div>
+                  <div className="dash-panel__title">{t("Where we fill up")}</div>
+                  <div className="dash-panel__sub">
+                    {/* The remainder is most of the ring — the top six
+                        are about a third of fills — so it is named here
+                        rather than left for someone to infer from a grey
+                        arc they cannot hover on a touchscreen. */}
+                    {stationChart
+                      ? t("Top {n} of {total} stations by fills.", {
+                          n: stationChart.chart.labels.length - (stationChart.otherStations > 0 ? 1 : 0),
+                          total: stations?.totalStations ?? 0,
+                        })
+                      : t("From the fuel sheet.")}
+                  </div>
+                </div>
+              </header>
+              <div className="dash-panel__body">
+                {!stationChart ? (
+                  <p className="dash-empty">
+                    <span>
+                      <Fuel size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                      {t("No fills logged in this period.")}
+                    </span>
+                  </p>
+                ) : (
+                  <div className="dash-chart dash-chart--donut">
+                    <Doughnut
+                      data={stationChart.chart}
+                      options={stationDoughnutOptions}
+                      plugins={[doughnutCentrePlugin]}
+                    />
+                  </div>
+                )}
+              </div>
+              {/* The busiest station spelled out under the ring. The
+                  legend cannot carry these names — "SARL S/S ARAMI
+                  FONTAINE DES GAZELLES EL OUTAYA" is 46 characters in a
+                  170px column — so the chart shows the shape and this
+                  line answers the actual question. */}
+              {stationChart?.top && (
+                <div className="dash-panel__foot dash-station-top">
+                  <span className="dash-station-top__rank">1</span>
+                  <span className="dash-station-top__name" title={stationChart.top.station}>
+                    {stationChart.top.station}
                   </span>
-                </p>
-              ) : (
-                <div className="dash-chart dash-chart--donut">
-                  <Doughnut
-                    data={statusChart}
-                    options={doughnutOptions}
-                    plugins={[doughnutCentrePlugin]}
-                  />
+                  <span className="dash-station-top__n">{nf(stationChart.top.fills)}</span>
                 </div>
               )}
-            </div>
-          </section>
+            </section>
+          </div>
 
           <SpeedingPanel rows={speeding} />
 

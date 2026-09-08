@@ -1402,6 +1402,87 @@ hr {
 .dash-chart--tall { height: 205px; }
 .dash-chart--donut { height: 190px; }
 
+/* ── The two donuts ───────────────────────────────────────────
+   The fleet-status chart gave up half its width so "Where we fill up"
+   could sit beside it. Two grid cells rather than a flex row, so both
+   rings get exactly half of a 350px rail and neither can win space from
+   the other by having a longer subtitle.
+
+   min-width: 0 on the children is not optional: a grid item's automatic
+   minimum is its content, and the station panel's subtitle is a whole
+   sentence — without it that sentence sets the column width and pushes
+   the pair wider than the rail. */
+.dash-donuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dash-donuts > * { min-width: 0; }
+
+/* TALLER than the full-width chart, not shorter — which is the opposite
+   of what halving the width suggests. At 168px the fleet legend can no
+   longer sit in one row, so it stacks into three; at the old 190px the
+   third entry ("Offline") was clipped off the bottom of the canvas.
+   Measured in a browser: 214px is what three legend rows plus a
+   readable ring actually need. */
+.dash-donuts .dash-chart--donut { height: 214px; }
+
+/* Chart.js sizes the canvas from its container and then writes the
+   result back as an inline width — which, on the frame after a rail
+   resize, can be the OLD width against a narrower parent. Capping it
+   means that frame clips nothing. */
+.dash-donuts canvas { max-width: 100%; }
+
+/* The busiest station, spelled out. The ring cannot label itself — see
+   stationDoughnutOptions — so this is where the name actually appears,
+   and it is the answer to the question the panel asks. */
+.dash-station-top {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* The rank badge carries the ramp's brightest step, so the line and the
+   arc it describes are visibly the same thing. */
+.dash-station-top__rank {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  border-radius: var(--r-sm);
+  background: var(--cyan);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+/* The one thing allowed to be cut. A 46-character station name has no
+   short form worth inventing, so it ellipsises and the title attribute
+   holds the whole of it. */
+.dash-station-top__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  color: var(--text);
+}
+
+.dash-station-top__n {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
 /* The panel foot: one link out to the page that holds the rest. */
 .dash-panel__foot {
   flex: none;

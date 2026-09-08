@@ -324,3 +324,74 @@ export async function getDriverSpeeding(
     })),
   };
 }
+
+// ── Where the fleet fills up ──────────────────────────────────
+
+export interface StationLeader {
+  station: string;
+  fills: number;
+  amountDa: number;
+  litres: number;
+  /** 1-based, already ordered by the RPC. Ties break on name so two
+   *  stations on the same count cannot swap places between refreshes. */
+  rank: number;
+}
+
+export interface StationLeaders {
+  leaders: StationLeader[];
+  /** The whole window, from SQL — NOT the sum of `leaders`. The donut's
+   *  remainder arc is total minus the top N, and deriving the total from
+   *  a list that has been limited would make the remainder wrong by
+   *  exactly the part it exists to show. */
+  totalFills: number;
+  totalAmountDa: number;
+  /** How many distinct stations the window holds, so the remainder can
+   *  say how many places it stands for rather than just "other". */
+  totalStations: number;
+}
+
+/**
+ * The stations the fleet fills at most often, and enough of the whole to
+ * size the rest.
+ *
+ * TOP N AND A REMAINDER, because the tail is the shape of this data: 318
+ * distinct stations over the sheet's lifetime, and the top six cover
+ * about a third of fills. Six slices that omit the other two thirds
+ * would be a chart that lies by omission; six plus one honest "everyone
+ * else" arc is the same information without the lie.
+ */
+export async function getFuelStationLeaders(
+  range: OpsRange = ALL_TIME,
+  limit = 6
+): Promise<{ data?: StationLeaders; error?: string }> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: "Not authenticated" };
+
+  const { data, error } = await supabase.rpc("fuel_station_leaders", {
+    p_from: range.from,
+    p_to: range.to,
+    p_limit: limit,
+  });
+  if (error) return { error: error.message };
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const num = (v: unknown) => (v == null ? 0 : Number(v));
+
+  return {
+    data: {
+      leaders: rows.map((r) => ({
+        station: String(r.station ?? "—"),
+        fills: num(r.fills),
+        amountDa: num(r.amount_da),
+        litres: num(r.litres),
+        rank: num(r.rank),
+      })),
+      // Identical on every row, so the first is as good as any — and 0
+      // when the window is empty, which the page reads as "no fills".
+      totalFills: num(rows[0]?.total_fills),
+      totalAmountDa: num(rows[0]?.total_amount),
+      totalStations: num(rows[0]?.total_stations),
+    },
+  };
+}

@@ -16,6 +16,31 @@ export const CHART_COLORS = {
   empty: "#42433d",  // --line, for the "no data" arc
 } as const;
 
+/**
+ * The station donut's arcs: ONE HUE, SEVEN STEPS.
+ *
+ * Categorical palettes are what a chart like this normally reaches for,
+ * and this app cannot have one — every hue in globals.css is spoken for
+ * by a vehicle state, so six stations in six colours would invent six
+ * meanings and collide with all five. Cyan is already the taxonomy's
+ * "parking, stations, informational", so the hue says STATION and the
+ * ramp says how much. Nothing new enters the palette.
+ *
+ * Descending luminance, so rank reads without the legend: the busiest
+ * station is the brightest arc. The last entry is --line, the same
+ * achromatic grey the "no data" arc uses, for the remainder — it is not
+ * a station, it is everyone else.
+ */
+export const STATION_RAMP = [
+  "#00cfff",
+  "#00b0e0",
+  "#0092c0",
+  "#0075a0",
+  "#005a80",
+  "#004060",
+  "#42433d",
+] as const;
+
 const SURFACE = "#191919";   // --panel, the ground a chart sits on
 const CANVAS = "#0e100f";    // --bg
 const TEXT = "#fffce1";      // --text
@@ -79,7 +104,10 @@ export const doughnutOptions = {
         pointStyle: "circle" as const,
         boxWidth: 7,
         boxHeight: 7,
-        padding: 14,
+        // 9, not 14: the legend sits in one row at full width and stacks
+        // into three in the half-rail pair, where 14px of padding per
+        // entry was most of the height the third one needed.
+        padding: 9,
         font: { size: 11 },
       },
     },
@@ -386,6 +414,43 @@ export const crosshairPlugin: Plugin<"line" | "bar"> = {
  * number, which is the taxonomy doing its job — green really is the
  * count of moving trucks — and never spends a hue on anything else.
  */
+/**
+ * The station donut. Same ring, NO LEGEND.
+ *
+ * The fleet chart's legend works because "Moving", "Stationary" and
+ * "Offline" are three short words. Station names are not: the current
+ * leader is "SARL S/S ARAMI FONTAINE DES GAZELLES EL OUTAYA", 46
+ * characters, in a column about 170px wide once the rail is split. Seven
+ * of those stacked under a small ring is not a legend, it is a wall —
+ * so the ring carries the shape, the tooltip carries the name, and the
+ * panel foot spells out the one that matters.
+ *
+ * The tooltip therefore has to do more work than the fleet chart's,
+ * because it is now the only place the full name appears.
+ */
+export const stationDoughnutOptions = {
+  ...doughnutOptions,
+  cutout: "58%",
+  // The name can be 46 characters, so the tooltip wraps rather than
+  // running off the panel it is drawn over.
+  maintainAspectRatio: false,
+  plugins: {
+    ...doughnutOptions.plugins,
+    legend: { display: false },
+    tooltip: {
+      ...doughnutOptions.plugins.tooltip,
+      callbacks: {
+        title: (items: { label: string }[]) => items[0]?.label ?? "",
+        label: (ctx: { parsed: number; dataset: { data: number[] } }) => {
+          const total = ctx.dataset.data.reduce((sum, n) => sum + (Number(n) || 0), 0);
+          const pct = total > 0 ? Math.round((ctx.parsed / total) * 100) : 0;
+          return `${ctx.parsed.toLocaleString("en-GB")} fills · ${pct}%`;
+        },
+      },
+    },
+  },
+};
+
 export const doughnutCentrePlugin: Plugin<"doughnut"> = {
   id: "prismDoughnutCentre",
   afterDatasetsDraw(chart) {
@@ -398,8 +463,18 @@ export const doughnutCentrePlugin: Plugin<"doughnut"> = {
 
     // The arc's own centre, not the chart area's: the legend below is
     // laid out inside chartArea, so its midpoint sits low of the ring.
-    const arc = chart.getDatasetMeta(0).data[0] as { x?: number; y?: number } | undefined;
+    const arc = chart.getDatasetMeta(0).data[0] as
+      { x?: number; y?: number; innerRadius?: number } | undefined;
     if (arc?.x == null || arc?.y == null) return;
+
+    // SIZED FROM THE HOLE, not fixed at 26px. This plugin drew one
+    // full-width ring when it was written; the dashboard now puts two
+    // side by side in half a rail, and at that size a hardcoded 26px
+    // readout sat on top of its own caption. Both figures scale off the
+    // inner radius, so the pair always fits the hole it is drawn in.
+    const hole = arc.innerRadius ?? 40;
+    const valueSize = Math.max(15, Math.min(26, Math.round(hole * 0.62)));
+    const capSize = Math.max(9, Math.min(11, Math.round(hole * 0.26)));
 
     const active = chart.getActiveElements();
     const hovered = active.length > 0 ? active[0].index : -1;
@@ -413,10 +488,17 @@ export const doughnutCentrePlugin: Plugin<"doughnut"> = {
     // a state, and a number in --line on --panel is barely legible. A
     // slice with no hue to lend gets the chrome cream instead.
     const colour = sliceColour === CHART_COLORS.empty ? TEXT : sliceColour;
+    // The resting caption used to be the literal "vehicles", which was
+    // true while this plugin drew one doughnut. It draws two now, and the
+    // second counts fills — so the word comes off the dataset. Anything
+    // that does not set it keeps saying "vehicles", which is what the
+    // fleet chart wants and means the change is invisible to it.
+    const unit =
+      (dataset as { centreCaption?: string }).centreCaption ?? "vehicles";
     const caption =
       hovered >= 0
         ? `${String(chart.data.labels?.[hovered] ?? "")} · ${Math.round((value / total) * 100)}%`
-        : "vehicles";
+        : unit;
 
     const ctx = chart.ctx;
     ctx.save();
@@ -424,13 +506,15 @@ export const doughnutCentrePlugin: Plugin<"doughnut"> = {
 
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = colour;
-    ctx.font = "600 26px 'IBM Plex Mono', ui-monospace, monospace";
-    ctx.fillText(String(value), arc.x, arc.y + 4);
+    ctx.font = `600 ${valueSize}px 'IBM Plex Mono', ui-monospace, monospace`;
+    ctx.fillText(String(value), arc.x, arc.y);
 
     ctx.textBaseline = "top";
     ctx.fillStyle = CHART_COLORS.dim;
-    ctx.font = "11px 'IBM Plex Sans', system-ui, sans-serif";
-    ctx.fillText(caption, arc.x, arc.y + 11);
+    ctx.font = `${capSize}px 'IBM Plex Sans', system-ui, sans-serif`;
+    // Clear of the value's baseline rather than a fixed 11px below the
+    // centre, which is what made the two overlap once the ring shrank.
+    ctx.fillText(caption, arc.x, arc.y + Math.round(capSize * 0.45));
 
     ctx.restore();
   },

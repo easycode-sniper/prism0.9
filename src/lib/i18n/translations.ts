@@ -266,6 +266,15 @@ export const translations: Record<Language, Record<string, string>> = {
     // 2026-09-07 — the owner asked for the line removed, and a
     // translation for a string nothing renders is a thing to maintain
     // for no reader.
+    // ── Where we fill up (dashboard donut) ──
+    "Where we fill up": "Where we fill up",
+    "From the fuel sheet.": "From the fuel sheet.",
+    "Top {n} of {total} stations by fills.": "Top {n} of {total} stations by fills.",
+    "{n} other stations": "{n} other stations",
+    "No fills logged in this period.": "No fills logged in this period.",
+    "fills": "fills",
+    "{n} vehicles, staff included.": "{n} vehicles, staff included.",
+    "No fleet snapshot yet — the monitoring job may not be running.": "No fleet snapshot yet — the monitoring job may not be running.",
     "no change": "no change",
     "vs yesterday": "vs yesterday",
     "vs the day before": "vs the day before",
@@ -516,6 +525,14 @@ export const translations: Record<Language, Record<string, string>> = {
     ", first to last fill {period}": ", du premier au dernier plein {period}",
     "The figures below could not be loaded: {reason}": "Impossible de charger les chiffres ci-dessous : {reason}",
     "Kilometres driven": "Kilomètres parcourus",
+    "Where we fill up": "Où nous faisons le plein",
+    "From the fuel sheet.": "D'après la feuille carburant.",
+    "Top {n} of {total} stations by fills.": "Top {n} des {total} stations par pleins.",
+    "{n} other stations": "{n} autres stations",
+    "No fills logged in this period.": "Aucun plein enregistré sur cette période.",
+    "fills": "pleins",
+    "{n} vehicles, staff included.": "{n} véhicules, véhicules de service inclus.",
+    "No fleet snapshot yet — the monitoring job may not be running.": "Aucun instantané de flotte — la tâche de surveillance ne tourne peut-être pas.",
     "no change": "sans changement",
     "vs yesterday": "vs hier",
     "vs the day before": "vs l'avant-veille",
@@ -590,6 +607,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "admin.subtitle": "Gestion des géorepérages, comptes utilisateurs et paramètres de connexion.",
   },
   ar: {
+    "Where we fill up": "أين نتزود بالوقود",
+    "{n} other stations": "{n} محطات أخرى",
+    "fills": "تعبئات",
     "no change": "بدون تغيير",
     "vs yesterday": "مقارنة بالأمس",
     "vs the day before": "مقارنة بأول أمس",

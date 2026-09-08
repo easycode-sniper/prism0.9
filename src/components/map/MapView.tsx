@@ -148,6 +148,11 @@ interface MapViewProps {
   /** Truck whose track is being fetched, so its popup button can say so. */
   trackLoadingId?: string | null;
   focusPoint?: [number, number] | null;
+  /** The truck the operator just pressed Locate on. Its marker is
+   *  highlighted and lifted above every other chip, and keeps its full
+   *  label at every zoom tier — centring alone does not find a truck in
+   *  the parc, where 32 of 101 sit inside 220m and the chips stack. */
+  focusTruckId?: string | null;
   /** Admins only. Absent for everyone else, which is what hides the
    *  button — the server action and the RLS policy both re-check. */
   onToggleStationBlacklist?: (stationId: string, next: boolean) => void;
@@ -217,7 +222,8 @@ function buildTruckIcon(
   offRoute: boolean | undefined,
   course: number | null | undefined,
   truckId: string,
-  driverName: string | null | undefined
+  driverName: string | null | undefined,
+  focused: boolean
 ): L.DivIcon {
   const color = statusColor(status, offRoute);
 
@@ -241,8 +247,14 @@ function buildTruckIcon(
     `</div><div class="tmk-stem"></div>`;
 
   const state = offRoute ? "offroute" : status;
+  // A data attribute rather than a class so the CSS can key on it the
+  // same way it keys on data-st, and so the tier rules that already
+  // carve out the off-route chip can carve out this one beside them.
+  // The chip inverts to cream; the status hue stays on its left edge, so
+  // being the truck you asked for does not stop the marker saying what
+  // the truck is doing.
   const html =
-    `<div class="tmk" data-st="${state}" style="--tmk-c:${color}">` +
+    `<div class="tmk" data-st="${state}"${focused ? ' data-focus="1"' : ""} style="--tmk-c:${color}">` +
     `${chip}<div class="tmk-glyph">${shape}</div></div>`;
 
   return L.divIcon({ html, className: "", iconSize: [22, 22], iconAnchor: [11, 11] });
@@ -456,7 +468,7 @@ function getOrCreateMapCore(): MapCore {
   return core;
 }
 
-export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], route = null, onRouteClear, track = null, onTrackClear, onTrackHours, onQuickTrack, trackLoadingId = null, focusPoint = null, onToggleStationBlacklist }: MapViewProps) {
+export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], zones = [], route = null, onRouteClear, track = null, onTrackClear, onTrackHours, onQuickTrack, trackLoadingId = null, focusPoint = null, focusTruckId = null, onToggleStationBlacklist }: MapViewProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Both route effects key off the dispatch id, not the object, so a
@@ -575,8 +587,9 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     if (!showUnits) return;
 
     for (const m of truckMarkers) {
+      const focused = focusTruckId != null && m.label === focusTruckId;
       const marker = L.marker([m.lat, m.lng], {
-        icon: buildTruckIcon(m.status, m.offRoute, m.course, m.label, m.driverName),
+        icon: buildTruckIcon(m.status, m.offRoute, m.course, m.label, m.driverName, focused),
         // The off-route chip has to be ON TOP, not merely displayed.
         // The CSS keeps it visible at every zoom tier, but `display` says
         // nothing about painter order, and Leaflet's default is by
@@ -585,7 +598,13 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
         // measured 0% visible at z11 and never above half at any zoom.
         // Lifting it makes the guarantee the CSS comment states actually
         // true: measured 0% -> 100% at parc density.
-        zIndexOffset: m.offRoute ? 1000 : 0,
+        //
+        // The located truck goes above even that. It is the only marker
+        // on the map the operator has explicitly asked for, and the
+        // whole reason Locate was not enough on its own is that
+        // centring puts the truck under the pile rather than on top of
+        // it — at the parc, 32 trucks sit inside 220m.
+        zIndexOffset: focused ? 2000 : m.offRoute ? 1000 : 0,
       });
 
       const eta = formatEta(m.etaSeconds);
@@ -632,7 +651,11 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     // The ref keeps the click calling the current callback, but a ref
     // cannot rewrite markup that has already been built; that is exactly
     // the bug the station popups shipped with.
-  }, [truckMarkers, showUnits, onQuickTrack, trackLoadingId]);
+    //
+    // focusTruckId is a dependency for the same reason: it is baked into
+    // the icon HTML as data-focus, and a marker already built cannot
+    // learn it was the one asked for.
+  }, [truckMarkers, showUnits, onQuickTrack, trackLoadingId, focusTruckId]);
 
   // Site markers
   useEffect(() => {

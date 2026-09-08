@@ -3528,3 +3528,70 @@ select option {
 .tmk-far .tmk[data-st="offroute"] .tmk-chip { display: flex; }
 .tmk-far .tmk[data-st="offroute"] .tmk-stem { display: block; }
 .tmk-mid .tmk[data-st="offroute"] .tmk-name { display: inline; }
+
+/* ── The truck you pressed Locate on ──────────────────────────
+   Centring the map on a truck does not find it. At the parc, 32 of 101
+   trucks sit inside 220m — about fourteen pixels at the zoom Locate
+   settles on — so the one you asked for arrives underneath thirty other
+   chips, and the operator reported exactly that: "sometimes if there are
+   plenty of trucks in the same area, say the HQ, I can't see it".
+
+   NO NEW HUE, and this is the one place it would have been easy to spend
+   one. All five are owned by a vehicle state, so a purple or magenta
+   chip would be the only coloured pixel on this map that says nothing
+   about a truck — and worse, it would say it loudest. "This is the one
+   you asked for" is a UI state, not a vehicle state, so it is carried by
+   chrome: the chip INVERTS to cream, which is both the achromatic answer
+   and, on a map where every other chip is a dark translucent slab, the
+   highest-contrast thing available.
+
+   The status hue survives on the left edge, widened to 3px. Being the
+   truck you looked for must not stop the marker saying what the truck is
+   doing.
+
+   MapView lifts this marker to zIndexOffset 2000 — above the off-route
+   1000 — because none of this is visible under a neighbour's chip. */
+.tmk[data-focus="1"] .tmk-chip {
+  background: var(--text);
+  border-color: var(--text);
+  border-left: 3px solid var(--tmk-c);
+  padding: 3px 8px;
+}
+.tmk[data-focus="1"] .tmk-id { color: var(--bg); }
+/* Not --text-dim: that token is tuned for cream on near-black and
+   disappears the moment the ground inverts. The driver's name still
+   sits under the id, by weight rather than by a second colour. */
+.tmk[data-focus="1"] .tmk-name { color: rgba(14, 16, 15, 0.68); }
+.tmk[data-focus="1"] .tmk-stem { background: var(--text); width: 2px; }
+
+/* A ring on the glyph, because the chip floats 26px above the actual
+   coordinate — the operator needs to see WHICH ARROW is the truck, not
+   only which label. It settles as a plain cream circle; the three pulses
+   are the attention, and the global prefers-reduced-motion rule caps
+   them to one, leaving the ring itself. */
+.tmk[data-focus="1"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border: 2px solid var(--text);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: tmk-focus-ring 1.3s var(--ease-out) 3;
+}
+
+@keyframes tmk-focus-ring {
+  0% { transform: scale(0.6); opacity: 0.25; }
+  60% { transform: scale(1.35); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* The located truck keeps its full label at every tier, for the same
+   reason the off-route one does: the tiers exist to clear room, and
+   these two are what the room is being cleared for. */
+.tmk-far .tmk[data-focus="1"] .tmk-chip { display: flex; }
+.tmk-far .tmk[data-focus="1"] .tmk-stem { display: block; }
+.tmk-mid .tmk[data-focus="1"] .tmk-name { display: inline; }

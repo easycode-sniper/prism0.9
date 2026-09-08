@@ -276,8 +276,11 @@ function MonitoringRow({
   // on the map and cyan in this table. Corrected 2026-09-01.
   const statusColor = isOffRoute ? "var(--red)" : truck.status === "moving" ? "var(--green)" : truck.status === "idle" ? "var(--amber)" : "var(--text-dim)";
 
+  // ?truck= as well as the coordinates: dispatch centres on the point
+  // and HIGHLIGHTS that marker, which is the difference between landing
+  // near a truck and finding it in the parc, where the chips stack.
   const locateHref = truck.lat != null && truck.lng != null
-    ? `/dispatch?lat=${truck.lat}&lng=${truck.lng}`
+    ? `/dispatch?lat=${truck.lat}&lng=${truck.lng}&truck=${encodeURIComponent(truck.truck_id)}`
     : null;
 
   return (

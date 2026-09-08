@@ -104,6 +104,28 @@ export default function DispatchPage() {
   );
   const [truckFocus, setTruckFocus] = useState<[number, number] | null>(null);
   const focusPoint = truckFocus ?? urlFocusPoint;
+
+  // WHICH truck was located, not just where it was. Centring is not
+  // finding: at the parc 32 trucks sit inside 220m, so the one you asked
+  // for lands under a mat of chips. MapView highlights this id and lifts
+  // it above every other marker.
+  //
+  // Carried in the URL too (?truck=), so the Locate links on Monitoring
+  // and the Déchargés panel arrive highlighted rather than merely
+  // centred. Same precedence as the point above: a press on this page
+  // wins over whatever the URL said.
+  const [truckFocusId, setTruckFocusId] = useState<string | null>(null);
+  const urlFocusTruck = searchParams.get("truck");
+  const focusTruckId = truckFocusId ?? urlFocusTruck;
+
+  // A FRESH ARRAY EVERY PRESS, deliberately: MapView centres in an
+  // effect keyed on focusPoint, so handing back the same reference makes
+  // a second press on an already-centred truck do nothing — which reads
+  // as a broken button.
+  function locateTruck(truckId: string, lat: number, lng: number) {
+    setTruckFocus([lat, lng]);
+    setTruckFocusId(truckId);
+  }
   const { fleetData, dispatches, geofences, gasStations, sites, refreshDispatches, refreshGasStations, optimistic } = useFleet();
 
   // Blacklisting is admin-only. This hides the control; the server
@@ -412,6 +434,7 @@ export default function DispatchPage() {
     onQuickTrack: (truckId: string) => { void loadTrack(truckId, TRACK_DEFAULT_HOURS); },
     trackLoadingId,
     focusPoint,
+    focusTruckId,
     onToggleStationBlacklist: admin ? handleToggleBlacklist : undefined,
   };
 
@@ -605,7 +628,7 @@ export default function DispatchPage() {
                             disabled={!locatable}
                             title={locatable ? "Centre on map" : "No position"}
                             aria-label={`Centre ${tr.truck_id} on map`}
-                            onClick={() => locatable && setTruckFocus([tr.lat!, tr.lng!])}
+                            onClick={() => locatable && locateTruck(tr.truck_id, tr.lat!, tr.lng!)}
                           >
                             <Crosshair size={13} strokeWidth={2} />
                           </button>
@@ -700,12 +723,7 @@ export default function DispatchPage() {
                         livePositions.get(d.truck_id) ??
                         (d.last_lat != null && d.last_lng != null ? [d.last_lat, d.last_lng] : null)
                       }
-                      // A FRESH ARRAY EVERY PRESS, deliberately: MapView
-                      // centres in an effect keyed on focusPoint, so
-                      // handing back the same reference would make the
-                      // second press on an already-centred truck do
-                      // nothing — which reads as a broken button.
-                      onLocate={(point) => setTruckFocus([point[0], point[1]])}
+                      onLocate={(point) => locateTruck(d.truck_id, point[0], point[1])}
                       check={checkResults.get(d.id)}
                       checking={checking === d.truck_id || checking === d.id}
                       routeShown={routeRunId === d.id}

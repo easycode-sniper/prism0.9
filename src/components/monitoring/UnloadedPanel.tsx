@@ -172,7 +172,7 @@ export default function UnloadedPanel({ statusOf, positionOf }: UnloadedPanelPro
                 <td className="px-3 py-2 font-mono c-cyan" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {pos ? (
                     <Link
-                      href={`/dispatch?lat=${pos.lat}&lng=${pos.lng}`}
+                      href={`/dispatch?lat=${pos.lat}&lng=${pos.lng}&truck=${encodeURIComponent(r.truck_id)}`}
                       className="inline-flex items-center gap-1.5 c-cyan hover:opacity-80"
                       title={t("Locate")}
                     >

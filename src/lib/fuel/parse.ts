@@ -313,11 +313,24 @@ export function parseFuelRow(
 
 // ── Resolving a column that changed format mid-sheet ──────────
 //
-// The date column is not written one way. Rows 2-510 of the connected
-// sheet are month-first ("8/1/2026" for 1 August) and rows 511 on are
-// day-first ("13/8/2026" for 13 August) — the two halves were pasted in
-// from sources that disagreed, and the join is invisible because both
-// readings are valid whenever the day is 12 or less.
+// NORMALISED BY THE OWNER, AND VERIFIED 2026-09-09. The whole column is
+// now day-first: read that way, all 1982 rows of the export parse, none
+// is invalid, and none runs backwards — a clean monotonic 1 August to 9
+// September. Read month-first, 973 of them fail outright. So the mixed
+// column described below is HISTORY, not the sheet you are looking at.
+//
+// This code stays anyway, and not out of sentiment: it costs one pass,
+// it is what makes a hand-added or backdated row safe, and the sheet is
+// maintained by hand so it can regress. Do not simplify it to a plain
+// day-first parse on the strength of one clean export — but do not warn
+// anyone about mixed dates either, which is a mistake already made once
+// by reading the paragraph below as the present tense.
+//
+// WHAT IT WAS. The date column was not written one way. Rows 2-510 of
+// the connected sheet were month-first ("8/1/2026" for 1 August) and
+// rows 511 on day-first ("13/8/2026" for 13 August) — the two halves
+// were pasted in from sources that disagreed, and the join was invisible
+// because both readings are valid whenever the day is 12 or less.
 //
 // No amount of looking at one cell can tell them apart. What can is the
 // order the cells arrive in: the sheet is append-only, so a fill never

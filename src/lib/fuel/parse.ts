@@ -167,8 +167,18 @@ const COL = {
   odometer: 10,
   distance: 11,
   litreFilled: 12,
-  // 13, 14, 15 are the sheet's own (sometimes-broken) computed columns —
-  // read nowhere here, recomputed below instead.
+  // 13 and 14 are "Liters per Km" and "Cost per Km" — both mislabeled
+  // (see the note above) and both re-derived below under their real
+  // names, so they stay unread.
+  //
+  // 15 IS READ, as of 2026-09-09. It is the sheet's own Variance, and
+  // the fuel desk works from that number, so the app has to show that
+  // number. See varianceDa below for what changed and why.
+  variance: 15,
+  // 16 is "VH SERVICE": a copy of Amount Filled, present only on Vh
+  // Service rows. The owner added it so he can total service-vehicle
+  // spend without filtering; it carries nothing column 9 does not
+  // already give us, so it stays unread.
 } as const;
 
 /** The Date & Time cell of a raw sheet row. Exported so the sync can
@@ -237,7 +247,45 @@ export function parseFuelRow(
   // have used no fuel," which is false, not merely unknown.
   const expectedLitres = distanceKm != null ? (distanceKm / 100) * ASSUMED_L_PER_100KM : null;
   const expectedCostDa = expectedLitres != null ? expectedLitres * DIESEL_PRICE_DA_PER_L : null;
-  const varianceDa = expectedCostDa != null ? amountDa - expectedCostDa : null;
+
+  // ── The variance is READ from the sheet, not recomputed ──────
+  //
+  // It used to be `amountDa - expectedCostDa`, on the reasoning that the
+  // sheet's computed columns are sometimes broken. Checked against a
+  // full export on 2026-09-09, that reasoning did not survive contact
+  // with the data: column 15 is 1854 numeric values, 128 deliberate
+  // blanks and ZERO formula errors across the whole sheet.
+  //
+  // And the recomputation was wrong on exactly five rows — which is few,
+  // and was still enough to put the dashboard's September total 28,000
+  // DA away from the sheet's and cost an afternoon:
+  //
+  //   rows 22, 515, 1198, 1815   a truck with an odometer but a BLANK
+  //                              distance — the second line of a fill
+  //                              split across two rows. The sheet books
+  //                              the whole amount as the écart; we
+  //                              produced null and dropped it.
+  //   row 926                    a Vh Service line with distance 0. We
+  //                              invented a 1000 DA variance for a
+  //                              vehicle the sheet deliberately leaves
+  //                              blank.
+  //
+  // Neither rule is derivable from the columns we read — a blank
+  // distance means "no écart" on row 2 and "the whole amount" on row
+  // 1815, and only the person keeping the sheet knows which. So the
+  // sheet decides. That also retires a standing hazard: the écart no
+  // longer silently depends on DIESEL_PRICE_DA_PER_L still being 31.
+  //
+  // A BLANK CELL IS RESPECTED as "no variance" — that is the sheet
+  // saying so, and 127 of the 128 blanks are Vh Service lines. An
+  // UNPARSEABLE cell is different: a formula error carries no number,
+  // and treating it as "no variance" would silently drop real money, so
+  // it falls back to the figure we can still derive. None exist today;
+  // this is the guard for the day one appears.
+  const computedVariance = expectedCostDa != null ? amountDa - expectedCostDa : null;
+  const varianceCell = cells[COL.variance];
+  const varianceIsBlank = String(varianceCell ?? "").trim() === "";
+  const varianceDa = parseSheetNumber(varianceCell) ?? (varianceIsBlank ? null : computedVariance);
 
   return {
     transactionNo,

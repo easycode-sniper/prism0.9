@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Copy, Check, Phone, MapPin, Download, Pencil, X } from "lucide-react";
-import { listDrivers, saveDriverContact, type DriverCard } from "@/lib/supabase/drivers";
+import { Copy, Check, Phone, MapPin, Download, Pencil, X, UserPlus } from "lucide-react";
+import { listDrivers, saveDriverContact, addDriver, type DriverCard } from "@/lib/supabase/drivers";
 import { normalizeName } from "@/lib/drivers/match";
 import { formatPhones, telHref } from "@/lib/drivers/phone";
 import { formatDate } from "@/lib/format";
@@ -20,6 +20,10 @@ export default function DriversPage() {
   const [canEdit, setCanEdit] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [fromWialon, setFromWialon] = useState(0);
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addedName, setAddedName] = useState<string | null>(null);
 
   // Re-reads through Wialon, so an edit shows with the same matching the
   // rest of the page uses rather than a locally patched card.
@@ -28,6 +32,7 @@ export default function DriversPage() {
     if (res.error) { setError(res.error); return; }
     setDrivers(res.drivers ?? []);
     setFilteredOut(res.filteredOut ?? 0);
+    setFromWialon(res.fromWialon ?? 0);
     setCanEdit(Boolean(res.canEdit));
   }
 
@@ -57,6 +62,7 @@ export default function DriversPage() {
       else {
         setDrivers(res.drivers ?? []);
         setFilteredOut(res.filteredOut ?? 0);
+        setFromWialon(res.fromWialon ?? 0);
         setCanEdit(Boolean(res.canEdit));
       }
     })();
@@ -84,6 +90,10 @@ export default function DriversPage() {
   }, [drivers, search, filter]);
 
   const withPhone = drivers?.filter((d) => d.phone).length ?? 0;
+  // Cards with no Wialon driver behind them. Counted from the list rather
+  // than tracked separately so it also picks up pre-existing directory
+  // rows the name match could never pair, not only ones added today.
+  const addedHere = drivers?.filter((d) => !d.inWialon).length ?? 0;
 
   function cardText(d: DriverCard): string {
     return [d.name, d.phone ?? "n/a", d.address ?? "n/a"].join(" — ");
@@ -137,13 +147,28 @@ export default function DriversPage() {
           <h2 style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", fontWeight: 600 }}>Drivers</h2>
           <p className="t-dim" style={{ fontSize: ".85rem", marginTop: "4px" }}>
             {drivers
-              ? `${drivers.length} drivers from Wialon · ${withPhone} with a phone number` +
+              ? `${fromWialon} drivers from Wialon` +
+                // Only mentioned once there are any, so the usual case
+                // reads exactly as it did before this feature existed.
+                (addedHere > 0 ? ` · ${addedHere} added here` : "") +
+                ` · ${withPhone} with a phone number` +
                 (filteredOut > 0 ? ` · ${filteredOut} placeholder ${filteredOut === 1 ? "entry" : "entries"} hidden` : "")
               : "Loading from Wialon…"}
           </p>
         </div>
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {canEdit && (
+            <button
+              onClick={() => { setAddError(null); setAddedName(null); setAdding((v) => !v); }}
+              aria-expanded={adding}
+              className="btn-sm"
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {adding ? <X size={13} /> : <UserPlus size={13} />}
+              {adding ? "Cancel" : "Add driver"}
+            </button>
+          )}
           <button onClick={copyAll} disabled={!visible.length} className="btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
             {copiedAll ? <Check size={13} /> : <Copy size={13} />}
             {copiedAll ? "Copied" : `Copy ${visible.length}`}
@@ -186,6 +211,33 @@ export default function DriversPage() {
         </div>
       </div>
 
+      {adding && (
+        <AddDriverForm
+          error={addError}
+          onError={setAddError}
+          onCancel={() => { setAdding(false); setAddError(null); }}
+          onAdded={(name) => {
+            setAdding(false);
+            setAddError(null);
+            setAddedName(name);
+            // Awaited, unlike the edit path: there is no card to patch
+            // optimistically, and the whole point of the press is to see
+            // the new one appear.
+            void reload();
+          }}
+        />
+      )}
+
+      {addedName && !adding && (
+        <div className="surface t-dim" style={{ padding: "10px 14px", fontSize: ".78rem", marginBottom: "14px", lineHeight: 1.45 }}>
+          Added <span className="t-primary">{addedName}</span>. They are a contact record only —
+          add them in Wialon as well for the name to appear on a truck, in dispatch or in a report.
+          <button onClick={() => setAddedName(null)} className="icon-ghost" aria-label="Dismiss" style={{ marginLeft: "6px", verticalAlign: "middle" }}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="surface" style={{ padding: "14px 16px", color: "var(--red)", fontSize: ".85rem" }}>
           {error}
@@ -208,6 +260,18 @@ export default function DriversPage() {
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: ".88rem", fontWeight: 600, lineHeight: 1.25 }}>{d.name}</div>
+                {/* Achromatic on purpose. Every hue in this app names a
+                    vehicle state, and "no Wialon driver behind this card"
+                    is a property of a record, not of a truck. */}
+                {!d.inWialon && (
+                  <div
+                    className="t-faint"
+                    title="Added on this page. Not in the Wialon driver library, so the name will not appear on a truck, in dispatch or in a report."
+                    style={{ fontFamily: "var(--font-mono)", fontSize: ".6rem", letterSpacing: ".04em", textTransform: "uppercase", marginTop: "4px", border: "1px solid var(--line)", borderRadius: "999px", padding: "1px 7px", display: "inline-block" }}
+                  >
+                    Not in Wialon
+                  </div>
+                )}
                 {d.hiredOn && (
                   <div className="t-faint" style={{ fontFamily: "var(--font-mono)", fontSize: ".64rem", marginTop: "3px" }}>
                     since {formatDate(new Date(d.hiredOn))}
@@ -277,6 +341,127 @@ export default function DriversPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Add a driver.
+ *
+ * A panel above the grid rather than a card in it: the grid is sorted by
+ * name, so a card-shaped form would either jump to wherever the typed
+ * name sorts or sit somewhere the sort does not explain.
+ *
+ * The name field is the one thing this has that DriverEditor deliberately
+ * does not — editing a name there would break the Wialon join that put
+ * the card on screen, whereas here the name IS the record being created.
+ */
+function AddDriverForm({
+  error,
+  onError,
+  onCancel,
+  onAdded,
+}: {
+  error: string | null;
+  onError: (message: string) => void;
+  onCancel: () => void;
+  onAdded: (name: string) => void;
+}) {
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [hiredOn, setHiredOn] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    const res = await addDriver({ fullName, phone, address, hiredOn });
+    setSaving(false);
+    if (res.error) { onError(res.error); return; }
+    onAdded(res.name ?? fullName.trim());
+  }
+
+  return (
+    <form onSubmit={submit} className="surface" style={{ padding: "16px 18px", marginBottom: "16px" }}>
+      {/* minWidth: 0 is load-bearing, not tidying. A fieldset carries a
+          UA min-width of min-content, so the auto-fit grid below resolves
+          against an indefinite width and lays out all four 190px tracks —
+          790px inside a 342px form at a 400px viewport, measured. It does
+          not show up as page overflow either, because the page wrapper's
+          overflow-y:auto computes overflow-x to auto and turns the spill
+          into a hidden sideways scroll. */}
+      <fieldset disabled={saving} style={{ border: "none", padding: 0, margin: 0, minWidth: 0 }}>
+        <div style={{ fontSize: ".82rem", fontWeight: 600, marginBottom: "3px" }}>Add a driver</div>
+        <p className="t-faint" style={{ fontSize: ".7rem", lineHeight: 1.45, marginBottom: "12px", maxWidth: "62ch" }}>
+          This creates a contact record on this page only — it does not add the driver to Wialon,
+          so the name will not appear on a truck, in dispatch or in a report. If the name matches
+          someone already in the Wialon list, these details attach to that driver instead of
+          creating a second card.
+        </p>
+
+        {/* Capped, because this page has no max-width of its own: left to
+            fill a 1920 viewport the four fields come out 449px each,
+            measured, which is a silly width for a ten-character date. The
+            cap holds them at ~228px on a wide screen and stops applying
+            below ~940px, where the auto-fit reflow takes over. */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px", maxWidth: "940px" }}>
+          <label>
+            <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "3px" }}>Full name</span>
+            <input
+              className="field"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="AMROUCHE Taher"
+              autoFocus
+              required
+              style={{ fontSize: ".78rem", padding: "6px 9px" }}
+            />
+          </label>
+          <label>
+            <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "3px" }}>Phone</span>
+            <input
+              className="field"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="0770 00 00 00"
+              style={{ fontFamily: "var(--font-mono)", fontSize: ".78rem", padding: "6px 9px" }}
+            />
+          </label>
+          <label>
+            <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "3px" }}>Address</span>
+            <input
+              className="field"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Town or full address"
+              style={{ fontSize: ".78rem", padding: "6px 9px" }}
+            />
+          </label>
+          <label>
+            <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "3px" }}>Hired on</span>
+            <input
+              className="field"
+              value={hiredOn}
+              onChange={(e) => setHiredOn(e.target.value)}
+              placeholder="2026-08-23"
+              style={{ fontFamily: "var(--font-mono)", fontSize: ".78rem", padding: "6px 9px" }}
+            />
+          </label>
+        </div>
+
+        {error && (
+          <p style={{ fontSize: ".72rem", color: "var(--red)", lineHeight: 1.4, marginTop: "10px" }}>{error}</p>
+        )}
+
+        <div style={{ display: "flex", gap: "6px", marginTop: "12px" }}>
+          <button type="submit" className="btn-sm" style={{ borderColor: "var(--green)", color: "var(--green)" }}>
+            {saving ? "Adding…" : "Add driver"}
+          </button>
+          <button type="button" onClick={onCancel} className="btn-sm">Cancel</button>
+        </div>
+      </fieldset>
+    </form>
   );
 }
 

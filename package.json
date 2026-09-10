@@ -11,7 +11,8 @@
     "check:email": "node --experimental-strip-types scripts/check-station-email.mts",
     "check:stations": "node --experimental-strip-types scripts/check-station-transitions.mts",
     "check:range": "node --experimental-strip-types scripts/check-previous-range.mts",
-    "check:drivers": "node --experimental-strip-types scripts/check-driver-union.mts"
+    "check:drivers": "node --experimental-strip-types scripts/check-driver-union.mts",
+    "check:scope": "bash scripts/check-dashboard-scope.sh"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

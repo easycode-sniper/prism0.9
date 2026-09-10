@@ -29,6 +29,7 @@ import {
   getDriverVariance,
   getTruckVariance,
   getDriverSpeeding,
+  getScopeOptions,
   type FuelPeriodStats,
   type StationLeaders,
   type DashboardSeries,
@@ -57,6 +58,19 @@ import RangeBar, { buildPresets, describeRange, presetKeyFor } from "@/component
 import type { OpsRange } from "@/lib/dashboard/range";
 import { previousRange, daysInRange } from "@/lib/dashboard/range";
 import { periodDelta } from "@/lib/dashboard/delta";
+import Combobox, { type ComboOption } from "@/components/forms/Combobox";
+import {
+  type Scope,
+  type ScopeOption,
+  FLEET,
+  isFleet,
+  scopeLabel,
+  optionToScope,
+  isSplitSource,
+  matchesDriver,
+  scopeFromParams,
+  scopeToQuery,
+} from "@/lib/dashboard/scope";
 import type { PeriodDelta } from "@/lib/dashboard/delta";
 import { metaFor } from "@/lib/notifications/kinds";
 import { formatDuration } from "@/lib/geometry";
@@ -360,6 +374,35 @@ export default function DashboardPage() {
   // was buffering. It had already failed.
   const [dataError, setDataError] = useState<string | null>(null);
 
+  // What the page is about: the whole fleet, one driver, or one truck.
+  // Read from the query string on mount so a focused dashboard can be
+  // sent to someone, the same reasoning as dispatch's ?truck= param.
+  const [scope, setScope] = useState<Scope>(FLEET);
+  const [scopeOptions, setScopeOptions] = useState<ScopeOption[]>([]);
+
+  useEffect(() => {
+    setScope(scopeFromParams(new URLSearchParams(window.location.search)));
+  }, []);
+
+  // The roster behind the search box. Fetched ONCE, not per range: who
+  // exists does not depend on which fortnight is on screen, and refetching
+  // it would empty the picker mid-interaction every time the range moved.
+  useEffect(() => {
+    let cancelled = false;
+    void getScopeOptions().then((r) => {
+      if (!cancelled && r.options) setScopeOptions(r.options);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Keep the URL in step without adding a history entry per selection —
+  // replaceState, so Back still leaves the dashboard rather than walking
+  // through every truck the operator looked at.
+  useEffect(() => {
+    const url = window.location.pathname + scopeToQuery(scope);
+    window.history.replaceState(null, "", url);
+  }, [scope]);
+
   // Every historical panel reads the same range, in ONE effect. Five
   // separate effects on the same dependency would fire five renders as
   // they landed and let the page sit briefly in a state where the
@@ -374,14 +417,24 @@ export default function DashboardPage() {
     // change flicker through a state where the figure is right and the
     // comparison beneath it still describes the last window.
     const comparison = previousRange(range, { calendar: presetKeyFor(range) === "month" });
+    //
+    // SCOPE RIDES ALONG WITH THE RANGE, in the same Promise.all and for
+    // the same reason: five panels that re-scoped independently would let
+    // the page sit in a state where the scorecards describe one truck and
+    // the charts beneath still describe the fleet.
+    //
+    // The two variance tables are NOT re-fetched per scope. They already
+    // return one row per driver and per truck over the whole range — 92
+    // and 74 rows — so the page filters the list it is holding rather
+    // than spending two round trips to be told the same thing.
     void Promise.all([
-      getFuelPeriodStats(range),
-      getDashboardSeries(range),
+      getFuelPeriodStats(range, scope),
+      getDashboardSeries(range, scope),
       getDriverVariance(500, range),
       getTruckVariance(500, range),
-      getDriverSpeeding(100, range),
-      comparison ? getFuelPeriodStats(comparison) : Promise.resolve({ stats: undefined, error: undefined }),
-      getFuelStationLeaders(range, STATION_SLICES),
+      getDriverSpeeding(100, range, scope),
+      comparison ? getFuelPeriodStats(comparison, scope) : Promise.resolve({ stats: undefined, error: undefined }),
+      getFuelStationLeaders(range, STATION_SLICES, scope),
     ])
       .then(([f, s, dv, tv, sp, pf, st]) => {
         if (cancelled) return;
@@ -407,7 +460,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [range]);
+  }, [range, scope]);
 
   /**
    * What the deltas are measured against, in the reader's words.
@@ -509,6 +562,67 @@ export default function DashboardPage() {
       otherStations,
     };
   }, [stations, t]);
+
+  // ── The two variance tables, narrowed to the scope ──
+  //
+  // Filtered here rather than in SQL: both RPCs already return one row
+  // per entity over the whole range (92 drivers, 74 trucks), so the
+  // answer is in memory and two more signatures would have to be kept in
+  // step for nothing.
+  //
+  // The CROSS pairing is the useful half. Scoped to a driver, the truck
+  // table shows the trucks HE filled — DriverVariance.trucks already
+  // carries that list. Scoped to a truck, the driver table shows the men
+  // who filled IT, found the same way. So each panel answers "and who/
+  // what was on the other side of this" rather than going blank.
+  const scopedDriverVariance = useMemo(() => {
+    if (!variance) return null;
+    if (isFleet(scope)) return variance;
+    if (scope.kind === "driver") return variance.filter((r) => matchesDriver(scope, r.driverName));
+    // Truck scope: drivers whose truck list names this truck.
+    return variance.filter((r) =>
+      (r.trucks ?? "").split(",").map((x) => x.trim()).includes(scope.id)
+    );
+  }, [variance, scope]);
+
+  const scopedTruckVariance = useMemo(() => {
+    if (!truckVariance) return null;
+    if (isFleet(scope)) return truckVariance;
+    if (scope.kind === "truck") return truckVariance.filter((r) => r.truckId === scope.id);
+    // Driver scope: the trucks named on that driver's own variance row.
+    const mine = new Set(
+      (variance ?? [])
+        .filter((r) => matchesDriver(scope, r.driverName))
+        .flatMap((r) => (r.trucks ?? "").split(",").map((x) => x.trim()))
+        .filter(Boolean)
+    );
+    return truckVariance.filter((r) => mine.has(r.truckId));
+  }, [truckVariance, variance, scope]);
+
+  // Drivers first, then trucks. The owner reaches for a name more often
+  // than a plate, and the group headings make the two halves scannable
+  // without reading every row.
+  const comboOptions: ComboOption[] = useMemo(() => {
+    const fmt = (o: ScopeOption) =>
+      o.kind === "driver"
+        ? `${o.fills} ${o.fills === 1 ? "fill" : "fills"} · ${o.visits} ${o.visits === 1 ? "visit" : "visits"}`
+        : `${o.fills} ${o.fills === 1 ? "fill" : "fills"}`;
+    return [...scopeOptions]
+      .sort((a, b) => (a.kind === b.kind ? a.label.localeCompare(b.label, "fr") : a.kind === "driver" ? -1 : 1))
+      .map((o) => ({
+        id: `${o.kind}:${o.id}`,
+        label: o.label,
+        hint: fmt(o),
+        group: o.kind === "driver" ? t("Drivers") : t("Trucks"),
+        // A driver the fuel sheet and the tracker spell differently
+        // arrives here as two entries with one side at zero. Saying so
+        // in the list beats letting someone pick one and wonder why half
+        // the page is empty. See migration 060.
+        note: isSplitSource(o) ? t("one source only") : null,
+      }));
+  }, [scopeOptions, t]);
+
+  const comboValue = isFleet(scope) ? "" : `${scope.kind}:${scopeLabel(scope)}`;
 
   const labels = (series?.km ?? []).map((p) => axisLabel(p.day));
 
@@ -669,6 +783,34 @@ export default function DashboardPage() {
       }));
   }, [trucks, dispatches]);
 
+  /**
+   * The tag on a panel that reads the live fleet.
+   *
+   * It always said "live", meaning the date range does not reach it.
+   * With a scope on the page it has a second thing to admit: these
+   * panels are still FLEET-WIDE. The owner chose to keep them showing
+   * rather than hide or replace them (2026-09-10), which is fine as long
+   * as nobody reads "3 moving" as three of one driver's trucks — so when
+   * a scope is set the tag says so out loud instead of relying on the
+   * reader to remember.
+   *
+   * Achromatic on purpose: every hue in this app names a vehicle state,
+   * and "this panel ignores your filter" is a fact about the panel.
+   */
+  const LiveTag = () => (
+    <span
+      className="vehicle-tag"
+      style={{ marginLeft: 8, verticalAlign: "middle" }}
+      title={
+        isFleet(scope)
+          ? t("Reads the live fleet — the date range does not apply")
+          : t("Reads the live fleet — neither the date range nor the current selection applies")
+      }
+    >
+      {isFleet(scope) ? t("live") : t("live · whole fleet")}
+    </span>
+  );
+
   const statusColour = (status: string) =>
     status === "moving" ? "var(--green)" : status === "idle" ? "var(--amber)" : "var(--text-faint)";
 
@@ -687,13 +829,61 @@ export default function DashboardPage() {
 
   return (
     <div className="dash" style={{ overflowY: "auto", height: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "12px" }}>
+      {/* Wraps, so the picker drops to its own line rather than squeezing
+          the heading off screen on a phone. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "12px", flexWrap: "wrap" }}>
         <div>
           <h2 style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", fontWeight: 600 }}>{t("dashboard.title")}</h2>
           <p className="t-dim" style={{ fontSize: ".78rem", marginTop: "3px" }}>
             {t("Every figure below covers {range}", { range: describeRange(range, t) })}
             {periodLabel ? t(", first to last fill {period}", { period: periodLabel }) : ""}.
           </p>
+          {/* Stated once, plainly, under the heading. The picker shows the
+              same name, but the picker is a control — someone reading a
+              screenshot of this page needs the page itself to say who it
+              is about. The live-panel caveat is named here rather than
+              only in each tag, because it is the one thing that makes a
+              scoped dashboard easy to misread. */}
+          {!isFleet(scope) && (
+            <p className="t-dim" style={{ fontSize: ".78rem", marginTop: "4px" }}>
+              {scope.kind === "driver"
+                ? t("Showing driver {name}.", { name: scopeLabel(scope) ?? "" })
+                : t("Showing truck {name}.", { name: scopeLabel(scope) ?? "" })}{" "}
+              <span className="t-faint">
+                {t("The live panels on the right still show the whole fleet.")}
+              </span>
+            </p>
+          )}
+        </div>
+
+        {/* ── Who or what the page is about ──
+            Beside the heading rather than in the range bar: the range
+            says WHEN and this says WHO, and putting them in one strip
+            made it read as a second date control. */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", minWidth: 0, flex: "1 1 auto" }}>
+          <Combobox
+            options={comboOptions}
+            value={comboValue}
+            onChange={(id) => {
+              const opt = scopeOptions.find((o) => `${o.kind}:${o.id}` === id);
+              setScope(opt ? optionToScope(opt) : FLEET);
+            }}
+            placeholder={t("Search a driver or truck…")}
+            listLabel={t("Drivers and trucks")}
+            loadingText={t("Loading drivers and trucks…")}
+            noMatchText={(q) => t("Nobody and no truck matches “{q}”", { q })}
+            style={{ width: "260px", maxWidth: "100%" }}
+          />
+          {!isFleet(scope) && (
+            <button
+              type="button"
+              className="btn-sm"
+              onClick={() => setScope(FLEET)}
+              title={t("Show the whole fleet again")}
+            >
+              {t("Clear")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -785,7 +975,20 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div style={{ minWidth: 0 }}>
-                <div className="dash-panel__title">{t("Distance per day")}</div>
+                {/* THE CHART CHANGES MEANING WHEN SCOPED, so it changes
+                    its name. Fleet-wide it is telemetry: real distance
+                    driven, per calendar day. fleet_day_metrics has no
+                    per-truck breakdown and cannot be given one — it
+                    derives from fleet_snapshots, which prunes after
+                    seven days — so scoped, km becomes the fuel sheet's
+                    distance BETWEEN FILLS, credited to the later fill's
+                    day. Same axis, different question; calling both
+                    "Distance per day" would be the quiet kind of wrong.
+                    Owner's call, 2026-09-10. Migration 060 has the
+                    reasoning in full. */}
+                <div className="dash-panel__title">
+                  {isFleet(scope) ? t("Distance per day") : t("Distance between fills")}
+                </div>
                 <div className="dash-panel__sub">
                   {/* Today is always partial — at 02:00 it is a
                       hundredth of a day's distance, which draws as a
@@ -793,8 +996,10 @@ export default function DashboardPage() {
                       by dropping the point: the current day is the one
                       people look for. Only worth saying when the range
                       actually reaches today. */}
-                  {t("Fleet kilometres, staff cars included.")}
-                  {range.to == null || range.to >= opsToday() ? " " + t("Today is still counting.") : ""}
+                  {isFleet(scope)
+                    ? t("Fleet kilometres, staff cars included.")
+                    : t("Kilometres covered between two fills, plotted on the day of the later fill — not distance driven that day.")}
+                  {isFleet(scope) && (range.to == null || range.to >= opsToday()) ? " " + t("Today is still counting.") : ""}
                   {/* A break in the line is "not recorded", never "zero
                       km driven". This panel reads fleet_day_metrics,
                       which pg_cron began writing on 2026-08-17 — earlier
@@ -803,7 +1008,7 @@ export default function DashboardPage() {
                       from the series rather than hardcoded, so it stops
                       appearing on its own once the range starts inside
                       the recorded period. */}
-                  {kmGapDay ? " " + t("No fleet tracking before {day} — those days are a gap, not zero.", { day: kmGapDay }) : ""}
+                  {isFleet(scope) && kmGapDay ? " " + t("No fleet tracking before {day} — those days are a gap, not zero.", { day: kmGapDay }) : ""}
                 </div>
               </div>
             </header>
@@ -1022,13 +1227,13 @@ export default function DashboardPage() {
               </div>
             </header>
             <div className="dash-panel__body dash-panel__body--flush">
-              {truckVariance === null ? (
+              {scopedTruckVariance === null ? (
                 <VarianceWaiting />
-              ) : truckVariance.length === 0 ? (
+              ) : scopedTruckVariance.length === 0 ? (
                 <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
               ) : (
                 <SortableTable
-                  rows={truckVariance}
+                  rows={scopedTruckVariance}
                   rowKey={(t) => t.truckId}
                   initialKey="varianceDa"
                   unit="trucks"
@@ -1083,13 +1288,13 @@ export default function DashboardPage() {
               </div>
             </header>
             <div className="dash-panel__body dash-panel__body--flush">
-              {variance === null ? (
+              {scopedDriverVariance === null ? (
                 <VarianceWaiting />
-              ) : variance.length === 0 ? (
+              ) : scopedDriverVariance.length === 0 ? (
                 <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
               ) : (
                 <SortableTable
-                  rows={variance}
+                  rows={scopedDriverVariance}
                   rowKey={(d) => d.driverName}
                   initialKey="varianceDa"
                   unit="drivers"
@@ -1143,7 +1348,7 @@ export default function DashboardPage() {
               <div>
                 <div className="dash-panel__title">
                   {t("What the fleet is doing")}
-                  <span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span>
+                  <LiveTag />
                 </div>
                 <div className="dash-panel__sub">
                   {/* Says which population it counts, like the distance
@@ -1238,7 +1443,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">{t("Drivers on duty")}<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span></div>
+                <div className="dash-panel__title">{t("Drivers on duty")}<LiveTag /></div>
                 <div className="dash-panel__sub">{t("Who is out right now.")}</div>
               </div>
             </header>
@@ -1271,7 +1476,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">{t("Active runs")}<span className="vehicle-tag" style={{ marginLeft: 8, verticalAlign: "middle" }} title={t("Reads the live fleet — the date range does not apply")}>{t("live")}</span></div>
+                <div className="dash-panel__title">{t("Active runs")}<LiveTag /></div>
                 <div className="dash-panel__sub">{t("Trucks on their way to a client right now.")}</div>
               </div>
             </header>
@@ -1317,7 +1522,7 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">{t("Operational signals")}</div>
+                <div className="dash-panel__title">{t("Operational signals")}<LiveTag /></div>
                 <div className="dash-panel__sub">{t("The latest from the alert feed.")}</div>
               </div>
             </header>

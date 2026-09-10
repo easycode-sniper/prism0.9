@@ -11,6 +11,9 @@ import { type OpsRange, ALL_TIME } from "@/lib/dashboard/range";
 // own subtitle, and a threshold living only in the database could drift
 // from that sentence without anything failing.
 import { UNLOADED_MIN_SECONDS } from "@/lib/constants";
+// Same reasoning as OpsRange above: a plain module, because this file is
+// "use server" and may only export async functions.
+import { type Scope, type ScopeOption, FLEET, scopeArgs } from "@/lib/dashboard/scope";
 
 // Everything the redesigned dashboard reads, in one module so the page
 // makes one round trip per section rather than a query per tile.
@@ -75,14 +78,24 @@ export interface FuelPeriodStats {
 // shape however well it fits. An aggregate is one row at any size.
 
 export async function getFuelPeriodStats(
-  range: OpsRange = ALL_TIME
+  range: OpsRange = ALL_TIME,
+  scope: Scope = FLEET
 ): Promise<{ stats?: FuelPeriodStats; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
 
+  // Both null for the fleet, which makes this the identical call the
+  // dashboard made before 060 — the scoped path is additive, and the
+  // unscoped one is not meant to change by a dinar.
+  const { driver, truck } = scopeArgs(scope);
   const { data, error } = await supabase
-    .rpc("fuel_period_stats", { p_from: range.from, p_to: range.to })
+    .rpc("fuel_period_stats", {
+      p_from: range.from,
+      p_to: range.to,
+      p_driver: driver,
+      p_truck: truck,
+    })
     .single();
   if (error) return { error: error.message };
   if (!data) return { error: "No fuel data" };
@@ -173,7 +186,8 @@ export interface DashboardSeries {
 }
 
 export async function getDashboardSeries(
-  range: OpsRange
+  range: OpsRange,
+  scope: Scope = FLEET
 ): Promise<{ series?: DashboardSeries; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -193,10 +207,20 @@ export async function getDashboardSeries(
   // days. 047 capped the END instead, which answered "2020 to today"
   // with 2020-2022 — three years of history and not one recent day on a
   // dashboard about now.
+  //
+  // SCOPED, the km column changes source — see migration 060. Fleet-wide
+  // it is telemetry from fleet_day_metrics, real distance per calendar
+  // day; for one truck that table has nothing to offer, so km becomes
+  // the fuel sheet's distance BETWEEN FILLS, credited to the later
+  // fill's day. The page relabels the chart rather than letting it read
+  // as the fleet chart with a filter on it.
+  const { driver, truck } = scopeArgs(scope);
   const { data, error } = await supabase.rpc("dashboard_daily_series", {
     p_from: range.from,
     p_to: range.to,
     p_min_seconds: UNLOADED_MIN_SECONDS,
+    p_driver: driver,
+    p_truck: truck,
   });
   if (error) return { error: error.message };
 
@@ -346,7 +370,8 @@ export async function getDriverSpeeding(
   // so it showed month-to-date while the tables beside it showed
   // everything. Callers must pass the page's range or the panels
   // disagree again.
-  range: OpsRange = ALL_TIME
+  range: OpsRange = ALL_TIME,
+  scope: Scope = FLEET
 ): Promise<{ drivers?: DriverSpeeding[]; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -355,8 +380,14 @@ export async function getDriverSpeeding(
   // Counted and grouped in Postgres: notifications grow without bound and
   // PostgREST truncates at 1000 rows without erroring. One row per driver
   // who sped at least once this month, which is far smaller.
+  //
+  // Scoped it still returns a LIST, of one row, so the panel keeps one
+  // layout. A truck scope can legitimately return more than one row —
+  // two men drove it — which is a fact about the truck worth seeing.
+  const { driver, truck } = scopeArgs(scope);
   const { data, error } = await supabase.rpc("driver_speeding_leaders", {
     p_limit: limit, p_from: range.from, p_to: range.to,
+    p_driver: driver, p_truck: truck,
   });
   if (error) return { error: error.message };
 
@@ -409,16 +440,23 @@ export interface StationLeaders {
  */
 export async function getFuelStationLeaders(
   range: OpsRange = ALL_TIME,
-  limit = 6
+  limit = 6,
+  scope: Scope = FLEET
 ): Promise<{ data?: StationLeaders; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Not authenticated" };
 
+  // Scoped this answers "where does THIS truck fill up", which is worth
+  // more than it sounds: a truck buying fuel somewhere the rest of the
+  // fleet never uses is the shape a blacklisted-station problem takes.
+  const { driver, truck } = scopeArgs(scope);
   const { data, error } = await supabase.rpc("fuel_station_leaders", {
     p_from: range.from,
     p_to: range.to,
     p_limit: limit,
+    p_driver: driver,
+    p_truck: truck,
   });
   if (error) return { error: error.message };
 
@@ -440,5 +478,46 @@ export async function getFuelStationLeaders(
       totalAmountDa: num(rows[0]?.total_amount),
       totalStations: num(rows[0]?.total_stations),
     },
+  };
+}
+
+// ── Who the search box can find ───────────────────────────────
+
+/**
+ * Every driver and truck the dashboard can actually be scoped to.
+ *
+ * Built from the tables the dashboard AGGREGATES, not from Wialon's
+ * roster: a name that appears in no fuel row and no zone visit would
+ * select a scope with nothing behind it, and an empty dashboard reads as
+ * a broken filter rather than as an honest "no data for this person".
+ *
+ * `fills` and `visits` come back with each option so the picker can show
+ * what is behind a name before it is chosen — and so a driver the fuel
+ * sheet spells one way and the tracker another appears as two entries
+ * with one side at zero, rather than as one entry that mysteriously
+ * half-populates the page. That split is a correction for the source
+ * sheet; migration 060 explains why SQL does not guess at it.
+ */
+export async function getScopeOptions(): Promise<{ options?: ScopeOption[]; error?: string }> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: "Not authenticated" };
+
+  const { data, error } = await supabase.rpc("dashboard_scope_options");
+  if (error) return { error: error.message };
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return {
+    options: rows
+      .map((r) => ({
+        kind: (r.kind === "truck" ? "truck" : "driver") as "driver" | "truck",
+        id: String(r.id ?? ""),
+        label: String(r.label ?? r.id ?? ""),
+        fills: Number(r.fills ?? 0),
+        visits: Number(r.visits ?? 0),
+      }))
+      // A blank id cannot be selected and cannot be searched for; it
+      // would render as an empty row in the popup.
+      .filter((o) => o.id !== ""),
   };
 }

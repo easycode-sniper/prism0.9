@@ -320,6 +320,8 @@ export const translations: Record<Language, Record<string, string>> = {
     "What the fleet is doing": "What the fleet is doing",
     "live": "live",
     "Reads the live fleet — the date range does not apply": "Reads the live fleet — the date range does not apply",
+    "Updating to {range}…": "Updating to {range}…",
+    "Still showing {range} — the newer figures could not be loaded.": "Still showing {range} — the newer figures could not be loaded.",
     // ── Dashboard scope (migration 060) ──
     "Reads the live fleet — neither the date range nor the current selection applies": "Reads the live fleet — neither the date range nor the current selection applies",
     "live · whole fleet": "live · whole fleet",
@@ -599,6 +601,8 @@ export const translations: Record<Language, Record<string, string>> = {
     "What the fleet is doing": "Ce que fait la flotte",
     "live": "en direct",
     "Reads the live fleet — the date range does not apply": "Lit la flotte en direct — la période ne s'applique pas",
+    "Updating to {range}…": "Mise à jour vers {range}…",
+    "Still showing {range} — the newer figures could not be loaded.": "Toujours affiché : {range} — les chiffres plus récents n'ont pas pu être chargés.",
     // ── Dashboard scope (migration 060) ──
     "Reads the live fleet — neither the date range nor the current selection applies": "Lit la flotte en direct — ni la période ni la sélection en cours ne s'appliquent",
     "live · whole fleet": "en direct · toute la flotte",

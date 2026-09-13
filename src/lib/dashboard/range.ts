@@ -79,6 +79,23 @@ export function addDays(iso: string, delta: number): string {
 }
 
 /** Inclusive day count: a range whose ends are equal is one day, not zero. */
+/**
+ * Are these the same window?
+ *
+ * Compared by VALUE, not by reference. The dashboard holds one range in
+ * state and another describing the figures currently on screen, and the
+ * second is a snapshot of the first — so they are equal in content while
+ * being different objects, and `===` would report every settled load as
+ * still in flight.
+ *
+ * Both nulls mean All time, so null === null is a match, not a gap.
+ */
+export function sameRange(a: OpsRange | null, b: OpsRange | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.from === b.from && a.to === b.to;
+}
+
 export function daysInRange(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00Z`);
   const b = Date.parse(`${to}T00:00:00Z`);

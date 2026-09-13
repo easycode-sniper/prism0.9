@@ -19,8 +19,7 @@ import {
   monthStart,
   monthEnd,
   addDays,
-  addMonths,
-} from "../src/lib/dashboard/range.ts";
+  addMonths, sameRange } from "../src/lib/dashboard/range.ts";
 import { periodDelta } from "../src/lib/dashboard/delta.ts";
 
 // The delta helper takes t so its one non-numeric phrase can speak
@@ -208,6 +207,39 @@ eq("identical figures read as no change",
 // Float sums: 45.68 and 45.680000000001 are the same number.
 eq("float noise is not a change",
   periodDelta(45.68, 45.680000000001, "L/100km", nf, t, true), { glyph: "=", text: "no change", tone: null });
+
+// ── sameRange: what the dashboard heading depends on ──────────────────
+//
+// The dashboard holds the SELECTED range and, separately, the range the
+// figures on screen actually cover. The second is a snapshot of the
+// first, so they are equal in content while being different objects —
+// and the heading only tells the truth if that comparison is by value.
+// Reference equality would report every settled load as still in flight;
+// worse, a comparison that wrongly said "equal" would let the page put
+// one period's numbers under another period's name, which is the
+// production fault of 2026-09-13 this helper exists to prevent.
+console.log("\nsameRange:");
+{
+  const a = { from: "2026-09-01", to: "2026-09-13" };
+  const b = { from: "2026-09-01", to: "2026-09-13" };
+  check("equal by value, not by reference", sameRange(a, b) === true && a !== b, "distinct objects, same window");
+  check("a different end is a different window",
+    sameRange(a, { from: "2026-09-01", to: "2026-09-30" }) === false, "");
+  check("a different start is a different window",
+    sameRange(a, { from: "2026-08-01", to: "2026-09-13" }) === false, "");
+  check("All time matches All time",
+    sameRange({ from: null, to: null }, { from: null, to: null }) === true, "both null");
+  // The real September case: This month vs Last month must never agree.
+  check("this month and last month are not the same window",
+    sameRange({ from: "2026-09-01", to: "2026-09-13" }, { from: "2026-08-01", to: "2026-08-31" }) === false, "");
+  // Nothing loaded yet is not a match for anything.
+  check("null (nothing loaded) never matches a real range", sameRange(null, a) === false, "");
+  check("null matches null", sameRange(null, null) === true, "");
+  // An open-ended range is not the same as a closed one that happens to
+  // start on the same day.
+  check("open-ended is not the same as closed",
+    sameRange({ from: "2026-09-01", to: null }, { from: "2026-09-01", to: "2026-09-13" }) === false, "");
+}
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);

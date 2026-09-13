@@ -56,7 +56,7 @@ import {
 } from "@/lib/chartTheme";
 import RangeBar, { buildPresets, describeRange, presetKeyFor } from "@/components/dashboard/RangeBar";
 import type { OpsRange } from "@/lib/dashboard/range";
-import { previousRange, daysInRange } from "@/lib/dashboard/range";
+import { previousRange, daysInRange, sameRange } from "@/lib/dashboard/range";
 import { periodDelta } from "@/lib/dashboard/delta";
 import Combobox, { type ComboOption } from "@/components/forms/Combobox";
 import {
@@ -373,6 +373,20 @@ export default function DashboardPage() {
   // serving the old ones from its schema cache. The page looked like it
   // was buffering. It had already failed.
   const [dataError, setDataError] = useState<string | null>(null);
+  // WHICH RANGE THE FIGURES ON SCREEN ACTUALLY COVER — not the one the
+  // control is set to. These are two different things the moment a load
+  // is in flight or has failed, and the page used to print the second
+  // over the first.
+  //
+  // The failure this fixes, seen in production 2026-09-13: the fetch
+  // rejected (a client left open across a deploy calling server-action
+  // ids the new build no longer had), the catch set an error and touched
+  // nothing else, so every panel kept the PREVIOUS range's numbers while
+  // this heading — driven by `range` — had already moved to the new one.
+  // The page then stated, in words, that 884,122 km covered 1-13
+  // September, when that figure was a 30-day window. A blank panel is a
+  // missing answer; a confident wrong one is worse.
+  const [loadedRange, setLoadedRange] = useState<OpsRange | null>(null);
 
   // What the page is about: the whole fleet, one driver, or one truck.
   // Read from the query string on mount so a focused dashboard can be
@@ -453,8 +467,16 @@ export default function DashboardPage() {
         setVariance(dv.drivers ?? null);
         setTruckVariance(tv.trucks ?? null);
         setSpeeding(sp.drivers ?? null);
+        // Last, and only on success: from here the heading describes
+        // these numbers rather than the control above them.
+        setLoadedRange(range);
       })
       .catch((e: unknown) => {
+        // Deliberately does NOT clear the figures. They are still true
+        // about loadedRange, and throwing away a working page over one
+        // transient rejection helps nobody. What must not happen is
+        // relabelling them — so loadedRange is left exactly where it was
+        // and the heading keeps naming the period these numbers describe.
         if (!cancelled) setDataError(e instanceof Error ? e.message : String(e));
       });
     return () => {
@@ -835,9 +857,20 @@ export default function DashboardPage() {
         <div>
           <h2 style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", fontWeight: 600 }}>{t("dashboard.title")}</h2>
           <p className="t-dim" style={{ fontSize: ".78rem", marginTop: "3px" }}>
-            {t("Every figure below covers {range}", { range: describeRange(range, t) })}
+            {t("Every figure below covers {range}", { range: describeRange(loadedRange ?? range, t) })}
             {periodLabel ? t(", first to last fill {period}", { period: periodLabel }) : ""}.
           </p>
+          {/* The control has moved and the figures have not caught up —
+              either still loading, or the last load failed. Saying which
+              period is on screen is the whole point; without it the page
+              silently attributes one window's numbers to another. */}
+          {loadedRange && !sameRange(loadedRange, range) && (
+            <p className="t-faint" style={{ fontSize: ".74rem", marginTop: "3px" }}>
+              {dataError
+                ? t("Still showing {range} — the newer figures could not be loaded.", { range: describeRange(loadedRange, t) })
+                : t("Updating to {range}…", { range: describeRange(range, t) })}
+            </p>
+          )}
           {/* Stated once, plainly, under the heading. The picker shows the
               same name, but the picker is a control — someone reading a
               screenshot of this page needs the page itself to say who it

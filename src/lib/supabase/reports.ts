@@ -502,3 +502,127 @@ export async function getVoyageReport(
 
   return finish(rows, count);
 }
+
+// ── Rapport Chargements ───────────────────────────────────────
+//
+// Livraisons turned round: that one is every truck at the CLIENT end of
+// a trip, this is every truck at the PLANT end of it. Same zone_visits
+// log, same fleet-wide shape, same range controls — the zone_kind is the
+// only thing that differs.
+//
+// It is NOT the old Rapport Usine, dropped 2026-09-01. That showed both
+// plant zones at once and the pair is what made it unreadable: the bay
+// is drawn inside the waiting area, so every stay appeared as two
+// overlapping rows with durations that must not be added. This reads the
+// bay only, one row per load, and folds the wait into a column of that
+// same row. See migration 062.
+
+export interface FleetLoadingVisit {
+  truck_id: string;
+  /** Stamped per visit, so a truck that changed hands mid-period shows
+   *  both drivers on the loads they actually ran. */
+  driver_name: string | null;
+  /** One value in practice — there is a single bay — but carried rather
+   *  than assumed. */
+  zone_name: string;
+  entered_at: string;
+  /** Null while the truck is still under the spout. */
+  exited_at: string | null;
+  /** Null for the same reason: an open load has no duration yet. */
+  seconds_loading: number | null;
+  /** Time at the plant BEFORE loading started — this entry minus the
+   *  enclosing waiting-zone entry, migration 040's figure.
+   *
+   *  Null where nothing encloses it: 4 of the first 326 loads, all from
+   *  before the waiting zone was being logged. Null is not zero, and the
+   *  page prints a dash rather than "no wait". */
+  queue_seconds: number | null;
+}
+
+export interface FleetLoadingTotalRow {
+  truck_id: string;
+  loadings: number;
+  /** The total below is over these only, so an open load cannot read as
+   *  zero time under the spout. */
+  closed_visits: number;
+  total_seconds: number;
+  /** Counted apart from closed_visits because the two sets differ: a
+   *  load can have ended and still have no enclosing waiting row. The
+   *  average wait divides by THIS. */
+  queued_visits: number;
+  total_queue_seconds: number;
+  last_entered: string | null;
+  /** Trucks that loaded at all across the whole fleet in the range — the
+   *  same value on every row. Livraisons carries fleet_sites for the
+   *  same reason: the detail list is capped, so it cannot be counted
+   *  from there. */
+  fleet_trucks: number;
+}
+
+/** Every loading the fleet did at Amouda in the range, grouped by truck.
+ *
+ *  OVERLAP, not entry time — 042's rule, so this, Livraisons and Geo
+ *  cannot disagree about which day a visit belongs to. */
+export async function getFleetLoadingVisits(
+  fromIso: string,
+  toIso: string
+): Promise<{ data: FleetLoadingVisit[]; truncated: boolean; total: number; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], truncated: false, total: 0, error: "Not authenticated" };
+
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], truncated: false, total: 0, error: invalid };
+
+  const { data, error, count } = await supabase
+    .rpc("fleet_loading_visits", {
+      p_from: fromIso,
+      p_to: toIso,
+      // ZERO, deliberately, and passed rather than left to the SQL
+      // default so it is visible from the app.
+      //
+      // Livraisons floors at UNLOADED_MIN_SECONDS because a client-site
+      // polygon sits beside a public road and a truck that drove past
+      // logs a visit that is not a delivery. The loading bay is inside
+      // the waiting area, off the road: a truck gets there by being sent
+      // there, so there is no drive-through to exclude. Of the first 326
+      // loads exactly one is under a minute and 14 are under 25, against
+      // a median of 57:31 — the Livraisons threshold would drop fourteen
+      // real loads. "Trucks that actually entered" means every entry.
+      p_min_seconds: 0,
+    }, { count: "exact" })
+    .limit(MAX_ROWS);
+
+  if (error) return { data: [], truncated: false, total: 0, error: error.message };
+
+  return finish((data ?? []) as FleetLoadingVisit[], count);
+}
+
+/** One row per truck, for the strip above the table.
+ *
+ *  Aggregated in Postgres for the reason 041 exists — a total summed
+ *  from the capped list above would be wrong without saying so. ~48 rows,
+ *  which cannot themselves be truncated, so the page may add these up. */
+export async function getFleetLoadingTotals(
+  fromIso: string,
+  toIso: string
+): Promise<{ data: FleetLoadingTotalRow[]; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: [], error: "Not authenticated" };
+
+  const invalid = validateRange(fromIso, toIso);
+  if (invalid) return { data: [], error: invalid };
+
+  // The same threshold as the detail, necessarily: a summary counting a
+  // different set of visits from the table under it is wrong in the way
+  // nobody checks.
+  const { data, error } = await supabase.rpc("fleet_loading_totals", {
+    p_from: fromIso,
+    p_to: toIso,
+    p_min_seconds: 0,
+  });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as FleetLoadingTotalRow[], error: null };
+}

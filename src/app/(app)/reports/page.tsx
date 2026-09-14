@@ -8,12 +8,16 @@ import {
   getReportableTrucks,
   getFleetSiteVisits,
   getFleetSiteTotals,
+  getFleetLoadingVisits,
+  getFleetLoadingTotals,
   getVoyageReport,
   type ParcEntry,
   type GeoVisit,
   type GeoTotalRow,
   type FleetSiteVisit,
   type FleetSiteTotalRow,
+  type FleetLoadingVisit,
+  type FleetLoadingTotalRow,
   type VoyageRow,
 } from "@/lib/supabase/reports";
 import {
@@ -57,7 +61,15 @@ import TruckCombobox from "@/components/forms/TruckCombobox";
 // Rapport Usine used to be and is not a revival of it — Usine asked what
 // the whole fleet did AT AMOUDA and could not see a client site, which
 // is the exact half this one keeps.
-type Report = "parc" | "geo" | "livraisons" | "voyages";
+//
+// Chargements was added 2026-09-14, asked for as "the counter to
+// Livraisons": the same fleet-wide read of the same log, at the plant
+// end of the trip instead of the client end. It is not the old Rapport
+// Usine coming back — that one showed the waiting area and the loading
+// bay as two overlapping rows per stay, which is what made it
+// unreadable. This shows the bay only, one row per load, with the wait
+// folded into a column of that row.
+type Report = "parc" | "geo" | "livraisons" | "chargements" | "voyages";
 type QuickRange = "today" | "yesterday" | "week" | "month";
 
 function startOfRange(range: QuickRange): { from: string; to: string } {
@@ -126,6 +138,19 @@ const LIV_COLUMNS = [
   "Truck ID", "Driver", "Site", "Client", "Heure d'entrée", "Heure sortie", "Temps passé",
 ] as const;
 
+// No Zone column: there is one loading bay and a column repeating its
+// name 300 times is width spent on a constant. It is named in the
+// sentence under the heading instead, and carried on every row of the
+// RPC so a second bay would have somewhere to appear.
+//
+// Avant chargement LAST, after the load's own times, because it is the
+// figure that qualifies them rather than another timestamp to read in
+// sequence: fifty minutes under the spout after ten minutes of queue and
+// after three hours are different days.
+const CHARG_COLUMNS = [
+  "Truck ID", "Driver", "Heure d'entrée", "Heure sortie", "Temps de chargement", "Avant chargement",
+] as const;
+
 // The owner's order, from the CSV he specified it with, and it is the
 // order the question is asked in: which truck, who drove it, what it
 // cost, how far, how much fuel, at what rate, how far off the assumed
@@ -157,6 +182,22 @@ function voyageRows(rows: VoyageRow[]): string[][] {
     // Spelled out rather than left blank: a blank cell in a spreadsheet
     // is indistinguishable from a zero somebody deleted.
     r.voyages == null ? "Not available" : String(r.voyages),
+  ]);
+}
+
+function chargRows(visits: FleetLoadingVisit[]): string[][] {
+  return visits.map((v) => [
+    v.truck_id,
+    v.driver_name || "—",
+    formatOpsDateTime(v.entered_at),
+    // Blank, not a dash, on an open load: the truck has not left, so
+    // there is no time to report. Same rule Livraisons and Geo follow.
+    v.exited_at ? formatOpsDateTime(v.exited_at) : "",
+    v.seconds_loading == null ? "" : hms(v.seconds_loading),
+    // Blank rather than 0 where nothing encloses the load — the wait is
+    // unknown, not zero, and a 0 in a spreadsheet column of durations is
+    // read as "went straight in".
+    v.queue_seconds == null ? "" : hms(v.queue_seconds),
   ]);
 }
 
@@ -227,6 +268,9 @@ export default function ReportsPage() {
   const [livVisits, setLivVisits] = useState<FleetSiteVisit[] | null>(null);
   const [livTotals, setLivTotals] = useState<FleetSiteTotalRow[] | null>(null);
 
+  const [chargVisits, setChargVisits] = useState<FleetLoadingVisit[] | null>(null);
+  const [chargTotals, setChargTotals] = useState<FleetLoadingTotalRow[] | null>(null);
+
   // Fetched once on mount rather than when Geo is selected: the list is
   // ~40 rows, and loading it on switch would put a spinner inside the
   // selector at the moment someone reaches for it.
@@ -269,6 +313,8 @@ export default function ReportsPage() {
     setGeoTotals(null);
     setLivVisits(null);
     setLivTotals(null);
+    setChargVisits(null);
+    setChargTotals(null);
     setVoyages(null);
     setError(null);
     setCopied(false);
@@ -318,6 +364,23 @@ export default function ReportsPage() {
         setTruncated(v.truncated);
         setTotal(v.total);
       }
+    } else if (report === "chargements") {
+      // Both together, for the reason Livraisons fetches both together:
+      // the strip describes the same answer as the table under it.
+      const [v, t] = await Promise.all([
+        getFleetLoadingVisits(fromIso, toIso),
+        getFleetLoadingTotals(fromIso, toIso),
+      ]);
+      if (v.error || t.error) {
+        setError(v.error ?? t.error);
+        setChargVisits(null);
+        setChargTotals(null);
+      } else {
+        setChargVisits(v.data);
+        setChargTotals(t.data);
+        setTruncated(v.truncated);
+        setTotal(v.total);
+      }
     } else if (report === "geo") {
       // Both together: the strip sits above the table and describes the
       // same answer, so a second round trip would show a filled table
@@ -359,6 +422,8 @@ export default function ReportsPage() {
     setGeoTotals(null);
     setLivVisits(null);
     setLivTotals(null);
+    setChargVisits(null);
+    setChargTotals(null);
     setVoyages(null);
     setError(null);
     setCopied(false);
@@ -372,6 +437,8 @@ export default function ReportsPage() {
       ? { columns: VOYAGE_COLUMNS, rows: voyageRows(voyages ?? []), slug: "rapport-voyages" }
       : report === "livraisons"
       ? { columns: LIV_COLUMNS, rows: livRows(livVisits ?? []), slug: "rapport-livraisons" }
+      : report === "chargements"
+      ? { columns: CHARG_COLUMNS, rows: chargRows(chargVisits ?? []), slug: "rapport-chargements" }
       : report === "geo"
       ? {
           columns: GEO_COLUMNS,
@@ -489,6 +556,7 @@ export default function ReportsPage() {
     report === "parc" ? entries !== null
     : report === "voyages" ? voyages !== null
     : report === "livraisons" ? livVisits !== null
+    : report === "chargements" ? chargVisits !== null
     : geoVisits !== null;
 
   return (
@@ -497,6 +565,7 @@ export default function ReportsPage() {
         {report === "parc" ? "Rapport Parc"
           : report === "geo" ? "Rapport Geo"
           : report === "voyages" ? "Rapport Voyages"
+          : report === "chargements" ? "Rapport Chargements"
           : "Rapport Livraisons"}
       </h1>
       <p className="mt-1 text-sm t-dim">
@@ -506,6 +575,8 @@ export default function ReportsPage() {
           ? "One row per truck: what it burned, what that cost against the assumed rate, and how many loaded trips it ran from the plant to a client."
           : report === "livraisons"
           ? `Every truck, every client site it stopped at for more than ${UNLOADED_MIN_SECONDS / 60} minutes — the plant is left out, so what remains is the deliveries.`
+          : report === "chargements"
+          ? "Every truck that entered Zone chargement – Usine AMOUDA Ciment, with how long it loaded and how long it waited to. The counterpart of Livraisons: that one is the fleet at the client end of a trip, this is the fleet at the plant end."
           : "One truck, every zone it entered — the plant's waiting area and loading bay alongside the client sites."}{" "}
         Times in Algeria local time ({OPS_TIMEZONE}).
       </p>
@@ -527,6 +598,22 @@ export default function ReportsPage() {
           polygon logs a truck that merely drove past, and on this fleet&rsquo;s first week 43 of 193
           site visits were that — several of them under two minutes. Same threshold as{" "}
           <strong>Déchargés</strong> on Monitoring, so the two agree on what a delivery is.
+        </p>
+      )}
+
+      {/* Says the two things a reader would otherwise assume wrongly:
+          that this counts every entry (Livraisons does not, and they sit
+          next to each other), and that Avant chargement is not part of
+          Temps de chargement. */}
+      {report === "chargements" && (
+        <p className="mt-1 text-xs t-faint">
+          <strong>Every entry counts here</strong> — there is no minimum stop, unlike{" "}
+          <strong>Livraisons</strong>. A site polygon sits beside a public road and logs trucks that
+          merely drove past; the loading bay is drawn inside the waiting area, so a truck reaches it
+          only by being sent there. <strong>Avant chargement</strong> is the wait before the load —
+          this entry minus the moment the truck entered the waiting area — so it runs{" "}
+          <em>before</em> Temps de chargement rather than inside it, and a dash means no waiting-area
+          entry encloses the load.
         </p>
       )}
 
@@ -553,7 +640,7 @@ export default function ReportsPage() {
 
       <div className="panel mt-5 p-4">
         <div className="seg" style={{ width: "fit-content" }}>
-          {(["parc", "geo", "livraisons", "voyages"] as Report[]).map((r) => (
+          {(["parc", "geo", "livraisons", "chargements", "voyages"] as Report[]).map((r) => (
             <button
               key={r}
               type="button"
@@ -561,7 +648,11 @@ export default function ReportsPage() {
               className={`seg-item${report === r ? " is-active" : ""}`}
               aria-pressed={report === r}
             >
-              {r === "parc" ? "Parc" : r === "geo" ? "Geo" : r === "voyages" ? "Voyages" : "Livraisons"}
+              {r === "parc" ? "Parc"
+                : r === "geo" ? "Geo"
+                : r === "voyages" ? "Voyages"
+                : r === "chargements" ? "Chargements"
+                : "Livraisons"}
             </button>
           ))}
         </div>
@@ -637,7 +728,7 @@ export default function ReportsPage() {
         // time, and green means "moving, on-route" in this palette — it
         // is not free to spend on a truck standing still, however
         // usefully.
-        <div className="kpi-strip mt-5" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+        <div className="kpi-strip mt-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))" }}>
           <div className="kpi-card">
             <div className="kpi-value">{livTotals.reduce((n, t) => n + t.deliveries, 0)}</div>
             <div className="kpi-label">Livraisons</div>
@@ -665,6 +756,62 @@ export default function ReportsPage() {
         </div>
       )}
 
+      {/* WHY auto-fit RATHER THAN repeat(4, …), on all three strips
+          below. .kpi-strip clips (overflow: hidden, and it must — see
+          globals.css), so four fixed tracks do not scroll when they stop
+          fitting, they silently cut the figures off. Measured at 400px
+          against the shipped Livraisons strip: its "412:18:05" lost 52px
+          and "Temps sur site" 37px, and this report's longer labels
+          would have lost 85px. minmax(min(150px, 100%), 1fr) keeps four
+          across wherever there is room, folds to 2×2 on a phone and to
+          one column at 320px, and the min() is what stops the track
+          floor from overflowing a viewport narrower than 150px itself.
+          Zero clipping at 1366 / 640 / 400 / 320 after the change. */}
+      {report === "chargements" && chargTotals && chargTotals.length > 0 && (
+        // The same four-slot shape as Livraisons, and summed the same
+        // way: from chargTotals, which is one row per truck and cannot
+        // be truncated, never from the capped visit list.
+        <div className="kpi-strip mt-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))" }}>
+          <div className="kpi-card">
+            <div className="kpi-value">{chargTotals.reduce((n, t) => n + t.loadings, 0)}</div>
+            <div className="kpi-label">Chargements</div>
+          </div>
+          <div className="kpi-card">
+            {/* Straight off the RPC, which carries the same fleet-wide
+                figure on every row. chargTotals.length is the same
+                number here — one row per truck that loaded — but reading
+                the column keeps this card right if the query ever grows
+                a row for a truck with none. */}
+            <div className="kpi-value">{chargTotals[0].fleet_trucks}</div>
+            <div className="kpi-label">
+              {chargTotals[0].fleet_trucks === 1 ? "Camion" : "Camions"}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-value">{hms(chargTotals.reduce((n, t) => n + t.total_seconds, 0))}</div>
+            <div className="kpi-label">Temps de chargement</div>
+          </div>
+          {/* AMBER, the one coloured card, on the same reading as Geo's
+              Attente card: amber is the taxonomy's idle and a truck
+              queueing at the plant is precisely idle. Loading time
+              beside it stays achromatic — it is productive, and green
+              means "moving, on-route".
+              Divided by queued_visits, NOT by loadings: a load with no
+              enclosing waiting row contributes no wait, and dividing by
+              every load would quietly average those in as zero. */}
+          <div className="kpi-card amber">
+            <div className="kpi-value">
+              {(() => {
+                const waits = chargTotals.reduce((n, t) => n + t.queued_visits, 0);
+                if (waits === 0) return "—";
+                return hms(chargTotals.reduce((n, t) => n + t.total_queue_seconds, 0) / waits);
+              })()}
+            </div>
+            <div className="kpi-label">Attente moyenne</div>
+          </div>
+        </div>
+      )}
+
       {report === "geo" && geoTotals && geoTotals.length > 0 && (
         // One card per zone actually visited, so the strip is as long as
         // the truck's day rather than a fixed set of slots — a truck
@@ -676,10 +823,11 @@ export default function ReportsPage() {
         // and time on a client site stay achromatic — both are
         // productive time, and green would claim the palette's
         // "moving, on-route" for something standing still.
-        <div
-          className="kpi-strip mt-5"
-          style={{ gridTemplateColumns: `repeat(${Math.min(geoTotals.length, 4)}, minmax(0, 1fr))` }}
-        >
+        // auto-fit replaces an explicit Math.min(length, 4) here, and
+        // matches it wherever it mattered: with four cards or fewer the
+        // row is identical at desktop width. Five zones now sit in one
+        // row rather than four-then-one, which is the better of the two.
+        <div className="kpi-strip mt-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))" }}>
           {geoTotals.map((t) => (
             <div
               key={`${t.zone_kind}-${t.site_id ?? "plant"}`}
@@ -708,6 +856,8 @@ export default function ReportsPage() {
                 ? active.rows.length === 1 ? "truck" : "trucks"
                 : report === "livraisons"
                 ? active.rows.length === 1 ? "livraison" : "livraisons"
+                : report === "chargements"
+                ? active.rows.length === 1 ? "chargement" : "chargements"
                 : active.rows.length === 1 ? "passage" : "passages"}
               {/* Names the real total, which is the whole reason the
                   count is now taken in Postgres: the old notice could
@@ -735,6 +885,8 @@ export default function ReportsPage() {
                 ? "No trucks entered the parc in this period."
                 : report === "livraisons"
                 ? "No truck reached a client site in this period."
+                : report === "chargements"
+                ? "No truck loaded at the plant in this period."
                 : `${truckId} entered no zone in this period.`}
             </p>
           ) : report === "geo" ? (
@@ -832,6 +984,36 @@ export default function ReportsPage() {
                         {v.exited_at ? formatOpsDateTime(v.exited_at) : "encore sur place"}
                       </td>
                       <td style={monoCell}>{hms(v.seconds_on_site)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : report === "chargements" ? (
+            <div className="mt-3 table-wrap">
+              <table>
+                <thead>
+                  <tr>{CHARG_COLUMNS.map((c) => <th key={c}>{c}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {chargVisits!.map((v, i) => (
+                    // Truck and entry time are not unique together: a
+                    // truck can leave and re-enter the bay inside a
+                    // minute, and both rows carry that tick's timestamp.
+                    <tr key={`${v.truck_id}-${v.entered_at}-${i}`}>
+                      <td className="truck-id">{v.truck_id}</td>
+                      <td style={{ color: v.driver_name ? "var(--text)" : "var(--text-dim)" }}>
+                        {v.driver_name || "—"}
+                      </td>
+                      <td style={monoCell}>{formatOpsDateTime(v.entered_at)}</td>
+                      <td style={monoCell}>
+                        {v.exited_at ? formatOpsDateTime(v.exited_at) : "encore en charge"}
+                      </td>
+                      <td style={monoCell}>{hms(v.seconds_loading)}</td>
+                      {/* A dash, not 0:00:00 — nothing encloses this
+                          load, so the wait is unknown rather than none.
+                          hms already prints a dash for null. */}
+                      <td style={monoCell}>{hms(v.queue_seconds)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -273,7 +273,7 @@ something other than an async function.
 | `/monitoring` | Searchable/filterable table of every truck, dispatched or not |
 | `/history` | Completed and stopped runs with duration and violation flags; CSV export and a printable daily summary |
 | `/notifications` | Rolling 24-hour feed, grouped by destination (Parc / Factory / Client / Conduct), 6 rows per group with expand, and mark-read |
-| `/reports` | Parc-entry report over a From/To range with quick ranges, clipboard copy and CSV download |
+| `/reports` | Five reports over one shared From/To range (quick ranges, clipboard copy, CSV download): **Parc** entries, **Geo** — one truck across every zone, **Livraisons** — the fleet at the client end of a trip, **Chargements** — the fleet at the plant end, with the wait before each load, and **Voyages** — fuel against trips, one row per truck |
 | `/drivers` | Driver directory — Wialon names matched to stored phone and address, with inline editing |
 | `/carburant` | Recent fuel transactions as the sheet records them |
 | `/admin` | Admin hub; lists the geofences currently loaded |

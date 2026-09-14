@@ -13,7 +13,8 @@
     "check:range": "node --experimental-strip-types scripts/check-previous-range.mts",
     "check:drivers": "node --experimental-strip-types scripts/check-driver-union.mts",
     "check:scope": "bash scripts/check-dashboard-scope.sh",
-    "check:feed": "node --experimental-strip-types scripts/check-feed-health.mts"
+    "check:feed": "node --experimental-strip-types scripts/check-feed-health.mts",
+    "check:all": "for s in scripts/check-*.mts; do echo \"── $s\"; node --experimental-strip-types \"$s\" || exit 1; done && bash scripts/check-dashboard-scope.sh"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

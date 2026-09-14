@@ -9,7 +9,8 @@
 // Runs with the service role, so RLS write policies don't apply.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadWialonConfig, fetchFleetData, type FleetTruck, type VehicleCategory } from "@/lib/fleet/wialon";
+import { loadWialonConfigResult, fetchFleetData, type FleetTruck, type VehicleCategory } from "@/lib/fleet/wialon";
+import { withRetry } from "@/lib/supabase/retry";
 import { loadGeofences, selectFactoryGeofence, selectLoadingGeofence } from "@/lib/fleet/geofences";
 import {
   loadDispatchAndSite,
@@ -39,17 +40,24 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   // the session-scoped helper returns nothing here — there is no session
   // — and surfaces as "Wialon is not configured" on a project where it
   // is configured perfectly well.
-  const config = await loadWialonConfig(supabase);
-  if (!config) {
+  const configResult = await loadWialonConfigResult(supabase);
+  if (!configResult.config) {
     return {
       ok: false,
       trucks: 0,
       dispatchesChecked: 0,
       durationMs: Date.now() - startedAt,
-      error: "Wialon is not configured — set the API token in Admin → Settings.",
+      // TWO DIFFERENT ANSWERS, said differently. A failed read is not a
+      // missing token, and telling someone to go and set a token that is
+      // already set costs them the real diagnosis — which is what
+      // happened on 2026-09-13.
+      error: configResult.error
+        ? `Could not read the Wialon configuration: ${configResult.error}`
+        : "Wialon is not configured — set the API token in Admin → Settings.",
       warnings,
     };
   }
+  const config = configResult.config;
 
   const fleet = await fetchFleetData(config);
   if (fleet.error) {
@@ -98,14 +106,29 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   // fire-and-forget and won't report a failed tick, so a gap in
   // fleet_snapshots is the signal that the schedule has stopped.
   // It's also what the browser now reads its truck positions from.
-  const { error: snapshotError } = await supabase.from("fleet_snapshots").insert({
-    snapshot_data: trucks,
-    truck_count: trucks.length,
-    moving_count: trucks.filter((t: FleetTruck) => t.status === "moving").length,
-    idle_count: trucks.filter((t: FleetTruck) => t.status === "idle").length,
-    offline_count: trucks.filter((t: FleetTruck) => t.status === "offline").length,
-    captured_at: new Date().toISOString(),
-  });
+  // Retried: this is the row the map, the strip and "What the fleet is
+  // doing" all read, so losing it to a blip is the difference between a
+  // live page and an amber one.
+  //
+  // An insert is not idempotent in general. The case to think about is a
+  // first attempt that actually landed and only lost its RESPONSE: the
+  // retry then writes a SECOND snapshot, with its own captured_at a
+  // fraction of a second later, because the timestamp is evaluated
+  // inside this closure on each attempt. Two snapshots 200ms apart is
+  // harmless — every reader takes the newest — and the alternative is a
+  // minute of the fleet with no position at all.
+  const { error: snapshotError } = await withRetry(
+    () =>
+      supabase.from("fleet_snapshots").insert({
+        snapshot_data: trucks,
+        truck_count: trucks.length,
+        moving_count: trucks.filter((t: FleetTruck) => t.status === "moving").length,
+        idle_count: trucks.filter((t: FleetTruck) => t.status === "idle").length,
+        offline_count: trucks.filter((t: FleetTruck) => t.status === "offline").length,
+        captured_at: new Date().toISOString(),
+      }),
+    { label: "fleet_snapshots insert" }
+  );
   if (snapshotError) warnings.push(`snapshot: ${snapshotError.message}`);
 
   const [{ data: geofences, error: geofenceError }, { data: dispatches, error: dispatchError }] =

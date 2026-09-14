@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
+import { withRetry } from "@/lib/supabase/retry";
 import { runFleetTick } from "@/lib/fleet/tick";
 
 // Scheduled fleet monitoring. Called every minute by pg_cron + pg_net
@@ -25,12 +26,35 @@ async function redeemedNonce(request: NextRequest): Promise<boolean> {
   const nonce = request.headers.get("x-tick-nonce");
   if (!nonce) return false;
 
-  const { data, error } = await createServiceClient()
-    .from("tick_nonces")
-    .delete()
-    .eq("nonce", nonce)
-    .gt("created_at", new Date(Date.now() - 3 * 60_000).toISOString())
-    .select("nonce");
+  // RETRIED ON A TRANSIENT FAILURE ONLY, and the distinction is what
+  // keeps this safe.
+  //
+  // Measured 2026-09-14: about ten runs an hour were rejected here with
+  // "could not redeem nonce: Gateway Timeout" — the Data API dropping a
+  // one-row DELETE while Postgres sat idle. Each one threw away a whole
+  // minute of fleet tracking over an error that had nothing to do with
+  // the nonce.
+  //
+  // THE CASE TO WORRY ABOUT is a first attempt that actually deleted the
+  // row and then lost its response. The retry finds nothing to delete,
+  // returns zero rows, and this rejects the request — which is exactly
+  // what happens today, so the retry is never WORSE than the behaviour
+  // it replaces, only better when the blip was a genuine non-delivery.
+  //
+  // And the replay protection is untouched: only a delivery FAILURE is
+  // retried. A successful call returning zero rows is an answer — the
+  // nonce is unknown, expired, or already spent — and falls straight
+  // through to the rejection below without a second attempt.
+  const { data, error } = await withRetry(
+    () =>
+      createServiceClient()
+        .from("tick_nonces")
+        .delete()
+        .eq("nonce", nonce)
+        .gt("created_at", new Date(Date.now() - 3 * 60_000).toISOString())
+        .select("nonce"),
+    { label: "nonce redemption" }
+  );
 
   if (error) {
     console.error("[tick] rejected: could not redeem nonce:", error.message);

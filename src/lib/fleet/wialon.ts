@@ -14,6 +14,7 @@
 // carrying the API token.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { withRetry } from "@/lib/supabase/retry";
 
 const DEFAULT_RELAY = "https://wialon-relay1.ferdjellahsouhaibomd.workers.dev";
 const DEFAULT_SERVER = "hst-api.wialon.eu";
@@ -24,23 +25,67 @@ export interface ResolvedWialonConfig {
   token: string;
 }
 
+/** The config, or why there isn't one — and those are two different
+ *  answers that used to look identical.
+ *
+ *  The old version destructured only `data` and dropped the error, so a
+ *  Data API timeout on this one read was indistinguishable from a
+ *  project with no token saved. The tick then reported "Wialon is not
+ *  configured — set the API token in Admin → Settings", which is a
+ *  sentence that sends someone to paste a token that was never missing.
+ *  It did exactly that on 2026-09-13, during an outage whose real cause
+ *  was an expired token — the message happened to be right that day and
+ *  would have been wrong on any of the thirty timeouts an hour measured
+ *  on 2026-09-14. Same lesson as the dashboard's 047 incident: a failure
+ *  that is pixel-identical to a legitimate empty state cannot be
+ *  diagnosed. */
+export interface WialonConfigResult {
+  config: ResolvedWialonConfig | null;
+  /** Set only when the READ failed. Null config with null error means
+   *  the project genuinely has no token saved. */
+  error: string | null;
+}
+
+export async function loadWialonConfigResult(
+  supabase: SupabaseClient
+): Promise<WialonConfigResult> {
+  // Retried, because this single read decides whether the tick runs at
+  // all: a timeout here returned null and aborted the whole minute. It
+  // is a plain SELECT, so a second attempt costs nothing but time and
+  // cannot do anything twice.
+  const { data, error } = await withRetry(
+    () =>
+      supabase
+        .from("app_config")
+        .select("config_value")
+        .eq("config_key", "wialon")
+        .single(),
+    { label: "app_config read" }
+  );
+
+  if (error) return { config: null, error: error.message };
+
+  const cfg = data?.config_value as { relay?: string; server?: string; token?: string } | undefined;
+  if (!cfg?.token) return { config: null, error: null };
+
+  return {
+    config: {
+      relay: cfg.relay || DEFAULT_RELAY,
+      server: cfg.server || DEFAULT_SERVER,
+      token: cfg.token,
+    },
+    error: null,
+  };
+}
+
+/** The same read for the three callers that only want the config and
+ *  treat every failure as "not configured". Kept so this change stays
+ *  confined to the tick, which is the only caller the distinction
+ *  matters to. */
 export async function loadWialonConfig(
   supabase: SupabaseClient
 ): Promise<ResolvedWialonConfig | null> {
-  const { data } = await supabase
-    .from("app_config")
-    .select("config_value")
-    .eq("config_key", "wialon")
-    .single();
-
-  const cfg = data?.config_value as { relay?: string; server?: string; token?: string } | undefined;
-  if (!cfg?.token) return null;
-
-  return {
-    relay: cfg.relay || DEFAULT_RELAY,
-    server: cfg.server || DEFAULT_SERVER,
-    token: cfg.token,
-  };
+  return (await loadWialonConfigResult(supabase)).config;
 }
 
 export interface WialonPosition {

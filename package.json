@@ -15,6 +15,7 @@
     "check:scope": "bash scripts/check-dashboard-scope.sh",
     "check:feed": "node --experimental-strip-types scripts/check-feed-health.mts",
     "check:cache": "node --experimental-strip-types scripts/check-dash-cache.mts",
+    "check:retry": "node --experimental-strip-types scripts/check-retry.mts",
     "check:all": "for s in scripts/check-*.mts; do echo \"── $s\"; node --experimental-strip-types \"$s\" || exit 1; done && bash scripts/check-dashboard-scope.sh"
   },
   "dependencies": {

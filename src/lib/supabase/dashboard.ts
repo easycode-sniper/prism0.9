@@ -15,8 +15,12 @@ import { UNLOADED_MIN_SECONDS } from "@/lib/constants";
 // "use server" and may only export async functions.
 import { type Scope, type ScopeOption, FLEET, scopeArgs } from "@/lib/dashboard/scope";
 
+/** The caller's own Supabase client, created once per request by the one
+ *  exported action below and handed to every reader. */
+type Db = Awaited<ReturnType<typeof createClient>>;
+
 // Everything the redesigned dashboard reads, in one module so the page
-// makes one round trip per section rather than a query per tile.
+// makes ONE round trip — see getDashboardBundle at the foot of the file.
 //
 // Every figure here is measured. Nothing on this page is derived from an
 // assumed rate or a placeholder: a dashboard that mixes real numbers with
@@ -77,13 +81,11 @@ export interface FuelPeriodStats {
 // 17,000 rows, and dragging those over the wire to add them is the wrong
 // shape however well it fits. An aggregate is one row at any size.
 
-export async function getFuelPeriodStats(
+async function readFuelPeriodStats(
+  supabase: Db,
   range: OpsRange = ALL_TIME,
   scope: Scope = FLEET
 ): Promise<{ stats?: FuelPeriodStats; error?: string }> {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: "Not authenticated" };
 
   // Both null for the fleet, which makes this the identical call the
   // dashboard made before 060 — the scoped path is additive, and the
@@ -185,13 +187,11 @@ export interface DashboardSeries {
   daysAvailable: number;
 }
 
-export async function getDashboardSeries(
+async function readDashboardSeries(
+  supabase: Db,
   range: OpsRange,
   scope: Scope = FLEET
 ): Promise<{ series?: DashboardSeries; error?: string }> {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: "Not authenticated" };
 
   // The RPC returns one row per day, already dense and already bucketed
   // to the Africa/Algiers operations day — so a fill logged at 00:12
@@ -276,7 +276,8 @@ export interface DriverVariance {
   variancePer100Km: number | null;
 }
 
-export async function getDriverVariance(
+async function readDriverVariance(
+  supabase: Db,
   // The whole roster, not a top N. One row per driver — 92 today — grows
   // with headcount rather than with fills, so it is small enough to hand
   // over whole and sort in the browser, where changing the sort costs
@@ -284,9 +285,6 @@ export async function getDriverVariance(
   limit = 500,
   range: OpsRange = ALL_TIME
 ): Promise<{ drivers?: DriverVariance[]; error?: string }> {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: "Not authenticated" };
 
   const { data, error } = await supabase.rpc("driver_variance_leaders", {
     p_limit: limit, p_from: range.from, p_to: range.to,
@@ -320,13 +318,11 @@ export interface TruckVariance {
   variancePer100Km: number | null;
 }
 
-export async function getTruckVariance(
+async function readTruckVariance(
+  supabase: Db,
   limit = 500,
   range: OpsRange = ALL_TIME
 ): Promise<{ trucks?: TruckVariance[]; error?: string }> {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: "Not authenticated" };
 
   const { data, error } = await supabase.rpc("truck_variance_leaders", {
     p_limit: limit, p_from: range.from, p_to: range.to,
@@ -363,7 +359,8 @@ export interface DriverSpeeding {
   lastAt: string | null;
 }
 
-export async function getDriverSpeeding(
+async function readDriverSpeeding(
+  supabase: Db,
   limit = 100,
   // Defaulted to ALL_TIME like the others, but note this one was NEVER
   // all-time before 047: it carried a hardcoded date_trunc('month'),
@@ -373,9 +370,6 @@ export async function getDriverSpeeding(
   range: OpsRange = ALL_TIME,
   scope: Scope = FLEET
 ): Promise<{ drivers?: DriverSpeeding[]; error?: string }> {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: "Not authenticated" };
 
   // Counted and grouped in Postgres: notifications grow without bound and
   // PostgREST truncates at 1000 rows without erroring. One row per driver
@@ -438,14 +432,12 @@ export interface StationLeaders {
  * would be a chart that lies by omission; six plus one honest "everyone
  * else" arc is the same information without the lie.
  */
-export async function getFuelStationLeaders(
+async function readFuelStationLeaders(
+  supabase: Db,
   range: OpsRange = ALL_TIME,
   limit = 6,
   scope: Scope = FLEET
 ): Promise<{ data?: StationLeaders; error?: string }> {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: "Not authenticated" };
 
   // Scoped this answers "where does THIS truck fill up", which is worth
   // more than it sounds: a truck buying fuel somewhere the rest of the
@@ -498,10 +490,7 @@ export async function getFuelStationLeaders(
  * half-populates the page. That split is a correction for the source
  * sheet; migration 060 explains why SQL does not guess at it.
  */
-export async function getScopeOptions(): Promise<{ options?: ScopeOption[]; error?: string }> {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: "Not authenticated" };
+async function readScopeOptions(supabase: Db): Promise<{ options?: ScopeOption[]; error?: string }> {
 
   const { data, error } = await supabase.rpc("dashboard_scope_options");
   if (error) return { error: error.message };
@@ -519,5 +508,120 @@ export async function getScopeOptions(): Promise<{ options?: ScopeOption[]; erro
       // A blank id cannot be selected and cannot be searched for; it
       // would render as an empty row in the popup.
       .filter((o) => o.id !== ""),
+  };
+}
+
+// ── The one round trip ────────────────────────────────────────
+//
+// THE ONLY EXPORT IN THIS FILE, and the reason is measured rather than
+// stylistic.
+//
+// The page used to call eight server actions — seven in a Promise.all
+// plus the scope roster — and a Promise.all of server actions is NOT
+// concurrent. Next.js queues actions and runs them strictly one at a
+// time; a second request does not begin until the first has answered.
+// Measured on Next 15.5.9 with this repo's own toolchain: seven actions
+// of 300ms each took 2,180ms end to end, and the server-side span
+// between the first start and the last finish was 2,180ms too, so they
+// never overlapped. The same work behind ONE action took 308ms.
+//
+// Each of those eight also opened with its own supabase.auth.getUser(),
+// which is a network call to the Auth API — not a cookie read. So the
+// page was paying sixteen sequential round trips (eight auth, eight
+// RPC) to answer a question Postgres does in tens of milliseconds: at
+// the time of writing every one of these RPCs runs in 7-23ms, and the
+// scope roster, the slowest, in 173ms. None of the waiting was
+// database work. That is how a dashboard that holds no slow query still
+// spends long enough in flight to be cut off with a 504, which is what
+// the owner was seeing on 2026-09-14 — the scorecards filled and the
+// charts underneath came back empty, because the queue ran out of time
+// partway down.
+//
+// So: one action, one client, one getUser, and then the reads in a
+// Promise.all where they ARE concurrent, because at that point they are
+// ordinary fetches rather than queued actions.
+//
+// The roster is the one conditional piece. It costs 173ms — an order of
+// magnitude more than anything else here — and it answers "who exists",
+// which does not change when the range moves. So the page asks for it
+// on the first load and never again, and the extra argument is what
+// keeps it out of every subsequent call.
+
+export interface DashboardBundle {
+  fuel?: FuelPeriodStats;
+  /** The same figures over the preceding window, for the deltas under
+   *  the scorecards. Undefined where there is nothing before this range
+   *  to compare with — All time, chiefly. */
+  previousFuel?: FuelPeriodStats;
+  series?: DashboardSeries;
+  drivers?: DriverVariance[];
+  trucks?: TruckVariance[];
+  speeding?: DriverSpeeding[];
+  stations?: StationLeaders;
+  /** Only when asked for. Undefined on a refresh is not "the roster is
+   *  empty" — the page keeps the list it already holds. */
+  options?: ScopeOption[];
+  /** The first hard failure among the panels. They share a range and a
+   *  round trip, so if one signature is wrong they all are; reporting
+   *  seven copies of one sentence would only bury it. */
+  error?: string;
+}
+
+export async function getDashboardBundle(
+  range: OpsRange,
+  /** The preceding window, for the deltas — or null where there is
+   *  nothing before this range.
+   *
+   *  PASSED IN rather than derived here, and not by preference: whether
+   *  a month-shaped range means "the whole month before" or "the same
+   *  many days of it" depends on which preset produced it, and
+   *  presetKeyFor lives in RangeBar, a client component this file must
+   *  not import. The page computes it once and uses the same value for
+   *  the label it prints under the figures, so the two cannot disagree. */
+  comparison: OpsRange | null,
+  scope: Scope = FLEET,
+  /** How many rows the two variance tables may return. The page sorts
+   *  them itself, so this is a guard rather than a page size. */
+  limits: { variance?: number; speeding?: number; stations?: number } = {},
+  /** True only on the first load — see the note above. */
+  includeOptions = false
+): Promise<DashboardBundle> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: "Not authenticated" };
+
+  const variance = limits.variance ?? 500;
+  const speedingLimit = limits.speeding ?? 100;
+  const stationSlices = limits.stations ?? 6;
+
+  const [f, s, dv, tv, sp, pf, st, opt] = await Promise.all([
+    readFuelPeriodStats(supabase, range, scope),
+    readDashboardSeries(supabase, range, scope),
+    readDriverVariance(supabase, variance, range),
+    readTruckVariance(supabase, variance, range),
+    readDriverSpeeding(supabase, speedingLimit, range, scope),
+    comparison
+      ? readFuelPeriodStats(supabase, comparison, scope)
+      : Promise.resolve({ stats: undefined, error: undefined }),
+    readFuelStationLeaders(supabase, range, stationSlices, scope),
+    includeOptions
+      ? readScopeOptions(supabase)
+      : Promise.resolve({ options: undefined, error: undefined }),
+  ]);
+
+  return {
+    fuel: f.stats,
+    // The comparison's own error is deliberately NOT folded into `error`
+    // below: the page is still correct without a delta, and failing the
+    // whole dashboard because the previous month would not load would
+    // trade a working page for a missing footnote.
+    previousFuel: pf.stats,
+    series: s.series,
+    drivers: dv.drivers,
+    trucks: tv.trucks,
+    speeding: sp.drivers,
+    stations: st.data,
+    options: opt.options,
+    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? undefined,
   };
 }

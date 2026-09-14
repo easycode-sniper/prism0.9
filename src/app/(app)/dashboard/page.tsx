@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Chart as ChartJS,
@@ -23,13 +23,8 @@ import { Bar, Chart, Doughnut, Line } from "react-chartjs-2";
 import { ArrowRight, Fuel, Gauge, MapPinOff, Route, ShieldAlert } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import {
-  getFuelPeriodStats,
-  getFuelStationLeaders,
-  getDashboardSeries,
-  getDriverVariance,
-  getTruckVariance,
-  getDriverSpeeding,
-  getScopeOptions,
+  getDashboardBundle,
+  type DashboardBundle,
   type FuelPeriodStats,
   type StationLeaders,
   type DashboardSeries,
@@ -58,6 +53,7 @@ import RangeBar, { buildPresets, describeRange, presetKeyFor } from "@/component
 import type { OpsRange } from "@/lib/dashboard/range";
 import { previousRange, daysInRange, sameRange } from "@/lib/dashboard/range";
 import { periodDelta } from "@/lib/dashboard/delta";
+import { makeCache, isFresh } from "@/lib/dashboard/cache";
 import Combobox, { type ComboOption } from "@/components/forms/Combobox";
 import {
   type Scope,
@@ -346,6 +342,23 @@ const consumptionClass = (v: number | null) =>
  *  how many the ramp has to colour. */
 const STATION_SLICES = 6;
 
+/** What the page already knows, kept between visits.
+ *
+ * AT MODULE SCOPE, and that is the whole point: a useState or a useRef
+ * dies with the component, and the complaint this answers is precisely
+ * about leaving the page and coming back. The module stays loaded across
+ * client-side navigation, so dispatch → dashboard finds its last answers
+ * still here and paints them before any request is made. It dies with the
+ * tab, so it is per-user and per-session by construction.
+ */
+const bundles = makeCache<DashboardBundle>();
+
+/** Range and scope together are what the answer depends on, so they are
+ *  what the key is made of. */
+function bundleKey(range: OpsRange, scope: Scope): string {
+  return `${range.from ?? ""}|${range.to ?? ""}|${scopeToQuery(scope)}`;
+}
+
 export default function DashboardPage() {
   const { t } = useTranslation();
   const { fleetData, notifications, dispatches } = useFleet();
@@ -398,16 +411,16 @@ export default function DashboardPage() {
     setScope(scopeFromParams(new URLSearchParams(window.location.search)));
   }, []);
 
-  // The roster behind the search box. Fetched ONCE, not per range: who
-  // exists does not depend on which fortnight is on screen, and refetching
-  // it would empty the picker mid-interaction every time the range moved.
-  useEffect(() => {
-    let cancelled = false;
-    void getScopeOptions().then((r) => {
-      if (!cancelled && r.options) setScopeOptions(r.options);
-    });
-    return () => { cancelled = true; };
-  }, []);
+  // The roster behind the search box is fetched ONCE — who exists does
+  // not depend on which fortnight is on screen — but it no longer has an
+  // effect of its own. It rides the first bundle instead, because a
+  // second server action would not have run beside that one: Next queues
+  // actions and runs them one at a time, so an independent request here
+  // simply added its whole latency to the mount. This ref is what keeps
+  // it to the first load; it costs 173ms against 7-23ms for everything
+  // else in the bundle, so asking for it per range would be the most
+  // expensive thing on the page.
+  const rosterLoaded = useRef(false);
 
   // Keep the URL in step without adding a history entry per selection —
   // replaceState, so Back still leaves the dashboard rather than walking
@@ -422,54 +435,87 @@ export default function DashboardPage() {
   // they landed and let the page sit briefly in a state where the
   // scorecards describe August and the tables still describe July —
   // which is the exact incoherence this control exists to remove.
+  //
+  // ONE SERVER ACTION, not seven, and it is not a tidiness point.
+  // Promise.all does NOT make server actions concurrent: Next queues
+  // them and runs them strictly one at a time, so the old call below
+  // paid seven round trips end to end — measured on this toolchain at
+  // 300ms of work apiece, seven actions took 2,180ms against 308ms for
+  // the same work behind one. Each also opened with its own
+  // auth.getUser(), which is a network call, so the real bill was
+  // sixteen sequential hops for figures Postgres produces in 7-23ms.
+  // That is how this page reached a 504 with no slow query in it.
+  //
+  // AND IT IS SERVED FROM CACHE WHERE IT CAN BE. `bundles` lives at
+  // module scope, so coming back from dispatch finds the last answers
+  // already here: they are painted before anything is requested, and
+  // under FRESH_MS nothing is requested at all. Past that the stale copy
+  // still goes up immediately and is replaced when the refresh lands —
+  // the wait disappears rather than moving.
   useEffect(() => {
     let cancelled = false;
-    setDataError(null);
-    // Six now: the sixth is the same scorecard query over the previous
-    // window. In the same Promise.all deliberately — a delta that
-    // arrived after the number it sits under would make every range
-    // change flicker through a state where the figure is right and the
-    // comparison beneath it still describes the last window.
+
+    // Applied together, always. Panels that landed independently would
+    // let the page sit in a state where the scorecards describe one
+    // truck and the charts beneath still describe the fleet, or where a
+    // delta describes a window its own figure no longer covers.
+    const apply = (b: DashboardBundle) => {
+      // The comparison's own failure is NOT folded into dataError: the
+      // page is still correct without a delta, and failing the whole
+      // dashboard because the previous month would not load would trade
+      // a working page for a missing footnote.
+      setPrevFuel(b.previousFuel ?? null);
+      setStations(b.stations ?? null);
+      setDataError(b.error ?? null);
+      setFuel(b.fuel ?? null);
+      setSeries(b.series ?? null);
+      setVariance(b.drivers ?? null);
+      setTruckVariance(b.trucks ?? null);
+      setSpeeding(b.speeding ?? null);
+      // Only when they were asked for. `undefined` on a refresh means
+      // "not requested", never "the roster is empty", so the picker
+      // keeps the list it already holds.
+      if (b.options) setScopeOptions(b.options);
+      // Last, and only with an answer in hand: from here the heading
+      // describes these numbers rather than the control above them.
+      setLoadedRange(range);
+    };
+
+    const key = bundleKey(range, scope);
+    const hit = bundles.get(key, Date.now());
+    if (hit) {
+      apply(hit.value);
+      // Fresh enough to stand on its own — no request at all. This is
+      // the case the owner asked for: the sheet syncs every fifteen
+      // minutes, so re-asking the moment someone navigates back buys
+      // nothing and costs the whole wait.
+      if (isFresh(hit.ageMs)) return;
+    } else {
+      // Nothing to show yet, so clear a stale error rather than leaving
+      // the last failure sitting over a load that has not failed.
+      setDataError(null);
+    }
+
+    // Computed here, not server-side, and used twice: the label under
+    // the figures reads from the same expression, so the two cannot
+    // disagree about what "the month before" meant.
     const comparison = previousRange(range, { calendar: presetKeyFor(range) === "month" });
-    //
-    // SCOPE RIDES ALONG WITH THE RANGE, in the same Promise.all and for
-    // the same reason: five panels that re-scoped independently would let
-    // the page sit in a state where the scorecards describe one truck and
-    // the charts beneath still describe the fleet.
-    //
-    // The two variance tables are NOT re-fetched per scope. They already
-    // return one row per driver and per truck over the whole range — 92
-    // and 74 rows — so the page filters the list it is holding rather
-    // than spending two round trips to be told the same thing.
-    void Promise.all([
-      getFuelPeriodStats(range, scope),
-      getDashboardSeries(range, scope),
-      getDriverVariance(500, range),
-      getTruckVariance(500, range),
-      getDriverSpeeding(100, range, scope),
-      comparison ? getFuelPeriodStats(comparison, scope) : Promise.resolve({ stats: undefined, error: undefined }),
-      getFuelStationLeaders(range, STATION_SLICES, scope),
-    ])
-      .then(([f, s, dv, tv, sp, pf, st]) => {
+
+    void getDashboardBundle(
+      range,
+      comparison,
+      scope,
+      { variance: 500, speeding: 100, stations: STATION_SLICES },
+      !rosterLoaded.current
+    )
+      .then((b) => {
         if (cancelled) return;
-        // The comparison's own error is NOT folded into dataError below:
-        // the page is still correct without a delta, and failing the
-        // whole dashboard because the previous week would not load would
-        // trade a working page for a missing footnote.
-        setPrevFuel(pf.stats ?? null);
-        setStations(st.data ?? null);
-        // First error wins. They share a range and a round trip, so if
-        // one signature is wrong they all are — reporting five copies of
-        // the same sentence would only bury it.
-        setDataError(f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? null);
-        setFuel(f.stats ?? null);
-        setSeries(s.series ?? null);
-        setVariance(dv.drivers ?? null);
-        setTruckVariance(tv.trucks ?? null);
-        setSpeeding(sp.drivers ?? null);
-        // Last, and only on success: from here the heading describes
-        // these numbers rather than the control above them.
-        setLoadedRange(range);
+        if (b.options) rosterLoaded.current = true;
+        // A FAILED BUNDLE IS NOT CACHED. Storing it would serve the
+        // gateway's bad minute back instantly for the next FRESH_MS,
+        // which is the one thing worse than waiting for it.
+        if (!b.error) bundles.set(key, b, Date.now());
+        apply(b);
       })
       .catch((e: unknown) => {
         // Deliberately does NOT clear the figures. They are still true

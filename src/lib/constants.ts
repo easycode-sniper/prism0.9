@@ -203,3 +203,27 @@ export const TRACK_STOP_SECONDS = 5 * 60;
  *  what prune_fleet_snapshots keeps, which is 7 days. */
 export const TRACK_WINDOW_HOURS = [2, 12, 24] as const;
 export const TRACK_DEFAULT_HOURS = 12;
+
+/**
+ * When the live fleet feed stops being trustworthy.
+ *
+ * The tick runs every minute (pg_cron "fleet-tick") and the browser
+ * re-reads every 60 seconds, so a perfectly healthy reading can already
+ * be nearly two minutes old by the time it is drawn — one tick interval
+ * plus one poll interval. Anything under that is normal jitter and must
+ * not raise an alarm, or the alarm stops meaning anything.
+ *
+ * THREE MINUTES is therefore the first honest threshold: three missed
+ * ticks, past any ordinary scheduling slop.
+ *
+ * FIFTEEN MINUTES is not a blip. By then the tick has failed fifteen
+ * times in a row and something is broken — which is exactly what
+ * happened on 2026-09-13, when an expired Wialon token stopped the feed
+ * for seventeen hours while the screen stayed green.
+ *
+ * The two bands map onto the palette without inventing a meaning:
+ * globals.css already defines amber as "idle, stale" and the strip
+ * already spends red on a tracking error.
+ */
+export const FEED_STALE_SECONDS = 3 * 60;
+export const FEED_DOWN_SECONDS = 15 * 60;

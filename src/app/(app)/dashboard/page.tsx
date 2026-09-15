@@ -26,7 +26,6 @@ import {
   getDashboardBundle,
   readFuelBudget,
   saveFuelBudget,
-  canEditFuelBudget,
   type DashboardBundle,
   type FuelBudget,
   type FuelPeriodStats,
@@ -377,6 +376,12 @@ export default function DashboardPage() {
   const [variance, setVariance] = useState<DriverVariance[] | null>(null);
   const [truckVariance, setTruckVariance] = useState<TruckVariance[] | null>(null);
   const [speeding, setSpeeding] = useState<DriverSpeeding[] | null>(null);
+  // Feeding the fuel-budget gauge, exactly as the rest of the page: the
+  // bundle carries the current month's budget and the caller's right to
+  // edit it, so the gauge appears with the other panels instead of
+  // running a second queued action (and second getUser) on its own mount.
+  const [budget, setBudget] = useState<FuelBudget | null>(null);
+  const [canEditBudget, setCanEditBudget] = useState(false);
   // Whether the last load actually succeeded. Without this a failed RPC
   // is INDISTINGUISHABLE from a slow one: every panel keeps its skeleton
   // and its "reading the sheet…" caption forever, which is exactly what
@@ -471,6 +476,8 @@ export default function DashboardPage() {
       setVariance(b.drivers ?? null);
       setTruckVariance(b.trucks ?? null);
       setSpeeding(b.speeding ?? null);
+      setBudget(b.budget ?? null);
+      setCanEditBudget(b.canEdit === true);
       // Only when they were asked for. `undefined` on a refresh means
       // "not requested", never "the roster is empty", so the picker
       // keeps the list it already holds.
@@ -1428,7 +1435,7 @@ export default function DashboardPage() {
         </div>
 
         <aside className="dash-rail">
-          <FuelBudgetGauge />
+          <FuelBudgetGauge budget={budget} canEdit={canEditBudget} onBudgetChange={setBudget} />
 
           <section className="panel dash-panel">
             <header className="dash-panel__head">
@@ -2156,31 +2163,20 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
   );
 }
 
-function FuelBudgetGauge() {
+function FuelBudgetGauge({
+  budget,
+  canEdit,
+  onBudgetChange,
+}: {
+  budget: FuelBudget | null;
+  canEdit: boolean;
+  onBudgetChange: (b: FuelBudget | null) => void;
+}) {
   const { t } = useTranslation();
-  const [budget, setBudget] = useState<FuelBudget | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [canEdit, setCanEdit] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    readFuelBudget().then((b) => {
-      if (cancelled) return;
-      setBudget(b);
-      setLoading(false);
-    });
-    canEditFuelBudget().then((ok) => {
-      if (cancelled) return;
-      setCanEdit(ok);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const startEdit = () => {
     setDraft(budget?.budget != null ? String(budget.budget) : "");
@@ -2201,7 +2197,14 @@ function FuelBudgetGauge() {
     if (res.error) {
       setError(res.error);
     } else {
-      setBudget(await readFuelBudget());
+      onBudgetChange(await readFuelBudget());
+      // A month's budget, changed once a month at most, is worth
+      // dropping every cached bundle for: each cached entry in the
+      // current view holds the OLD figure, and one of them would be
+      // served back for up to FRESH_MS after the operator navigates
+      // away and returns — the gauge visibly snapping back to a dead
+      // number. Rare enough that the reset is the honest answer.
+      bundles.clear();
       setEditing(false);
     }
     setSaving(false);
@@ -2216,7 +2219,7 @@ function FuelBudgetGauge() {
             {t("The whole fleet's budget this month, against what the sheet has already paid.")}
           </div>
         </div>
-        {!loading && canEdit && !editing && (
+        {canEdit && !editing && (
           <button className="btn-sm" onClick={startEdit}>
             <Pencil size={11} />
             {budget?.budget != null ? t("Edit") : t("Set budget")}
@@ -2224,7 +2227,7 @@ function FuelBudgetGauge() {
         )}
       </header>
       <div className="dash-panel__body">
-        {loading ? (
+        {!budget ? (
           <div className="skeleton" style={{ height: 190, borderRadius: "var(--r-md)" }} />
         ) : editing ? (
           <form
@@ -2260,12 +2263,8 @@ function FuelBudgetGauge() {
             </div>
             {error && <p className="budget-edit-error">{error}</p>}
           </form>
-        ) : budget ? (
-          <FuelBudgetArc b={budget} />
         ) : (
-          <p className="dash-empty">
-            <span>{t("Could not read the fuel budget.")}</span>
-          </p>
+          <FuelBudgetArc b={budget} />
         )}
       </div>
     </section>

@@ -126,12 +126,17 @@ async function readFuelPeriodStats(
 
 // ── The fuel budget ──────────────────────────────────────────
 //
-// The budget gauge on the right rail is deliberately NOT part of the
-// dashboard bundle: it answers a different question than the rest of
-// the page. The bundle chases the range the operator selected; the
-// budget is "right now" — the CURRENT operations month, however far
-// the range is set — so the panel reads it on mount and after a save,
-// and never re-reads it when the range moves.
+// The budget gauge on the right rail rides INSIDE the dashboard bundle
+// like everything else, though it answers a different question than
+// the rest of the page: the bundle chases the range the operator
+// selected, while the budget is "right now" — the CURRENT operations
+// month, however far the range is set. It is a cheap read (one row plus
+// the MTD fuel stats every panel shares), and keeping it in the one
+// action is what makes it refresh in the same round trip — and the same
+// cache — as every other panel, instead of a second queued action with
+// its own getUser() on every mount. After a save the page re-reads it
+// alone and drops the cache, so the new figure spreads everywhere at
+// once.
 
 export interface FuelBudget {
   /** The budgeted month, YYYY-MM-01, in the operations day. */
@@ -173,9 +178,27 @@ async function readBudgetForMonth(
   };
 }
 
-/** The budget for the current operations month, read on demand by the
- *  gauge panel — the one dashboard figure that has nothing to do with
- *  the range selector. */
+/** Whether the signed-in user may edit the budget, read inside the
+ *  bundle with the client and auth call it already made — no second
+ *  getUser(). Split from the read policy so the gauge stays visible to
+ *  operators while the edit control stays admin-only; same split the
+ *  station blacklist uses. */
+async function readBudgetEditable(
+  supabase: Db,
+  userId: string
+): Promise<{ canEdit: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) return { canEdit: false, error: error.message };
+  return { canEdit: data?.role === "admin" };
+}
+
+/** The budget for the current operations month, re-read on its own only
+ *  AFTER a save (the bundle carries it the rest of the time) — the one
+ *  dashboard figure that has nothing to do with the range selector. */
 export async function readFuelBudget(): Promise<FuelBudget | null> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -183,13 +206,6 @@ export async function readFuelBudget(): Promise<FuelBudget | null> {
   const month = monthStart(opsToday());
   const { budget } = await readBudgetForMonth(supabase, month);
   return budget ?? null;
-}
-
-/** Lists whether the signed-in user may edit the budget, so the panel
- *  can show the edit control while the read policy itself stays open to
- *  everyone. Same split the station blacklist uses. */
-export async function canEditFuelBudget(): Promise<boolean> {
-  return isAdmin();
 }
 
 /** Sets or replaces the budget for a month. Only admins: the RLS policy
@@ -705,6 +721,12 @@ export interface DashboardBundle {
   /** Only when asked for. Undefined on a refresh is not "the roster is
    *  empty" — the page keeps the list it already holds. */
   options?: ScopeOption[];
+  /** The CURRENT operations month's budget — the one figure on the page
+   *  that does not move when the range selector does (it is "right
+   *  now"). The gauge panel's whole data source, range-independent. */
+  budget?: FuelBudget;
+  /** Whether the caller may edit the budget. */
+  canEdit?: boolean;
   /** The first hard failure among the panels. They share a range and a
    *  round trip, so if one signature is wrong they all are; reporting
    *  seven copies of one sentence would only bury it. */
@@ -738,7 +760,7 @@ export async function getDashboardBundle(
   const speedingLimit = limits.speeding ?? 100;
   const stationSlices = limits.stations ?? 6;
 
-  const [f, s, dv, tv, sp, pf, st, mm, opt] = await Promise.all([
+  const [f, s, dv, tv, sp, pf, st, mm, opt, bg, be] = await Promise.all([
     readFuelPeriodStats(supabase, range, scope),
     readDashboardSeries(supabase, range, scope),
     readDriverVariance(supabase, variance, range),
@@ -752,6 +774,8 @@ export async function getDashboardBundle(
     includeOptions
       ? readScopeOptions(supabase)
       : Promise.resolve({ options: undefined, error: undefined }),
+    readBudgetForMonth(supabase, monthStart(opsToday())),
+    readBudgetEditable(supabase, userData.user.id),
   ]);
 
   return {
@@ -767,7 +791,9 @@ export async function getDashboardBundle(
     speeding: sp.drivers,
     stations: st.data,
     models: mm.models,
+    budget: bg.budget,
+    canEdit: be.canEdit,
     options: opt.options,
-    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? mm.error ?? undefined,
+    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? mm.error ?? bg.error ?? be.error ?? undefined,
   };
 }

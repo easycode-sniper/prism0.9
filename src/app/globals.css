@@ -1724,43 +1724,6 @@ hr {
   font-family: var(--font-mono);
 }
 
-/* ── Active runs, as rows ─────────────────────────────────────
-   Truck and state on the first line, destination on its own, ETA
-   under it. A run has four facts and the rail is 350px wide; laid out
-   as table columns the truck id broke mid-token and the status column
-   fell off the panel. Stacked, the destination — the longest and the
-   most variable of the four — gets the whole width. */
-.run-list { display: flex; flex-direction: column; }
-
-.run-row {
-  padding: 9px 15px 10px;
-  border-bottom: 1px solid var(--line);
-  min-width: 0;
-}
-
-.run-row:last-child { border-bottom: 0; }
-
-.run-row__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.run-row__dest {
-  margin-top: 4px;
-  font-size: 0.78rem;
-  color: var(--text);
-  line-height: 1.3;
-}
-
-.run-row__eta {
-  margin-top: 2px;
-  font-size: 0.68rem;
-  font-family: var(--font-mono);
-  color: var(--text-dim);
-}
-
 /* ── Duty list ────────────────────────────────────────────────
    A driver per row: status dot, name, what they are on. */
 .duty-row {
@@ -1792,33 +1755,6 @@ hr {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* ── Signals feed ─────────────────────────────────────────────
-   Icon, line, elapsed time. Same anatomy as the notifications page, at
-   the density a dashboard column allows. */
-.signal-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 8px 15px;
-  min-width: 0;
-}
-
-.signal-row + .signal-row { border-top: 1px solid var(--line); }
-
-.signal-icon { flex: none; margin-top: 1px; }
-
-.signal-title {
-  font-size: 0.73rem;
-  color: var(--text);
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.signal-time { margin-top: 2px; font-size: 0.65rem; color: var(--text-faint); }
 
 /* A dashboard panel with nothing in it still has to hold its height, or
    the row it sits in collapses around it and the page reflows the moment

@@ -20,7 +20,7 @@ import type { ChartData } from "chart.js";
 // <Chart>, not <Bar>, for the mixed cost chart: <Bar> is typed to "bar"
 // datasets only, and that one carries a line dataset on a second axis.
 import { Bar, Chart, Doughnut, Line } from "react-chartjs-2";
-import { ArrowRight, Fuel, Gauge, MapPinOff, Route, ShieldAlert } from "lucide-react";
+import { ArrowRight, Fuel, Gauge, MapPinOff } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import {
   getDashboardBundle,
@@ -68,8 +68,6 @@ import {
   scopeToQuery,
 } from "@/lib/dashboard/scope";
 import type { PeriodDelta } from "@/lib/dashboard/delta";
-import { metaFor } from "@/lib/notifications/kinds";
-import { formatDuration } from "@/lib/geometry";
 import { opsToday } from "@/lib/format";
 import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
 import { SPEED_LIMIT_KMH } from "@/lib/constants";
@@ -108,18 +106,6 @@ const nf = (n: number) => Math.round(n).toLocaleString("en-GB");
 function axisLabel(day: string): string {
   const d = new Date(`${day}T12:00:00Z`);
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-}
-
-function relativeTime(
-  iso: string,
-  t: (key: string, vars?: Record<string, string | number>) => string,
-): string {
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 1) return t("just now");
-  if (mins < 60) return t("{n} min ago", { n: mins });
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return t("{n} hr ago", { n: hrs });
-  return t("{n} d ago", { n: Math.round(hrs / 24) });
 }
 
 /** Every driver and every truck the sheet names is rendered. The panel
@@ -361,7 +347,7 @@ function bundleKey(range: OpsRange, scope: Scope): string {
 
 export default function DashboardPage() {
   const { t } = useTranslation();
-  const { fleetData, notifications, dispatches } = useFleet();
+  const { fleetData, dispatches } = useFleet();
 
   const [fuel, setFuel] = useState<FuelPeriodStats | null>(null);
   // The same five figures for the window before this one, for the deltas
@@ -721,7 +707,6 @@ export default function DashboardPage() {
   // same list four times — kept per series anyway, so that a series which
   // one day stops being dense cannot silently mislabel its own points.
   const kmDays = (series?.km ?? []).map((p) => p.day);
-  const alertDays = (series?.alerts ?? []).map((p) => p.day);
   const litreDays = (series?.litres ?? []).map((p) => p.day);
   const consumptionDays = (series?.consumption ?? []).map((p) => p.day);
   const costDays = (series?.amountDa ?? []).map((p) => p.day);
@@ -741,16 +726,11 @@ export default function DashboardPage() {
 
   // What the fleet DELIVERED, against the cost every other panel here
   // measures. Bars rather than a line: this is a count of discrete
-  // events, the same shape as the alerts panel, and a line between two
-  // days would draw a slope through hours in which nothing happened.
+  // events, and a line between two days would draw a slope through hours
+  // in which nothing happened.
   const deliveriesChart = {
     labels: (series?.deliveries ?? []).map((p) => axisLabel(p.day)),
     datasets: [{ data: (series?.deliveries ?? []).map((p) => p.value), ...BAR_SERIES }],
-  };
-
-  const alertsChart = {
-    labels: (series?.alerts ?? []).map((p) => axisLabel(p.day)),
-    datasets: [{ data: (series?.alerts ?? []).map((p) => p.value), ...BAR_SERIES }],
   };
 
   // Litres bought against what they bought — the same bars-plus-rate
@@ -881,8 +861,6 @@ export default function DashboardPage() {
 
   const statusColour = (status: string) =>
     status === "moving" ? "var(--green)" : status === "idle" ? "var(--amber)" : "var(--text-faint)";
-
-  const signals = notifications.slice(0, 6);
 
   // The sheet's own date cells for the first and last fill IN THE
   // RANGE, as written. Secondary now that the heading names the selected
@@ -1272,28 +1250,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </section>
-
-          <section className="panel dash-panel">
-            <header className="dash-panel__head">
-              <div>
-                <div className="dash-panel__title">{t("Alerts raised per day")}</div>
-                <div className="dash-panel__sub">{t("Off route, speeding and arrivals together.")}</div>
-              </div>
-            </header>
-            <div className="dash-panel__body">
-              <div className="dash-chart">
-                {series ? (
-                  <Bar
-                    data={alertsChart}
-                    options={timeSeriesOptions({ days: alertDays })}
-                    plugins={[crosshairPlugin]}
-                  />
-                ) : (
-                  <ChartWaiting />
-                )}
-              </div>
-            </div>
-          </section>
         </div>
 
           <section className="panel dash-panel">
@@ -1548,90 +1504,6 @@ export default function DashboardPage() {
             <div className="dash-panel__foot">
               <Link href="/drivers" className="dash-more">
                 All drivers <ArrowRight size={12} />
-              </Link>
-            </div>
-          </section>
-
-          <section className="panel dash-panel">
-            <header className="dash-panel__head">
-              <div>
-                <div className="dash-panel__title">{t("Active runs")}<LiveTag /></div>
-                <div className="dash-panel__sub">{t("Trucks on their way to a client right now.")}</div>
-              </div>
-            </header>
-            <div className="dash-panel__body dash-panel__body--flush">
-              {dispatches.length === 0 ? (
-                <p className="dash-empty">
-                  <span>
-                    <Route size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-                    Nothing is running. A run appears here the moment it is dispatched.
-                  </span>
-                </p>
-              ) : (
-                // Rows, not a table. The same four facts in a 350px rail
-                // put the truck id in a column narrow enough to break it
-                // mid-token — "00038-" over "523-35" — and pushed Status
-                // off the panel entirely. Stacked, the destination gets
-                // the full width it actually needs and nothing is cut.
-                <div className="run-list">
-                  {dispatches.slice(0, 5).map((d) => (
-                    <div key={d.id} className="run-row">
-                      <div className="run-row__head">
-                        <span className="truck-id">{d.truck_id}</span>
-                        <span className={`status-pill ${d.last_on_route === false ? "off-route" : "dispatched"}`}>
-                          {d.last_on_route === false ? t("Off route") : t("On route")}
-                        </span>
-                      </div>
-                      <div className="run-row__dest">{d.site?.name ?? "—"}</div>
-                      <div className="run-row__eta">
-                        {d.last_eta_seconds != null ? t("ETA {eta}", { eta: formatDuration(d.last_eta_seconds) }) : t("no ETA yet")}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="dash-panel__foot">
-              <Link href="/dispatch" className="dash-more">
-                Open dispatch <ArrowRight size={12} />
-              </Link>
-            </div>
-          </section>
-
-          <section className="panel dash-panel">
-            <header className="dash-panel__head">
-              <div>
-                <div className="dash-panel__title">{t("Operational signals")}<LiveTag /></div>
-                <div className="dash-panel__sub">{t("The latest from the alert feed.")}</div>
-              </div>
-            </header>
-            <div className="dash-panel__body dash-panel__body--flush">
-              {signals.length === 0 ? (
-                <p className="dash-empty">
-                  <span>
-                    <ShieldAlert size={15} style={{ display: "block", margin: "0 auto 7px" }} />
-                    Nothing has been raised yet today.
-                  </span>
-                </p>
-              ) : (
-                signals.map((n) => {
-                  const meta = metaFor(n.kind);
-                  const Icon = meta.icon;
-                  return (
-                    <div key={n.id} className="signal-row">
-                      <Icon size={13} strokeWidth={2} color={meta.color} className="signal-icon" />
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div className="signal-title">{n.title}</div>
-                        <div className="signal-time">{relativeTime(n.created_at, t)}</div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <div className="dash-panel__foot">
-              <Link href="/notifications" className="dash-more">
-                View all <ArrowRight size={12} />
               </Link>
             </div>
           </section>

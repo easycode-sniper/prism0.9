@@ -20,11 +20,15 @@ import type { ChartData } from "chart.js";
 // <Chart>, not <Bar>, for the mixed cost chart: <Bar> is typed to "bar"
 // datasets only, and that one carries a line dataset on a second axis.
 import { Bar, Chart, Doughnut, Line } from "react-chartjs-2";
-import { ArrowRight, Fuel, Gauge, MapPinOff } from "lucide-react";
+import { ArrowRight, Fuel, Gauge, MapPinOff, Pencil } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import {
   getDashboardBundle,
+  readFuelBudget,
+  saveFuelBudget,
+  canEditFuelBudget,
   type DashboardBundle,
+  type FuelBudget,
   type FuelPeriodStats,
   type FuelModelStat,
   type StationLeaders,
@@ -52,7 +56,7 @@ import {
 } from "@/lib/chartTheme";
 import RangeBar, { buildPresets, describeRange, presetKeyFor } from "@/components/dashboard/RangeBar";
 import type { OpsRange } from "@/lib/dashboard/range";
-import { previousRange, daysInRange, sameRange } from "@/lib/dashboard/range";
+import { previousRange, daysInRange, sameRange, monthStart } from "@/lib/dashboard/range";
 import { periodDelta } from "@/lib/dashboard/delta";
 import { makeCache, isFresh } from "@/lib/dashboard/cache";
 import Combobox, { type ComboOption } from "@/components/forms/Combobox";
@@ -102,6 +106,12 @@ installChartDefaults();
 // historical panel, not just the charts.
 
 const nf = (n: number) => Math.round(n).toLocaleString("en-GB");
+
+/** Budget figures carry cents — 11,234,123.31, not 11,234,123 — so they
+ *  round to the dinar, not to the whole. The two formatters sit apart
+ *  on purpose: almost nothing else on this page keeps two decimals. */
+const money = (n: number) =>
+  n.toLocaleString("en-GB", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
 
 /** "2026-08-25" -> "25 Aug", for an axis that has to fit thirty of them. */
 function axisLabel(day: string): string {
@@ -1418,6 +1428,8 @@ export default function DashboardPage() {
         </div>
 
         <aside className="dash-rail">
+          <FuelBudgetGauge />
+
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
@@ -1894,5 +1906,237 @@ function FuelModelTreemap({ models }: { models: FuelModelStat[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ── The fuel-budget gauge ─────────────────────────────────────
+//
+// The first panel of the right rail, and the one figure on the page
+// that deliberately ignores the range selector: the budget answers
+// "how is this MONTH going", and this month is the same whatever the
+// charts describe. The gauge is an SVG arc of tick segments rather
+// than a Chart.js doughnut because it is a progression, not a share —
+// the arc FILLS as the month spends, and Chart.js cannot open a 90°
+// gap at the bottom of a ring. It also sidesteps the canvas, which
+// cannot style its pixels from the token palette.
+//
+// Colour: amber is the money already spent (it is gone from the
+// month), cyan is what is still there — both already spoken for in
+// the taxonomy, unlike a sixth hue. Going over turns the whole arc
+// red, which is the money rule's overspend half. The centre shows the
+// TARGET, never the spend: reading a gauge at a budget it is racing
+// is the point of the panel.
+//
+// Only admins may edit. The edit control is a hairline pill in the
+// panel head, exactly like the station blacklist and the driver
+// directory; the form it opens is the dashboard's only inline input.
+
+/** How many segments the 270° arc is built from. Forty reads as smooth
+ *  at the rail's width and still lets a change of a few percent move
+ *  whole ticks, which a two-hundred-piece arc would swallow. */
+const BUDGET_TICKS = 40;
+/** The arc leaves its bottom 90° open — the speedometer gap the centre
+ *  content hangs into. Start 135° so the spend grows clockwise from
+ *  the lower-left as the month burns through it. */
+const BUDGET_ARC_START_DEG = 135;
+const BUDGET_CX = 110;
+const BUDGET_CY = 100;
+const BUDGET_R_INNER = 62;
+const BUDGET_R_OUTER = 84;
+
+function FuelBudgetArc({ b }: { b: FuelBudget }) {
+  const { t } = useTranslation();
+  const hasBudget = b.budget != null && b.budget > 0;
+  const share = hasBudget ? Math.min(b.filled / (b.budget ?? 0), 1) : 0;
+  const over = hasBudget && b.filled > (b.budget ?? 0);
+  const left = hasBudget ? (b.budget ?? 0) - b.filled : null;
+
+  const ticks = useMemo(() => {
+    const pt = (i: number, r: number) => {
+      const a = ((BUDGET_ARC_START_DEG + (270 * i) / (BUDGET_TICKS - 1)) * Math.PI) / 180;
+      return { x: BUDGET_CX + r * Math.cos(a), y: BUDGET_CY + r * Math.sin(a) };
+    };
+    return Array.from({ length: BUDGET_TICKS }, (_, i) => {
+      const inner = pt(i, BUDGET_R_INNER);
+      const outer = pt(i, BUDGET_R_OUTER);
+      let tick: string;
+      if (!hasBudget) tick = "budget__tick--muted";
+      else if (over) tick = "budget__tick--over";
+      else if (i / (BUDGET_TICKS - 1) < share) tick = "budget__tick--used";
+      else tick = "budget__tick--left";
+      return { x1: inner.x, y1: inner.y, x2: outer.x, y2: outer.y, tick };
+    });
+  }, [hasBudget, over, share]);
+
+  const overAmount = over ? (b.budget ?? 0) - b.filled : null;
+
+  return (
+    <div className="budget">
+      <div
+        className="budget__gauge"
+        role="img"
+        aria-label={
+          hasBudget
+            ? `${t("Amount filled")}: ${money(b.filled)} DA. ${t("Budget")}: ${money(b.budget!)} DA.`
+            : t("No budget set for this month.")
+        }
+      >
+        <svg viewBox="0 0 220 210" className="budget__svg" aria-hidden="true">
+          {ticks.map((tk, i) => (
+            <line
+              key={i}
+              className={tk.tick}
+              x1={tk.x1}
+              y1={tk.y1}
+              x2={tk.x2}
+              y2={tk.y2}
+            />
+          ))}
+        </svg>
+        <div className="budget__center">
+          <span className="budget__badge">
+            <Gauge size={18} />
+          </span>
+          <span className="budget__label">{t("Budget")}</span>
+          <span className="budget__value">
+            {hasBudget ? money(b.budget!) : "—"}
+            {hasBudget && <span className="budget__unit"> DA</span>}
+          </span>
+        </div>
+      </div>
+      <div className="budget__legend">
+        <span>
+          <span className="budget__dot" style={{ background: over ? "var(--red)" : "var(--amber)" }} />
+          <span>{t("Amount filled")}</span>
+          <span className="budget__legend-v">{`${money(b.filled)} DA`}</span>
+        </span>
+        <span>
+          <span
+            className="budget__dot"
+            style={{ background: left == null ? "var(--line)" : left < 0 ? "var(--red)" : "var(--cyan)" }}
+          />
+          <span>{over ? t("Over budget") : t("Budget left")}</span>
+          <span className={over ? "budget__legend-v budget__legend--over" : "budget__legend-v"}>
+            {hasBudget ? `${money(Math.abs(overAmount ?? left!))} DA` : "—"}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function FuelBudgetGauge() {
+  const { t } = useTranslation();
+  const [budget, setBudget] = useState<FuelBudget | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [canEdit, setCanEdit] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    readFuelBudget().then((b) => {
+      if (cancelled) return;
+      setBudget(b);
+      setLoading(false);
+    });
+    canEditFuelBudget().then((ok) => {
+      if (cancelled) return;
+      setCanEdit(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const startEdit = () => {
+    setDraft(budget?.budget != null ? String(budget.budget) : "");
+    setError(null);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    const amount = Math.round(parseFloat(draft) * 100) / 100;
+    if (!Number.isFinite(amount) || amount < 0) {
+      setError(t("A budget must be a positive amount."));
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const month = budget?.month ?? monthStart(opsToday());
+    const res = await saveFuelBudget(month, amount);
+    if (res.error) {
+      setError(res.error);
+    } else {
+      setBudget(await readFuelBudget());
+      setEditing(false);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <section className="panel dash-panel">
+      <header className="dash-panel__head">
+        <div>
+          <div className="dash-panel__title">{t("Fuel budget")}</div>
+          <div className="dash-panel__sub">
+            {t("The whole fleet's budget this month, against what the sheet has already paid.")}
+          </div>
+        </div>
+        {!loading && canEdit && !editing && (
+          <button className="btn-sm" onClick={startEdit}>
+            <Pencil size={11} />
+            {budget?.budget != null ? t("Edit") : t("Set budget")}
+          </button>
+        )}
+      </header>
+      <div className="dash-panel__body">
+        {loading ? (
+          <div className="skeleton" style={{ height: 190, borderRadius: "var(--r-md)" }} />
+        ) : editing ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void save();
+            }}
+          >
+            <input
+              className="field"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={t("Budget for this month, DA")}
+              aria-label={t("Budget for this month, DA")}
+              autoFocus
+            />
+            <div className="budget-edit-row">
+              <button className="btn-sm" type="submit" disabled={saving}>
+                {t("Save")}
+              </button>
+              <button
+                className="btn-sm"
+                type="button"
+                disabled={saving}
+                onClick={() => setEditing(false)}
+              >
+                {t("Cancel")}
+              </button>
+            </div>
+            {error && <p className="budget-edit-error">{error}</p>}
+          </form>
+        ) : budget ? (
+          <FuelBudgetArc b={budget} />
+        ) : (
+          <p className="dash-empty">
+            <span>{t("Could not read the fuel budget.")}</span>
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

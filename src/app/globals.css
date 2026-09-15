@@ -1580,6 +1580,141 @@ hr {
   .dash-more:hover { color: var(--accent); }
 }
 
+/* ── The fuel-budget gauge ────────────────────────────────────
+   The first panel of the right rail: a 270° arc of tick segments
+   that FILLS as the month's fuel money is spent. The arc is thin
+   strokes, so it can carry the taxonomy without the treemap rule
+   (no saturated area fill): amber is the money already paid — gone
+   from the month — cyan is what remains, and going over turns the
+   whole arc red, the overspend half of the money rule. The centre
+   shows the TARGET; the spend belongs to the legend, or the gauge
+   would read as "this is what we have left" exactly when it is
+   racing the figure. Muted --line ticks read as "no budget set",
+   never as a sixth colour. */
+.budget__gauge {
+  position: relative;
+  width: 100%;
+  max-width: 244px;
+  margin: 0 auto;
+}
+
+.budget__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.budget__svg line {
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.budget__tick--muted { stroke: var(--line); opacity: 0.45; }
+.budget__tick--used  { stroke: var(--amber); }
+.budget__tick--left  { stroke: var(--cyan); }
+.budget__tick--over  { stroke: var(--red); }
+
+/* The icon badge and the target figure hang in the arc's open 90°.
+   The badge's amber is the label's, so the two read as one claim
+   about money — not as a state, and not as a second colour. */
+.budget__center {
+  position: absolute;
+  left: 50%;
+  top: 47.6%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.budget__badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  color: var(--amber);
+  margin-bottom: 7px;
+}
+
+.budget__label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.budget__value {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.budget__unit {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* Two dot-and-figure rows, one per "channel" of the month. The dots
+   repeat the arc's colours exactly, so the legend is read at a glance */
+.budget__legend {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.budget__legend > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.budget__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.budget__legend-v {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.budget__legend--over { color: var(--red); }
+
+/* The admin's inline form: the dashboard's only free-typing input,
+   on the same .field anatomy the dispatch form uses, with the two
+   actions as hairline pills and the error in the alarm colour. */
+.budget-edit-row {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.budget-edit-error {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--red);
+}
+
 /* ── KPI tile ─────────────────────────────────────────────────
    Label above, figure below, one line of context under it. The figure
    is cream, not a status colour: a kilometre is a quantity, not a state

@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 // "use server", which may only export async functions. Exporting the
 // constant from here compiled fine — nothing outside crossed a client
 // boundary with it — and then broke the render at runtime.
-import { type OpsRange, ALL_TIME } from "@/lib/dashboard/range";
+import { type OpsRange, ALL_TIME, monthStart } from "@/lib/dashboard/range";
+import { opsToday } from "@/lib/format";
+import { isAdmin } from "@/lib/supabase/auth";
 // Passed to the RPC explicitly rather than leaning on its SQL default,
 // exactly as reports.ts does: the panel prints "over 25 minutes" in its
 // own subtitle, and a threshold living only in the database could drift
@@ -120,6 +122,92 @@ async function readFuelPeriodStats(
       unpairedAmountDa: num(r.unpaired_amount_da),
     },
   };
+}
+
+// ── The fuel budget ──────────────────────────────────────────
+//
+// The budget gauge on the right rail is deliberately NOT part of the
+// dashboard bundle: it answers a different question than the rest of
+// the page. The bundle chases the range the operator selected; the
+// budget is "right now" — the CURRENT operations month, however far
+// the range is set — so the panel reads it on mount and after a save,
+// and never re-reads it when the range moves.
+
+export interface FuelBudget {
+  /** The budgeted month, YYYY-MM-01, in the operations day. */
+  month: string;
+  /** The money assigned to that month, or null when no budget has been
+   *  set — the gauge then draws its arc muted and shows an em dash
+   *  rather than inventing a figure. */
+  budget: number | null;
+  /** What the sheet has already paid since the month started, the same
+   *  fuel_period_stats read every other fuel panel uses. With no budget
+   *  this is still real and still shown. */
+  filled: number;
+}
+
+async function readBudgetForMonth(
+  supabase: Db,
+  month: string
+): Promise<{ budget?: FuelBudget; error?: string }> {
+  // monthStart stays a date string (no time region attached), and the
+  // operations "today" already IS ops-zone — pairing a YYYY-MM-DD target
+  // against a YYYY-MM-DD source can't drift the way two timestamps do.
+  const today = opsToday();
+  const from = monthStart(month);
+  const [fg, fill] = await Promise.all([
+    supabase
+      .from("monthly_budgets")
+      .select("month, amount")
+      .eq("month", from)
+      .maybeSingle(),
+    readFuelPeriodStats(supabase, { from, to: today }),
+  ]);
+  return {
+    budget: {
+      month,
+      budget: fg.data?.amount == null ? null : Number(fg.data.amount),
+      filled: fill.stats?.amountDa ?? 0,
+    },
+    error: fg.error ? fg.error.message : fill.error,
+  };
+}
+
+/** The budget for the current operations month, read on demand by the
+ *  gauge panel — the one dashboard figure that has nothing to do with
+ *  the range selector. */
+export async function readFuelBudget(): Promise<FuelBudget | null> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return null;
+  const month = monthStart(opsToday());
+  const { budget } = await readBudgetForMonth(supabase, month);
+  return budget ?? null;
+}
+
+/** Lists whether the signed-in user may edit the budget, so the panel
+ *  can show the edit control while the read policy itself stays open to
+ *  everyone. Same split the station blacklist uses. */
+export async function canEditFuelBudget(): Promise<boolean> {
+  return isAdmin();
+}
+
+/** Sets or replaces the budget for a month. Only admins: the RLS policy
+ *  and this guard are the same rule in two places, and the policy is
+ *  the one that cannot be argued with. */
+export async function saveFuelBudget(
+  month: string,
+  amount: number
+): Promise<{ error?: string }> {
+  if (!(await isAdmin())) return { error: "Only admins can edit the budget." };
+  if (!Number.isFinite(amount) || amount < 0)
+    return { error: "A budget must be a positive amount." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("monthly_budgets").upsert(
+    { month: monthStart(month), amount: Math.round(amount * 100) / 100 },
+    { onConflict: "month" }
+  );
+  return error ? { error: error.message } : {};
 }
 
 // ── Daily series ──────────────────────────────────────────────

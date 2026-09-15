@@ -1951,6 +1951,7 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
   const share = hasBudget ? Math.min(b.filled / (b.budget ?? 0), 1) : 0;
   const over = hasBudget && b.filled > (b.budget ?? 0);
   const left = hasBudget ? (b.budget ?? 0) - b.filled : null;
+  const overAmount = over ? (b.budget ?? 0) - b.filled : null;
 
   const ticks = useMemo(() => {
     const pt = (i: number, r: number) => {
@@ -1979,18 +1980,98 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
     });
   }, [hasBudget, over, share]);
 
-  const overAmount = over ? (b.budget ?? 0) - b.filled : null;
+  // The dial itself is hoverable: which side of the arc the pointer is
+  // over — the cream spent side or the faded remaining side — decides
+  // which figure the small panel carries, and the open gap answers with
+  // the budget. Mouse-driven only; a touchscreen has the legend's
+  // hover panels and the always-visible legend figures, so nothing is
+  // locked behind the pointer.
+  const gaugeRef = useRef<HTMLDivElement>(null);
+  const [gHover, setGHover] = useState<{
+    channel: "spent" | "left" | "over" | "budget";
+    left: number;
+    top: number;
+  } | null>(null);
+
+  const onGaugeMove = (e: { clientX: number; clientY: number }) => {
+    const el = gaugeRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // Pointer -> the same 220x210 viewBox space the ticks are built in.
+    const nx = ((e.clientX - rect.left) / rect.width) * 220;
+    const ny = ((e.clientY - rect.top) / rect.height) * 210;
+    const dx = nx - BUDGET_CX;
+    const dy = ny - BUDGET_CY;
+    if (Math.hypot(dx, dy) > 96 || !hasBudget) {
+      setGHover(null);
+      return;
+    }
+    // The cursor's angle around the centre, folded into the arc's
+    // own 135°→405° space so the same <share boundary the ticks use
+    // decides spent-from-remaining, and anything past 270° of it is
+    // the gap that was never part of the arc at all.
+    const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const along = (deg - BUDGET_ARC_START_DEG + 360) % 360;
+    const channel: "spent" | "left" | "over" | "budget" =
+      along > 270 ? "budget" : over ? "over" : along / 270 < share ? "spent" : "left";
+    setGHover({
+      channel,
+      left: Math.max(2, Math.min(e.clientX - rect.left + 14, rect.width - 192 - 2)),
+      top: Math.max(2, Math.min(e.clientY - rect.top + 14, rect.height - 96 - 2)),
+    });
+  };
+
+  const hoverContent = gHover
+    ? gHover.channel === "budget"
+      ? {
+          title: t("Budget"),
+          value: hasBudget ? `${money(b.budget!)} DA` : "—",
+          soft: false,
+          over: false,
+          dotBg: "var(--text)",
+          meta: null as string | null,
+        }
+      : gHover.channel === "spent"
+        ? {
+            title: t("Amount filled"),
+            value: `${money(b.filled)} DA`,
+            soft: false,
+            over: false,
+            dotBg: "var(--text)",
+            meta: hasBudget ? `${Math.round(share * 100)}%` : null,
+          }
+        : gHover.channel === "left"
+          ? {
+              title: t("Budget left"),
+              value: hasBudget ? `${money(left!)} DA` : "—",
+              soft: true,
+              over: false,
+              dotBg: "var(--text)",
+              meta: hasBudget && !over ? `${Math.round((1 - share) * 100)}%` : null,
+            }
+          : {
+              title: t("Over budget"),
+              value: hasBudget ? `${money(Math.abs(overAmount!))} DA` : "—",
+              soft: false,
+              over: true,
+              dotBg: "var(--red)",
+              meta: null,
+            }
+    : null;
 
   return (
     <div className="budget">
       <div
         className="budget__gauge"
+        ref={gaugeRef}
         role="img"
         aria-label={
           hasBudget
             ? `${t("Amount filled")}: ${money(b.filled)} DA. ${t("Budget")}: ${money(b.budget!)} DA.`
             : t("No budget set for this month.")
         }
+        onMouseMove={onGaugeMove}
+        onMouseLeave={() => setGHover(null)}
       >
         <svg viewBox="0 0 220 210" className="budget__svg" aria-hidden="true">
           {ticks.map((tk, i) => (
@@ -2015,6 +2096,21 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
             {hasBudget && <span className="budget__unit"> DA</span>}
           </span>
         </div>
+        {gHover && hoverContent && (
+          <div className="budget__hover-tip" style={{ left: gHover.left, top: gHover.top }} role="status">
+            <span className="budget__tip-title">{hoverContent.title}</span>
+            <span className="budget__tip-row">
+              <span
+                className={hoverContent.soft ? "budget__tip-dot budget__dot--soft" : "budget__tip-dot"}
+                style={{ background: hoverContent.dotBg }}
+              />
+              <span className={hoverContent.over ? "budget__tip-v budget__tip-v--red" : "budget__tip-v"}>
+                {hoverContent.value}
+              </span>
+              {hoverContent.meta && <span className="budget__tip-meta">{hoverContent.meta}</span>}
+            </span>
+          </div>
+        )}
       </div>
       <div className="budget__legend">
         <span>

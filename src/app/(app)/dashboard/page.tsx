@@ -26,6 +26,7 @@ import {
   getDashboardBundle,
   type DashboardBundle,
   type FuelPeriodStats,
+  type FuelModelStat,
   type StationLeaders,
   type DashboardSeries,
   type DriverVariance,
@@ -357,6 +358,7 @@ export default function DashboardPage() {
   // collapse.
   const [prevFuel, setPrevFuel] = useState<FuelPeriodStats | null>(null);
   const [stations, setStations] = useState<StationLeaders | null>(null);
+  const [models, setModels] = useState<FuelModelStat[] | null>(null);
   const [series, setSeries] = useState<DashboardSeries | null>(null);
   // Defaults to the last 30 ops days: the widest window the old control
   // offered, so a returning reader sees roughly what they saw before
@@ -452,6 +454,7 @@ export default function DashboardPage() {
       // a working page for a missing footnote.
       setPrevFuel(b.previousFuel ?? null);
       setStations(b.stations ?? null);
+      setModels(b.models ?? null);
       setDataError(b.error ?? null);
       setFuel(b.fuel ?? null);
       setSeries(b.series ?? null);
@@ -1250,6 +1253,41 @@ export default function DashboardPage() {
               </div>
             </div>
           </section>
+
+          {/* Third, the model mix — a treemap because it is three things
+              that are really one: how much of the fuel bill each model
+              is. A bar chart would rank them; the treemap SIZES them,
+              which is the question here (Shackman and MAN are close on
+              share but Renault is a sliver, and that sliver is the
+              point). Area is amount paid, the same habit every fuel
+              panel on this page keeps. The palette is the station
+              donut's categorical ramp — see FuelModelTreemap below. */}
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">{t("Fuel by model")}</div>
+                <div className="dash-panel__sub">
+                  {t("Cell area is what each model cost at the pump. The model is read from the plate.")}
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body">
+              <div className="dash-chart">
+                {!models ? (
+                  <ChartWaiting />
+                ) : models.length === 0 ? (
+                  <p className="dash-empty">
+                    <span>
+                      <Fuel size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                      {t("No fills logged in this period.")}
+                    </span>
+                  </p>
+                ) : (
+                  <FuelModelTreemap models={models} />
+                )}
+              </div>
+            </div>
+          </section>
         </div>
 
           <section className="panel dash-panel">
@@ -1598,5 +1636,249 @@ function ChartWaiting() {
   const { t } = useTranslation();
   return (
     <div className="skeleton" style={{ position: "absolute", inset: 0, borderRadius: "var(--r-md)" }} role="status" aria-label={t("Loading chart")} />
+  );
+}
+
+// ── The model mix treemap ────────────────────────────────────
+//
+// BRUSH-IMPLEMENTED ON PURPOSE. The codebase already draws its other
+// charts with Chart.js, and Chart.js has no treemap — the plugin
+// (chartjs-chart-treemap) is a third-party canvas renderer we would add
+// for ONE panel of THREE rectangles. A 9-line chart does not justify a
+// dependency. The tooltip is hand-built too, styled to the Chart.js
+// tooltip so the panel's hover reading matches its neighbours', and it
+// avoids Chart.js entirely.
+//
+// The categorical rule applies (owner, 2026-09-08): the cells reuse the
+// station donut's ramp — cyan, pink, amber — deliberately NO green and
+// NO red, because those two are truck states and a model cell in either
+// would read as one. Ranked by amount, so the biggest model gets the
+// saturated cyan before the ramp runs down.
+
+interface TreemapCell {
+  model: FuelModelStat;
+  /** Fractions of the panel, so the layout holds at any render width. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Bruls–Huizing–van Wijk squarification over the models, ranked by
+ * amount as the RPC returns them.
+ *
+ * LAYOUT IS AREA-HONEST, and that is why this is worth the lines: the
+ * whole point of a treemap is that a cell's area IS its share of the
+ * total, and the simplest fill (sort + slice) quietly reads until a
+ * small model — Renault is 1.2% of the fuel bill — becomes the corner
+ * everyone asks about. Squarify keeps that sliver on its face: a thin
+ * full-width strip is exactly how much fuel one model is.
+ *
+ * The layout decision reads the SHORTEST side of whatever rectangle is
+ * left, so it depends on the box's aspect, not its size. This page's
+ * box is always landscape (a trio panel is wider than its 150px chart),
+ * so the layout is computed over a nominal box and returned as
+ * fractions.
+ *
+ * For THIS data the ramp collapses each model into its own full-width
+ * band: squarify refuses to stand two rectangles side by side when the
+ * row would get squat in a landscape box. That is not the paper being
+ * picky, it is the honest read — Shackman 58.3%, MAN 40.5%, and Renault
+ * a 1.2% hairline across the floor that 22px of label cannot render,
+ * which is exactly how much of the fuel bill one model is.
+ */
+function squarifyCells(models: FuelModelStat[], width: number, height: number): TreemapCell[] {
+  const cells = models
+    .map((model) => ({ model, value: Math.max(0, model.amountDa) }))
+    .filter((c) => c.value > 0);
+  const total = cells.reduce((a, c) => a + c.value, 0);
+  if (total <= 0) return [];
+
+  // SCALED TO THE BOX AT ONCE, because the layout treats a row's sum as
+  // square pixels: laying rows out in raw dinars would size the first
+  // row as if the fleet's whole budget were the panel.
+  for (const c of cells) c.value = (c.value / total) * width * height;
+
+  let row: typeof cells = [];
+  let rowSum = 0;
+  const worst = (r: typeof cells, s: number, side: number) => {
+    const max = Math.max(...r.map((c) => c.value));
+    const min = Math.min(...r.map((c) => c.value));
+    // The paper's aspect figure: how far the row's fat and thin ends
+    // drift from square once it is laid along a side of length `side`.
+    return Math.max((side * side * max) / (s * s), (s * s) / (side * side * min));
+  };
+
+  const out: TreemapCell[] = [];
+  let x = 0;
+  let y = 0;
+  let w = width;
+  let h = height;
+
+  const lay = () => {
+    if (row.length === 0) return;
+    if (w >= h) {
+      // Landscape: the row spans the width and takes its share of the
+      // height; each rectangle's width is its share of the row.
+      const rh = (rowSum / (w * h)) * h;
+      let xc = x;
+      for (const c of row) {
+        const rw = (c.value / rowSum) * w;
+        out.push({ model: c.model, x: xc / width, y: y / height, w: rw / width, h: rh / height });
+        xc += rw;
+      }
+      y += rh;
+      h -= rh;
+    } else {
+      const rw = (rowSum / (w * h)) * w;
+      let yc = y;
+      for (const c of row) {
+        const rhh = (c.value / rowSum) * h;
+        out.push({ model: c.model, x: x / width, y: yc / height, w: rw / width, h: rhh / height });
+        yc += rhh;
+      }
+      x += rw;
+      w -= rw;
+    }
+    row = [];
+    rowSum = 0;
+  };
+
+  let i = 0;
+  while (i < cells.length) {
+    const side = Math.min(w, h);
+    const next = [...row, cells[i]];
+    const nextSum = rowSum + cells[i].value;
+    // A rectangle joins the row while doing so keeps its aspect reasonable;
+    // once adding the next would ruin it, the row is complete and laid.
+    if (row.length === 0 || worst(row, rowSum, side) >= worst(next, nextSum, side)) {
+      row = next;
+      rowSum = nextSum;
+      i += 1;
+    } else {
+      lay();
+    }
+  }
+  if (row.length > 0) lay();
+  return out;
+}
+
+/** The hover card, positioned from the pointer by the component below. */
+interface ModelTip {
+  model: FuelModelStat;
+  color: string;
+  left: number;
+  top: number;
+}
+
+function FuelModelTreemap({ models }: { models: FuelModelStat[] }) {
+  const { t } = useTranslation();
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [tip, setTip] = useState<ModelTip | null>(null);
+
+  const cells = useMemo(() => squarifyCells(models, 300, 150), [models]);
+  const total = models[0]?.totalAmount ?? 0;
+
+  const placeTip = (cell: TreemapCell, color: string, cx: number, cy: number) => {
+    const rect = boxRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Clamped to the chart, like Chart.js keeps its tooltip on-canvas:
+    // a card that escapes the panel reads as a stray element on the page.
+    // The half-widths are estimates of the card's own size; the card is
+    // small and the panel is wide enough that the clamp never visibly
+    // misses.
+    const W = 190;
+    const H = 118;
+    setTip({
+      model: cell.model,
+      color,
+      left: Math.max(2, Math.min(cx + 14, rect.width - W - 2)),
+      top: Math.max(2, Math.min(cy + 14, rect.height - H - 2)),
+    });
+  };
+
+  // Cell coordinates relative to the box. Reading the rect once per
+  // event rather than once per axis — it is the same call, and the
+  // browser is free to double it if asked twice.
+  const cellEvent = (cell: TreemapCell, color: string) => (e: { clientX: number; clientY: number }) => {
+    const rect = boxRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    placeTip(cell, color, e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  return (
+    <div className="treemap" ref={boxRef} onMouseLeave={() => setTip(null)}>
+      {cells.map((cell, i) => {
+        const color = STATION_RAMP[i] ?? CHART_COLORS.dim;
+        const share = total > 0 ? Math.round((cell.model.amountDa / total) * 100) : 0;
+        return (
+          <div
+            key={cell.model.model}
+            className="treemap__cell"
+            style={{
+              left: `${cell.x * 100}%`,
+              top: `${cell.y * 100}%`,
+              width: `${cell.w * 100}%`,
+              height: `${cell.h * 100}%`,
+              background: color,
+            }}
+            onMouseEnter={cellEvent(cell, color)}
+            onMouseMove={cellEvent(cell, color)}
+            tabIndex={0}
+            role="img"
+            aria-label={`${cell.model.model}: ${nf(cell.model.amountDa)} DA, ${share}%`}
+          >
+            {/* A cell too thin for its label says nothing instead of
+                mislabelling — the same skip the doughnut-slice plugin
+                applies under ~4% of the ring. The tooltip still has the
+                numbers. */}
+            {cell.h * 150 >= 22 && (
+              <span className="treemap__label">
+                <span className="treemap__label-name">{cell.model.model}</span>
+                <span className="treemap__label-meta">
+                  {nf(cell.model.amountDa)} DA · {share}%
+                </span>
+              </span>
+            )}
+          </div>
+        );
+      })}
+
+      {tip && (
+        <div className="chart-tooltip" style={{ left: tip.left, top: tip.top }} role="status">
+          <div className="chart-tooltip__title">{tip.model.model}</div>
+          <div className="chart-tooltip__row">
+            <span className="chart-tooltip__dot" style={{ background: tip.color }} />
+            <span>{t("Fills")}</span>
+            <span className="chart-tooltip__v">{nf(tip.model.fills)}</span>
+          </div>
+          <div className="chart-tooltip__row">
+            <span className="chart-tooltip__dot" style={{ background: tip.color, opacity: 0.55 }} />
+            <span>{t("Litres")}</span>
+            <span className="chart-tooltip__v">{nf(tip.model.litres)} L</span>
+          </div>
+          <div className="chart-tooltip__row">
+            <span className="chart-tooltip__dot" style={{ background: tip.color, opacity: 0.3 }} />
+            <span>{t("Amount")}</span>
+            <span className="chart-tooltip__v">{nf(tip.model.amountDa)} DA</span>
+          </div>
+          <div className="chart-tooltip__row">
+            <span />
+            <span>{t("L/100km")}</span>
+            <span className="chart-tooltip__v">
+              {tip.model.litresPer100Km == null ? "—" : `${tip.model.litresPer100Km.toFixed(1)}`}
+            </span>
+          </div>
+          <div className="chart-tooltip__row">
+            <span />
+            <span>{t("Share")}</span>
+            <span className="chart-tooltip__v">
+              {total > 0 ? `${Math.round((tip.model.amountDa / total) * 100)}%` : "—"}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

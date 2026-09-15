@@ -1402,6 +1402,104 @@ hr {
 .dash-chart--tall { height: 205px; }
 .dash-chart--donut { height: 190px; }
 
+/* ── The model-mix treemap ────────────────────────────────────
+   The third trio panel. Three absolutely-positioned cells whose area is
+   the model's share of fuel paid; abundant cells on cyan/pink/amber
+   carry the ink-dark label, and a cell too thin for one says nothing —
+   the tooltip still has the numbers (see FuelModelTreemap). */
+.treemap { position: absolute; inset: 0; }
+
+.treemap__cell {
+  position: absolute;
+  overflow: hidden;
+  filter: saturate(1);
+  transition: filter 0.15s ease;
+}
+.treemap__cell:hover,
+.treemap__cell:focus-visible {
+  /* The hover affordance a lurking sliver needs: the row is otherwise
+     a 2px hairline with nothing to say it is a cell. Slight lift rather
+     than a border, which would fight the colour it sits in. */
+  filter: saturate(1.35);
+  outline: none;
+}
+
+/* Dark ink on the saturated cells, exactly as the station rank badge
+   does it — cream on #ffb300 is barely there. */
+.treemap__label {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--bg);
+  pointer-events: none;
+}
+.treemap__label-name {
+  font-size: 0.83rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.treemap__label-meta {
+  font-family: var(--font-mono);
+  font-size: 0.63rem;
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0.85;
+}
+
+/* ── The treemap's hover card ─────────────────────────────────
+   Styled to the Chart.js tooltip (see doughnutOptions in chartTheme.ts)
+   so the panel's hover reading matches its neighbours': same surface,
+   hairline, radius and cream/dim pair. The one thing it cannot share is
+   the box: Chart.js positions and sizes its own, this one is fixed and
+   clamped by the component. */
+.chart-tooltip {
+  position: absolute;
+  z-index: 20;
+  width: max-content;
+  max-width: 188px;
+  box-sizing: border-box;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+.chart-tooltip__title {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chart-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.chart-tooltip__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.chart-tooltip__v {
+  margin-left: auto;
+  color: var(--text);
+}
+
 /* The busiest station, spelled out. The ring cannot label itself — see
    stationDoughnutOptions — so this is where the name actually appears,
    and it is the answer to the question the panel asks. */

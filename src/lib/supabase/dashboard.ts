@@ -473,6 +473,59 @@ async function readFuelStationLeaders(
   };
 }
 
+// ── The model mix ─────────────────────────────────────────────
+
+export interface FuelModelStat {
+  /** MAN, Renault or Shackman — the plate's classification (migration
+   *  063 / truck_model). */
+  model: string;
+  fills: number;
+  litres: number;
+  amountDa: number;
+  litresPer100Km: number | null;
+  /** The window totals, identical on every row (like StationLeaders):
+   *  the treemap sizes each cell from the model's share of them, and
+   *  deriving the total from a list the RPC already limits is the same
+   *  remainder bug the station donut's totals exist to avoid. */
+  totalFills: number;
+  totalAmount: number;
+  totalLitres: number;
+}
+
+async function readFuelModelStats(
+  supabase: Db,
+  range: OpsRange = ALL_TIME,
+  scope: Scope = FLEET
+): Promise<{ models?: FuelModelStat[]; error?: string }> {
+
+  const { driver, truck } = scopeArgs(scope);
+  const { data, error } = await supabase.rpc("fuel_model_stats", {
+    p_from: range.from,
+    p_to: range.to,
+    p_driver: driver,
+    p_truck: truck,
+  });
+  if (error) return { error: error.message };
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const num = (v: unknown) => (v == null ? 0 : Number(v));
+
+  return {
+    models: rows.map((r) => ({
+      model: String(r.model ?? "—"),
+      fills: num(r.fills),
+      litres: num(r.litres),
+      amountDa: num(r.amount_da),
+      litresPer100Km: r.litres_per_100km == null ? null : Number(r.litres_per_100km),
+      // Identical on every row, so the first is as good as any — and 0
+      // when the window is empty.
+      totalFills: num(rows[0]?.total_fills),
+      totalAmount: num(rows[0]?.total_amount),
+      totalLitres: num(rows[0]?.total_litres),
+    })),
+  };
+}
+
 // ── Who the search box can find ───────────────────────────────
 
 /**
@@ -558,6 +611,9 @@ export interface DashboardBundle {
   trucks?: TruckVariance[];
   speeding?: DriverSpeeding[];
   stations?: StationLeaders;
+  /** MAN / Renault / Shackman, one row each, sized for the model mix
+   *  treemap in the third trio slot. */
+  models?: FuelModelStat[];
   /** Only when asked for. Undefined on a refresh is not "the roster is
    *  empty" — the page keeps the list it already holds. */
   options?: ScopeOption[];
@@ -594,7 +650,7 @@ export async function getDashboardBundle(
   const speedingLimit = limits.speeding ?? 100;
   const stationSlices = limits.stations ?? 6;
 
-  const [f, s, dv, tv, sp, pf, st, opt] = await Promise.all([
+  const [f, s, dv, tv, sp, pf, st, mm, opt] = await Promise.all([
     readFuelPeriodStats(supabase, range, scope),
     readDashboardSeries(supabase, range, scope),
     readDriverVariance(supabase, variance, range),
@@ -604,6 +660,7 @@ export async function getDashboardBundle(
       ? readFuelPeriodStats(supabase, comparison, scope)
       : Promise.resolve({ stats: undefined, error: undefined }),
     readFuelStationLeaders(supabase, range, stationSlices, scope),
+    readFuelModelStats(supabase, range, scope),
     includeOptions
       ? readScopeOptions(supabase)
       : Promise.resolve({ options: undefined, error: undefined }),
@@ -621,7 +678,8 @@ export async function getDashboardBundle(
     trucks: tv.trucks,
     speeding: sp.drivers,
     stations: st.data,
+    models: mm.models,
     options: opt.options,
-    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? undefined,
+    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? mm.error ?? undefined,
   };
 }

@@ -1404,50 +1404,53 @@ hr {
 
 /* ── The model-mix treemap ────────────────────────────────────
    The third trio panel. Three absolutely-positioned cells whose area is
-   the model's share of fuel paid; abundant cells on cyan/pink/amber
-   carry the ink-dark label, and a cell too thin for one says nothing —
-   the tooltip still has the numbers (see FuelModelTreemap). */
+   the model's share of fuel paid. The hue is a ~10% wash (the tint() in
+   page.tsx), NOT a slab: a full-saturation wall of cyan/pink/amber reads
+   as stations, which is what this panel is not. The model's name and the
+   area do the telling; a --line hairline separates the bands, and a
+   cell too thin for its name says nothing — the tooltip has the
+   numbers. */
 .treemap { position: absolute; inset: 0; }
 
 .treemap__cell {
   position: absolute;
   overflow: hidden;
-  filter: saturate(1);
-  transition: filter 0.15s ease;
+  border: 1px solid var(--panel);
 }
 .treemap__cell:hover,
 .treemap__cell:focus-visible {
   /* The hover affordance a lurking sliver needs: the row is otherwise
-     a 2px hairline with nothing to say it is a cell. Slight lift rather
-     than a border, which would fight the colour it sits in. */
-  filter: saturate(1.35);
-  outline: none;
+     a 2px hairline with nothing to say it is a cell. A quiet outline
+     lit on the controls' side of the system, not another colour. */
+  outline: 1px solid var(--text-dim);
+  outline-offset: -2px;
 }
 
-/* Dark ink on the saturated cells, exactly as the station rank badge
-   does it — cream on #ffb300 is barely there. */
+/* The model as a wordmark — styled text, not an asset: MAN and Renault
+   are registered marks and there are no logo files in the repo, and
+   fetched images would fight text-over-chrome. Cream on the dark cell,
+   the same ink the rest of the panel is set in. */
 .treemap__label {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
+  left: 12px;
+  top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  color: var(--bg);
+  gap: 2px;
+  color: var(--text);
   pointer-events: none;
 }
 .treemap__label-name {
-  font-size: 0.83rem;
+  font-size: 1.05rem;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 .treemap__label-meta {
   font-family: var(--font-mono);
   font-size: 0.63rem;
-  font-weight: 600;
   line-height: 1.2;
-  opacity: 0.85;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 /* ── The treemap's hover card ─────────────────────────────────

@@ -1260,8 +1260,10 @@ export default function DashboardPage() {
               which is the question here (Shackman and MAN are close on
               share but Renault is a sliver, and that sliver is the
               point). Area is amount paid, the same habit every fuel
-              panel on this page keeps. The palette is the station
-              donut's categorical ramp — see FuelModelTreemap below. */}
+              panel on this page keeps. The models are wordmarks, and
+              their categorical wash is the station donut's ramp turned
+              down to a whisper — the owner asked for the colour up,
+              then asked for it down again. See FuelModelTreemap. */}
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
@@ -1649,11 +1651,23 @@ function ChartWaiting() {
 // tooltip so the panel's hover reading matches its neighbours', and it
 // avoids Chart.js entirely.
 //
-// The categorical rule applies (owner, 2026-09-08): the cells reuse the
-// station donut's ramp — cyan, pink, amber — deliberately NO green and
-// NO red, because those two are truck states and a model cell in either
-// would read as one. Ranked by amount, so the biggest model gets the
-// saturated cyan before the ramp runs down.
+// The categorical rule applies (owner, 2026-09-08), and then the owner
+// walked it back a step (2026-09-15): the cells reuse the station donut's
+// ramp — cyan, pink, amber — deliberately NO green and NO red, because
+// those two are truck states and a model cell in either would read as
+// one. But a WALL of full-saturation hue is the loudest thing on the
+// dashboard, and that is not what taxonomy is for. The hue survives as
+// a ~10% wash — an index, not a field — and the model's own name does
+// the telling.
+
+/** The ramp hues, as a thin film rather than a slab: three rectangles
+ *  of full-saturation cyan read as stations, not as fuel. The model's
+ *  name and the area carry the meaning; the tint merely indexes which
+ *  is which, and the tooltip dots echo it. */
+const tint = (hex: string, alpha = 0.1) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+};
 
 interface TreemapCell {
   model: FuelModelStat;
@@ -1821,7 +1835,7 @@ function FuelModelTreemap({ models }: { models: FuelModelStat[] }) {
               top: `${cell.y * 100}%`,
               width: `${cell.w * 100}%`,
               height: `${cell.h * 100}%`,
-              background: color,
+              background: tint(color),
             }}
             onMouseEnter={cellEvent(cell, color)}
             onMouseMove={cellEvent(cell, color)}

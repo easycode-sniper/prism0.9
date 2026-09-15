@@ -1920,11 +1920,12 @@ function FuelModelTreemap({ models }: { models: FuelModelStat[] }) {
 // gap at the bottom of a ring. It also sidesteps the canvas, which
 // cannot style its pixels from the token palette.
 //
-// Colour: amber is the money already spent (it is gone from the
-// month), cyan is what is still there — both already spoken for in
-// the taxonomy, unlike a sixth hue. Going over turns the whole arc
-// red, which is the money rule's overspend half. The centre shows the
-// TARGET, never the spend: reading a gauge at a budget it is racing
+// Colour: the money already spent is drawn in the visible cream the
+// charts use for cream figures; the budget still hanging is the same
+// cream turned down until it is almost not there, fading outward from
+// the spend line — the same quiet the rest of the page keeps. Red is
+// reserved for ONE situation, the overspend alarm. The centre shows
+// the TARGET, never the spend: reading a gauge at a budget it is racing
 // is the point of the panel.
 //
 // Only admins may edit. The edit control is a hairline pill in the
@@ -1959,12 +1960,22 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
     return Array.from({ length: BUDGET_TICKS }, (_, i) => {
       const inner = pt(i, BUDGET_R_INNER);
       const outer = pt(i, BUDGET_R_OUTER);
+      const at = i / (BUDGET_TICKS - 1);
       let tick: string;
+      let style: { opacity?: number } | undefined;
       if (!hasBudget) tick = "budget__tick--muted";
       else if (over) tick = "budget__tick--over";
-      else if (i / (BUDGET_TICKS - 1) < share) tick = "budget__tick--used";
-      else tick = "budget__tick--left";
-      return { x1: inner.x, y1: inner.y, x2: outer.x, y2: outer.y, tick };
+      else if (at < share) tick = "budget__tick--used";
+      else {
+        // The unspent arc fades away from the spend boundary: almost
+        // visible just past it, nearly gone at the tail — the shared
+        // "mostly future" look of a chart that is still young. A flat
+        // faint would read as a second colour; a ramp reads as light.
+        tick = "budget__tick--left";
+        const t = Math.max(0, Math.min(1, (at - share) / Math.max(1e-9, 1 - share)));
+        style = { opacity: 0.22 - 0.13 * t };
+      }
+      return { x1: inner.x, y1: inner.y, x2: outer.x, y2: outer.y, tick, style };
     });
   }, [hasBudget, over, share]);
 
@@ -1986,6 +1997,7 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
             <line
               key={i}
               className={tk.tick}
+              style={tk.style}
               x1={tk.x1}
               y1={tk.y1}
               x2={tk.x2}
@@ -1995,7 +2007,7 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
         </svg>
         <div className="budget__center">
           <span className="budget__badge">
-            <Gauge size={18} />
+            <Gauge size={15} />
           </span>
           <span className="budget__label">{t("Budget")}</span>
           <span className="budget__value">
@@ -2006,17 +2018,17 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
       </div>
       <div className="budget__legend">
         <span>
-          <span className="budget__dot" style={{ background: over ? "var(--red)" : "var(--amber)" }} />
+          <span className="budget__dot" style={{ background: "var(--text)" }} />
           <span>{t("Amount filled")}</span>
           <span className="budget__legend-v">{`${money(b.filled)} DA`}</span>
         </span>
         <span>
           <span
-            className="budget__dot"
-            style={{ background: left == null ? "var(--line)" : left < 0 ? "var(--red)" : "var(--cyan)" }}
+            className={left == null ? "budget__dot" : "budget__dot budget__dot--soft"}
+            style={{ background: left == null ? "var(--line)" : left < 0 ? "var(--red)" : "var(--text)" }}
           />
           <span>{over ? t("Over budget") : t("Budget left")}</span>
-          <span className={over ? "budget__legend-v budget__legend--over" : "budget__legend-v"}>
+          <span className={over ? "budget__legend-v budget__legend--over" : "budget__legend-v budget__legend-v--dim"}>
             {hasBudget ? `${money(Math.abs(overAmount ?? left!))} DA` : "—"}
           </span>
         </span>

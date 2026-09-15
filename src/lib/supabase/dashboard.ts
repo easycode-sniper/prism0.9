@@ -476,7 +476,7 @@ async function readFuelStationLeaders(
 // ── The model mix ─────────────────────────────────────────────
 
 export interface FuelModelStat {
-  /** MAN, Renault or Shackman — the plate's classification (migration
+  /** MAN, Renault or Shacman — the plate's classification (migration
    *  063 / truck_model). */
   model: string;
   fills: number;
@@ -611,7 +611,7 @@ export interface DashboardBundle {
   trucks?: TruckVariance[];
   speeding?: DriverSpeeding[];
   stations?: StationLeaders;
-  /** MAN / Renault / Shackman, one row each, sized for the model mix
+  /** MAN / Renault / Shacman, one row each, sized for the model mix
    *  treemap in the third trio slot. */
   models?: FuelModelStat[];
   /** Only when asked for. Undefined on a refresh is not "the roster is

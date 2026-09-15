@@ -1257,7 +1257,7 @@ export default function DashboardPage() {
           {/* Third, the model mix — a treemap because it is three things
               that are really one: how much of the fuel bill each model
               is. A bar chart would rank them; the treemap SIZES them,
-              which is the question here (Shackman and MAN are close on
+              which is the question here (Shacman and MAN are close on
               share but Renault is a sliver, and that sliver is the
               point). Area is amount paid, the same habit every fuel
               panel on this page keeps. The models are wordmarks, and
@@ -1698,7 +1698,7 @@ interface TreemapCell {
  * For THIS data the ramp collapses each model into its own full-width
  * band: squarify refuses to stand two rectangles side by side when the
  * row would get squat in a landscape box. That is not the paper being
- * picky, it is the honest read — Shackman 58.3%, MAN 40.5%, and Renault
+ * picky, it is the honest read — Shacman 58.3%, MAN 40.5%, and Renault
  * a 1.2% hairline across the floor that 22px of label cannot render,
  * which is exactly how much of the fuel bill one model is.
  */

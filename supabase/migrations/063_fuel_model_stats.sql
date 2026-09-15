@@ -13,8 +13,10 @@
 -- — but never committed to a file here, so a fresh database from these
 -- migrations could not reproduce it. It is idempotent, so the CREATE
 -- OR REPLACE below both heals the repo and leaves the live database
--- untouched. The definition is verbatim from the project, spelling and
--- all ("Shackman", not "Shacman").
+-- untouched. The definition was verbatim from the project — including
+-- its misspelling, "Shackman". Migration 064 corrects it to "Shacman"
+-- (the brand is Shaanxi's SHACMAN), so this file ends at the fixed
+-- spelling and a fresh build needs neither.
 --
 -- What it says: a plate classifies as a model only when its second
 -- hyphen-separated part is a "5" year (51x/52x — the truck-era plates
@@ -35,12 +37,12 @@ AS $function$
     WHEN split_part(p_truck_id, '-', 2) NOT LIKE '5%' THEN NULL
     WHEN split_part(p_truck_id, '-', 3) = '16'  THEN 'Renault'
     WHEN split_part(p_truck_id, '-', 2) = '523' THEN 'MAN'
-    WHEN split_part(p_truck_id, '-', 2) IN ('519', '522', '525') THEN 'Shackman'
+    WHEN split_part(p_truck_id, '-', 2) IN ('519', '522', '525') THEN 'Shacman'
   END
 $function$;
 
 COMMENT ON FUNCTION public.truck_model(TEXT) IS
-  'Classifies a plate into MAN / Renault / Shackman, NULL for staff and VH Service. Reproduced verbatim from the console migrations truck_model_consumption and truck_model_category_guard (2026-09-14) so the repo can rebuild the database.';
+  'Classifies a plate into MAN / Renault / Shacman, NULL for staff and VH Service. Reproduced verbatim from the console migrations truck_model_consumption and truck_model_category_guard (2026-09-14) so the repo can rebuild the database.';
 
 -- ── 1. The aggregate ─────────────────────────────────────────────────
 --

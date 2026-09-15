@@ -1654,7 +1654,7 @@ hr {
 .budget__value {
   margin-top: 2px;
   font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   font-weight: 700;
   line-height: 1.15;
   color: var(--text);
@@ -1662,7 +1662,7 @@ hr {
 }
 
 .budget__unit {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 600;
   color: var(--text-dim);
 }
@@ -1670,7 +1670,12 @@ hr {
 /* Two dot-and-figure rows, one per "channel" of the month. The dots
    repeat the arc exactly: the spent figure in visible cream, the
    budget left in the same cream turned down until it has faded to
-   almost nothing — the shared look of a chart that is mostly future. */
+   almost nothing — the shared look of a chart that is mostly future.
+   Each cell is also a hover target: the pair floats a small panel up
+   from the cell with that channel's EXACT figure and its share of the
+   month, so the faded row still gives up its number on demand without
+   ever having to sit big and bright where it would out-shout the
+   spent side. */
 .budget__legend {
   margin-top: 6px;
   display: grid;
@@ -1681,6 +1686,7 @@ hr {
 }
 
 .budget__legend > span {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1706,6 +1712,79 @@ hr {
 .budget__legend-v--dim { color: var(--text-dim); }
 
 .budget__legend--over { color: var(--red); }
+
+/* The hover panel each legend cell floats. Same anatomy as the
+   chart tooltips — dark step, hairline, small radius, pointer-events
+   off so it can never steal a hover — but driven by CSS :hover on
+   the cell rather than by Chart.js cursor maths. Pure show/hide: the
+   figure it carries is already on the row below it, so nothing is
+   ever locked behind the hover. */
+.budget__tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: max-content;
+  max-width: 190px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity var(--dur-hover) var(--ease-out),
+    transform var(--dur-hover) var(--ease-out);
+}
+
+.budget__tip-title {
+  display: block;
+  margin-bottom: 5px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.budget__tip-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.budget__tip-dot {
+  flex: none;
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.budget__tip-v { color: var(--text); }
+.budget__tip-v--red { color: var(--red); }
+
+.budget__tip-meta {
+  margin-left: 2px;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .budget__legend > span:hover .budget__tip {
+    visibility: visible;
+    opacity: 1;
+  }
+}
 
 /* The admin's inline form: the dashboard's only free-typing input,
    on the same .field anatomy the dispatch form uses, with the two

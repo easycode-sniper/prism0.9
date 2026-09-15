@@ -2021,6 +2021,14 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
           <span className="budget__dot" style={{ background: "var(--text)" }} />
           <span>{t("Amount filled")}</span>
           <span className="budget__legend-v">{`${money(b.filled)} DA`}</span>
+          <span className="budget__tip">
+            <span className="budget__tip-title">{t("Amount filled")}</span>
+            <span className="budget__tip-row">
+              <span className="budget__tip-dot" style={{ background: "var(--text)" }} />
+              <span className="budget__tip-v">{`${money(b.filled)} DA`}</span>
+              {hasBudget && <span className="budget__tip-meta">{Math.round(share * 100)}%</span>}
+            </span>
+          </span>
         </span>
         <span>
           <span
@@ -2030,6 +2038,21 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
           <span>{over ? t("Over budget") : t("Budget left")}</span>
           <span className={over ? "budget__legend-v budget__legend--over" : "budget__legend-v budget__legend-v--dim"}>
             {hasBudget ? `${money(Math.abs(overAmount ?? left!))} DA` : "—"}
+          </span>
+          <span className="budget__tip">
+            <span className="budget__tip-title">{over ? t("Over budget") : t("Budget left")}</span>
+            <span className="budget__tip-row">
+              <span
+                className={
+                  left == null ? "budget__tip-dot" : "budget__tip-dot budget__dot--soft"
+                }
+                style={{ background: left == null ? "var(--line)" : left < 0 ? "var(--red)" : "var(--text)" }}
+              />
+              <span className={over ? "budget__tip-v budget__tip-v--red" : "budget__tip-v"}>
+                {hasBudget ? `${money(Math.abs(overAmount ?? left!))} DA` : "—"}
+              </span>
+              {hasBudget && !over && <span className="budget__tip-meta">{Math.round((1 - share) * 100)}%</span>}
+            </span>
           </span>
         </span>
       </div>

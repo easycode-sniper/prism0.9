@@ -3746,22 +3746,23 @@ html[dir="rtl"] table { text-align: right; }
 
 .signin-kpi {
   box-sizing: border-box;
-  padding: 10px 12px;
+  padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--panel);
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .signin-kpi__icon { flex: none; color: var(--text-dim); }
 
 .signin-kpi__value {
+  flex: 1;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -3771,10 +3772,23 @@ html[dir="rtl"] table { text-align: right; }
 }
 
 .signin-kpi__value small {
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   font-weight: 400;
   color: var(--text-dim);
 }
+
+/* The arrow and its share, pinned right. Tone, not direction: green is
+   good news here even when it points down. */
+.signin-kpi__trend {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.signin-kpi__trend--bad { color: var(--red); }
 
 .signin-eyebrow {
   margin: 0;
@@ -3851,6 +3865,9 @@ html[dir="rtl"] table { text-align: right; }
     border-bottom: 1px solid var(--line);
   }
   .signin-hero__inner { padding: 44px 28px; gap: 36px; }
+  /* One full-width row each: two squeezed columns would clip the
+     widest amounts, and the brief is no squeezing anywhere. */
+  .signin-kpis { grid-template-columns: minmax(0, 1fr); }
   .signin-side { padding: 40px 20px; }
 }
 

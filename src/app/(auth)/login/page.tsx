@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Mail, MessageCircle, Route, Fuel, Banknote, Gauge, Scale } from "lucide-react";
+import { Eye, EyeOff, Mail, MessageCircle, Route, Fuel, Banknote, Gauge, Scale, Truck } from "lucide-react";
 import { signIn } from "@/lib/supabase/actions";
 import { LoginMapBackground } from "@/components/layout/LoginMapBackground";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
@@ -34,20 +34,27 @@ const WHATSAPP_URL =
 // fleet's size and spend to anyone with the URL. Same for the status
 // counts below: plausible, static, nobody's.
 //
-// Icon plus amount only, no labels and no deltas: at this size there is
-// nothing to squeeze, and the strip reads as texture rather than a
-// table competing with the dashboard's own.
+// Icon plus amount plus the tone arrow, nothing else: no labels, no
+// captions, so there is nothing in them to squeeze — and the arrow
+// keeps its dashboard meaning (direction is not tone: consumption
+// falling reads green, variance rising reads red).
 const HERO_KPIS: {
   icon: typeof Route;
   value: number;
   unit: string;
   decimals?: number;
+  delta: number;
+  bad?: boolean;
 }[] = [
-  { icon: Route, value: 842150, unit: "km" },
-  { icon: Fuel, value: 301470, unit: "L" },
-  { icon: Banknote, value: 9845200, unit: "DA" },
-  { icon: Gauge, value: 35.8, unit: "L/100km", decimals: 1 },
-  { icon: Scale, value: 312750, unit: "DA" },
+  { icon: Route, value: 842150, unit: "km", delta: 0.084 },
+  { icon: Fuel, value: 301470, unit: "L", delta: 0.061 },
+  { icon: Banknote, value: 9845200, unit: "DA", delta: 0.073 },
+  { icon: Gauge, value: 35.8, unit: "L/100km", decimals: 1, delta: -0.021 },
+  { icon: Scale, value: 312750, unit: "DA", delta: 0.046, bad: true },
+  // Six cards, not five: the grid lands three-by-three instead of
+  // leaving a widowed cell that reads as a missing card. Truck count,
+  // coherent with the status strip below it (36 of these on route).
+  { icon: Truck, value: 64, unit: "", delta: 0.016 },
 ];
 
 // Likewise illustrative. Off-route and sites stay cream: on a panel
@@ -69,6 +76,15 @@ function int(n: number, decimals: number, language: string): string {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(n);
+}
+
+/** One-decimal share, French-style ("8,4 %") where French is on. */
+function pct(f: number, language: string): string {
+  return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(f);
 }
 
 export default function LoginPage() {
@@ -123,9 +139,12 @@ export default function LoginPage() {
           <div className="signin-kpis">
             {HERO_KPIS.map((k, i) => (
               <div key={i} className="signin-kpi">
-                <k.icon size={15} strokeWidth={2} aria-hidden="true" className="signin-kpi__icon" />
+                <k.icon size={14} strokeWidth={2} aria-hidden="true" className="signin-kpi__icon" />
                 <span className="signin-kpi__value">
                   {int(k.value, k.decimals ?? 0, language)} <small>{k.unit}</small>
+                </span>
+                <span className={`signin-kpi__trend${k.bad ? " signin-kpi__trend--bad" : ""}`}>
+                  {k.delta >= 0 ? "▲" : "▼"} {pct(Math.abs(k.delta), language)}
                 </span>
               </div>
             ))}

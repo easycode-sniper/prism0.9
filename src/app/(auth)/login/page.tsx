@@ -29,14 +29,10 @@ const WHATSAPP_URL =
   `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent("Hello — I'm contacting you about Prism.")}`;
 
 // ── The hero panel's figures ─────────────────────────────────────
-// A FROZEN SNAPSHOT, not live data, and that distinction matters:
-// this page renders unauthenticated, so it cannot read the fleet
-// tables — RLS stops at `authenticated` — and these are the 30-day
-// dashboard as it stood when the page was designed, kept the way
-// LoginMapBackground's routes are kept: illustration of what Prism
-// tracks, not a reading of it. If they ever need to move again, that
-// is a public-aggregates endpoint plus an RLS story — a security
-// decision, not CSS.
+// ILLUSTRATIVE, deliberately not the fleet's — the owner's call, since
+// this page renders unauthenticated and real totals would hand the
+// fleet's size and spend to anyone with the URL. Same for the status
+// counts below: plausible, static, nobody's.
 //
 // Tone follows the dashboard's own rule (direction is not tone): the
 // three growing totals read green, consumption falling reads green,
@@ -50,22 +46,22 @@ const HERO_KPIS: {
   delta: number;
   bad?: boolean;
 }[] = [
-  { icon: Route, label: "Kilometres driven", value: 900757, unit: "km", delta: 0.127 },
-  { icon: Fuel, label: "Litres consumed", value: 419085, unit: "L", delta: 0.119 },
-  { icon: Banknote, label: "Amount filled", value: 13089098, unit: "DA", delta: 0.118 },
-  { icon: Gauge, label: "Average consumption", value: 46.53, unit: "L/100km", decimals: 2, delta: -0.036 },
-  { icon: Scale, label: "Total variance", value: 426093, unit: "DA", delta: 0.058, bad: true },
+  { icon: Route, label: "Kilometres driven", value: 842150, unit: "km", delta: 0.084 },
+  { icon: Fuel, label: "Litres consumed", value: 301470, unit: "L", delta: 0.061 },
+  { icon: Banknote, label: "Amount filled", value: 9845200, unit: "DA", delta: 0.073 },
+  { icon: Gauge, label: "Average consumption", value: 35.8, unit: "L/100km", decimals: 1, delta: -0.021 },
+  { icon: Scale, label: "Total variance", value: 312750, unit: "DA", delta: 0.046, bad: true },
 ];
 
-// Same snapshot reasoning as above. Off-route and sites stay cream:
-// on a panel that cannot know the fleet's state, spending red or pink
-// would imply a live alert the page has no way to have read.
+// Likewise illustrative. Off-route and sites stay cream: on a panel
+// that cannot know the fleet's state, spending red or pink would imply
+// a live alert the page has no way to have read.
 const HERO_STATUS: { value: number; label: string; color: string }[] = [
-  { value: 48, label: "On route", color: "var(--green)" },
-  { value: 15, label: "Idle", color: "var(--amber)" },
-  { value: 7, label: "Parking", color: "var(--cyan)" },
-  { value: 3, label: "Off route", color: "var(--text)" },
-  { value: 3, label: "Sites", color: "var(--text)" },
+  { value: 36, label: "On route", color: "var(--green)" },
+  { value: 12, label: "Idle", color: "var(--amber)" },
+  { value: 5, label: "Parking", color: "var(--cyan)" },
+  { value: 2, label: "Off route", color: "var(--text)" },
+  { value: 4, label: "Sites", color: "var(--text)" },
 ];
 
 /** Locale-aware figure for the hero strip: French groups in narrow

@@ -3724,33 +3724,29 @@ html[dir="rtl"] table { text-align: right; }
 
 .signin-kpis {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  overflow: hidden;
+  /* Detached cards with air between them, never an attached strip:
+     each cell is its own bordered card on a 10px gap. auto-fit lands
+     three across on the desktop column (landscape cards, wider than
+     tall) and reflows to two without a breakpoint of its own. */
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
 }
 
 .signin-kpi {
   box-sizing: border-box;
-  padding: 16px 14px;
-  border-right: 1px solid var(--line);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
 
-.signin-kpi:last-child { border-right: none; }
-
 .signin-kpi__icon { color: var(--text-dim); }
 
 .signin-kpi__label {
   margin-top: 8px;
-  /* Two lines tall, always: the longest labels wrap and the values
-     below stay on one line across the strip. Truncating "KILOMETRES
-     DRIVEN" to "KILOMETRES D…" would hide the one word that says what
-     the figure is. */
-  min-height: 3em;
   font-family: var(--font-mono);
   font-size: 0.58rem;
   line-height: 1.5;
@@ -3762,7 +3758,7 @@ html[dir="rtl"] table { text-align: right; }
 .signin-kpi__value {
   margin-top: 6px;
   font-family: var(--font-mono);
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -3857,10 +3853,10 @@ html[dir="rtl"] table { text-align: right; }
 
 .signin-page--split .signin-card { max-width: 420px; }
 
-/* Stacked below the width where five KPI cells plus a card stop
+/* Stacked below the width where the hero column plus the card stop
    fitting side by side: hero on top, card below, the hairline moving
-   from the column's edge to the row's. The strip reflows to whatever
-   fits rather than squeezing mono figures it cannot shrink. */
+   from the column's edge to the row's. The cards reflow on their own
+   through auto-fit. */
 @media (max-width: 1020px) {
   .signin-page--split { grid-template-columns: minmax(0, 1fr); }
   .signin-hero {
@@ -3868,15 +3864,6 @@ html[dir="rtl"] table { text-align: right; }
     border-bottom: 1px solid var(--line);
   }
   .signin-hero__inner { padding: 44px 28px; gap: 36px; }
-  /* 1px gaps over the line-coloured ground draw the cell dividers for
-     free, whatever the wrap (2+2+1, 3+2) — no nth-child arithmetic that
-     only holds for one row count. */
-  .signin-kpis {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1px;
-    background: var(--line);
-  }
-  .signin-kpi { border-right: none; background: var(--panel); }
   .signin-side { padding: 40px 20px; }
 }
 

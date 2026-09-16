@@ -2094,9 +2094,11 @@ function FuelBudgetArc({ b }: { b: FuelBudget }) {
           ))}
         </svg>
         <div className="budget__center">
-          <span className="budget__badge">
-            <Gauge size={15} />
-          </span>
+          {/* The station, not the speedo: this dial tracks fuel money,
+              and the pump says so before any figure is read. Decorative —
+              the gauge's own aria-label already names both figures. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/illustrations/gas-station.svg" alt="" aria-hidden="true" className="budget__art" />
           <span className="budget__label">{t("Budget")}</span>
           <span className="budget__value">
             {hasBudget ? money(b.budget!) : "—"}

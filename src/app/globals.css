@@ -1712,10 +1712,9 @@ hr {
 .budget__tick--left  { stroke: var(--text); opacity: 0.14; }
 .budget__tick--over  { stroke: var(--red); }
 
-/* The icon badge and the target figure hang in the arc's open 90°.
-   Both are achromatic — a light-cream badge on a dark step, the
-   figure itself in the charts' cream — so the money never borrows a
-   status hue. */
+/* The station and the target figure hang in the arc's open 90°. Both
+   are achromatic — the artwork is the charts' own cream, the figure in
+   it too — so the money never borrows a status hue. */
 .budget__center {
   position: absolute;
   left: 50%;
@@ -1728,17 +1727,16 @@ hr {
   pointer-events: none;
 }
 
-.budget__badge {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--panel-3);
-  border: 1px solid var(--line);
-  color: var(--text-dim);
-  margin-bottom: 5px;
+/* The gas station at dial size. Wide enough to read as a station —
+   canopy, pump, shop, sign — narrow enough to leave the ring its
+   opening and the label its air: the inner ticks clear ~137px across,
+   and 96px of art keeps a cream margin of arc on both sides plus room
+   for BUDGET and the figure to sit clear of the station's base. */
+.budget__art {
+  width: 96px;
+  height: auto;
+  display: block;
+  margin-bottom: 8px;
 }
 
 .budget__label {

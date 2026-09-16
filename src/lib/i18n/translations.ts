@@ -158,6 +158,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // ── Sign in ──
     "OMD Fleet Operations": "OMD Fleet Operations",
+    "Welcome back": "Welcome back",
     "Continuous live tracking,": "Continuous live tracking,",
     "maximum efficiency.": "maximum efficiency.",
     "Real-time GPS control, automated route adherence, and instant fuel variance for your entire fleet.": "Real-time GPS control, automated route adherence, and instant fuel variance for your entire fleet.",
@@ -465,6 +466,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     // ── Sign in ──
     "OMD Fleet Operations": "Opérations de flotte OMD",
+    "Welcome back": "Bon retour",
     "Continuous live tracking,": "Suivi continu en direct,",
     "maximum efficiency.": "efficacité maximale.",
     "Real-time GPS control, automated route adherence, and instant fuel variance for your entire fleet.": "Contrôle GPS en temps réel, respect automatisé des itinéraires et écart carburant instantané pour toute votre flotte.",

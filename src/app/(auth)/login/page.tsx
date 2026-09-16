@@ -34,23 +34,20 @@ const WHATSAPP_URL =
 // fleet's size and spend to anyone with the URL. Same for the status
 // counts below: plausible, static, nobody's.
 //
-// Tone follows the dashboard's own rule (direction is not tone): the
-// three growing totals read green, consumption falling reads green,
-// variance growing reads red.
+// Icon plus amount only, no labels and no deltas: at this size there is
+// nothing to squeeze, and the strip reads as texture rather than a
+// table competing with the dashboard's own.
 const HERO_KPIS: {
   icon: typeof Route;
-  label: string;
   value: number;
   unit: string;
   decimals?: number;
-  delta: number;
-  bad?: boolean;
 }[] = [
-  { icon: Route, label: "Kilometres driven", value: 842150, unit: "km", delta: 0.084 },
-  { icon: Fuel, label: "Litres consumed", value: 301470, unit: "L", delta: 0.061 },
-  { icon: Banknote, label: "Amount filled", value: 9845200, unit: "DA", delta: 0.073 },
-  { icon: Gauge, label: "Average consumption", value: 35.8, unit: "L/100km", decimals: 1, delta: -0.021 },
-  { icon: Scale, label: "Total variance", value: 312750, unit: "DA", delta: 0.046, bad: true },
+  { icon: Route, value: 842150, unit: "km" },
+  { icon: Fuel, value: 301470, unit: "L" },
+  { icon: Banknote, value: 9845200, unit: "DA" },
+  { icon: Gauge, value: 35.8, unit: "L/100km", decimals: 1 },
+  { icon: Scale, value: 312750, unit: "DA" },
 ];
 
 // Likewise illustrative. Off-route and sites stay cream: on a panel
@@ -72,15 +69,6 @@ function int(n: number, decimals: number, language: string): string {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(n);
-}
-
-/** One-decimal share, French-style ("12,7 %") where French is on. */
-function pct(f: number, language: string): string {
-  return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", {
-    style: "percent",
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  }).format(f);
 }
 
 export default function LoginPage() {
@@ -130,17 +118,14 @@ export default function LoginPage() {
             LIVE · DZ
           </p>
 
+          <p className="signin-welcome">{t("Welcome back")}</p>
+
           <div className="signin-kpis">
-            {HERO_KPIS.map((k) => (
-              <div key={k.label} className="signin-kpi">
-                <k.icon size={16} strokeWidth={2} aria-hidden="true" className="signin-kpi__icon" />
-                <span className="signin-kpi__label">{t(k.label)}</span>
+            {HERO_KPIS.map((k, i) => (
+              <div key={i} className="signin-kpi">
+                <k.icon size={15} strokeWidth={2} aria-hidden="true" className="signin-kpi__icon" />
                 <span className="signin-kpi__value">
                   {int(k.value, k.decimals ?? 0, language)} <small>{k.unit}</small>
-                </span>
-                <span className={`signin-kpi__delta${k.bad ? " signin-kpi__delta--bad" : ""}`}>
-                  {k.delta >= 0 ? "▲" : "▼"} {pct(Math.abs(k.delta), language)}
-                  <small>{t("vs the previous 30 days")}</small>
                 </span>
               </div>
             ))}

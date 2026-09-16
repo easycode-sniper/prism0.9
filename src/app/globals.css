@@ -3722,69 +3722,56 @@ html[dir="rtl"] table { text-align: right; }
   background: var(--green);
 }
 
+/* The greeting above the strip. Big, but a step below the marketing
+   headline it introduces — greeting first, pitch second. */
+.signin-welcome {
+  margin: 0;
+  font-size: clamp(1.4rem, 1.1rem + 1.2vw, 1.75rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
 .signin-kpis {
   display: grid;
-  /* Detached cards with air between them, never an attached strip:
-     each cell is its own bordered card on a 10px gap. auto-fit lands
-     three across on the desktop column (landscape cards, wider than
-     tall) and reflows to two without a breakpoint of its own. */
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  /* Detached mini-cards with air between them, never an attached strip:
+     each cell is its own bordered card on a 10px gap. Icon plus amount
+     only — nothing in them to squeeze, so auto-fit lands three compact
+     landscape cards across the desktop column and reflows to two
+     without a breakpoint of its own. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
 .signin-kpi {
   box-sizing: border-box;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--panel);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
-.signin-kpi__icon { color: var(--text-dim); }
-
-.signin-kpi__label {
-  margin-top: 8px;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  line-height: 1.5;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
+.signin-kpi__icon { flex: none; color: var(--text-dim); }
 
 .signin-kpi__value {
-  margin-top: 6px;
   font-family: var(--font-mono);
-  font-size: 0.92rem;
+  font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .signin-kpi__value small {
   font-size: 0.62rem;
-  font-weight: 400;
-  color: var(--text-dim);
-}
-
-.signin-kpi__delta {
-  margin-top: 8px;
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  font-weight: 700;
-  color: var(--green);
-}
-
-.signin-kpi__delta--bad { color: var(--red); }
-
-.signin-kpi__delta small {
-  display: block;
-  margin-top: 3px;
-  font-size: 0.58rem;
   font-weight: 400;
   color: var(--text-dim);
 }

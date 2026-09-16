@@ -126,7 +126,7 @@ export default function LoginPage() {
 
   return (
     <div className="signin-page signin-page--split">
-      <section className="signin-hero" aria-label={t("OMD Fleet Operations")}>
+      <section className="signin-hero" aria-label="Prism">
         <LoginMapBackground />
         <div className="signin-hero__inner">
           <p className="signin-live">
@@ -151,7 +151,6 @@ export default function LoginPage() {
           </div>
 
           <div className="signin-hero__copy">
-            <p className="signin-eyebrow">{t("OMD Fleet Operations")}</p>
             <h1 className="signin-h1">
               {t("Continuous live tracking,")} <span>{t("maximum efficiency.")}</span>
             </h1>
@@ -188,13 +187,12 @@ export default function LoginPage() {
 
         <span className="signin-mark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/omd-logo.png" alt="" width={26} height={26} />
+          <img src="/prism-mark.svg" alt="" width={28} height={28} />
         </span>
 
-        {/* Prism and OMD are names, not copy: they read the same in every
-            language and are deliberately not passed through t(). */}
+        {/* Prism is a name, not copy: it reads the same in every
+            language and is deliberately not passed through t(). */}
         <h1 className="signin-title">Prism</h1>
-        <p className="signin-sub">{t("OMD Fleet Operations")}</p>
 
         <form onSubmit={handleSubmit} className="signin-form" noValidate>
           <fieldset disabled={loading} className="signin-fields">

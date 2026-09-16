@@ -3477,8 +3477,8 @@ html[dir="rtl"] table { text-align: right; }
   height: 48px;
   margin-bottom: 18px;
   border-radius: 50%;
-  /* The OMD mark is white on a transparent ground, so it needs a dark
-     backing of its own — on the cream accent it would vanish outright. */
+/* The prism mark carries its own disc, so it reads on any surface —
+   the ring here only frames it. */
   background: var(--panel-3);
   border: 1px solid var(--line);
 }
@@ -3486,20 +3486,11 @@ html[dir="rtl"] table { text-align: right; }
 .signin-mark img { object-fit: contain; }
 
 .signin-title {
+  margin: 0 0 26px;
   font-size: 1.55rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);
-}
-
-.signin-sub {
-  margin-top: 4px;
-  margin-bottom: 26px;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-dim);
 }
 
 .signin-form { width: 100%; }
@@ -3789,15 +3780,6 @@ html[dir="rtl"] table { text-align: right; }
 }
 
 .signin-kpi__trend--bad { color: var(--red); }
-
-.signin-eyebrow {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
 
 .signin-h1 {
   margin: 14px 0 12px;

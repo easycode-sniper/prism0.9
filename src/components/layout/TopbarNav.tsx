@@ -32,14 +32,14 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
       <Link href="/dashboard" className="brand brand-link" aria-label={`${t("brand.title")} — ${t("go to dashboard")}`}>
         <div className="brand-mark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/omd-logo.png" alt="OMD" width={24} height={24} style={{ objectFit: "contain" }} />
+          <img src="/prism-mark.svg" alt="" width={24} height={24} style={{ objectFit: "contain" }} />
         </div>
         {/* The title is IN THE DOM BUT NOT DRAWN. Four pages —
             dashboard, drivers, carburant, maintenance — have no <h1> of
             their own, so deleting this one would leave them with no
             heading at all; hiding it visually changes what the header
             looks like without changing the document outline. What is
-            drawn is the operator name alone, because on a screen where
+            drawn is the product name alone, because on a screen where
             you already know which app you are in, the app's own name is
             the line paying the least for its width — and with eleven
             tabs the header has none to spare. */}

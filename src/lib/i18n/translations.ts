@@ -69,10 +69,7 @@ export const SAME_IN_FRENCH = new Set<string>([
   "clients.title",
   "clients.filter.all",
   "Client",
-  // The operator's own name, so it does not translate. It used to differ
-  // only in the half that was dropped on 2026-09-07 ("· Amouda Line" /
-  // "· Ligne Amouda"), which is why this needed listing then and not
-  // before.
+  // The product name, so it does not translate.
   "brand.subtitle",
   // Units and words French spells the same way.
   "Litres",
@@ -83,8 +80,8 @@ export const SAME_IN_FRENCH = new Set<string>([
 
 export const translations: Record<Language, Record<string, string>> = {
   en: {
-    "brand.title": "Fleet Route Monitor",
-    "brand.subtitle": "OMD Transport",
+    "brand.title": "Prism",
+    "brand.subtitle": "Prism",
     "nav.dashboard": "Dashboard",
     "nav.dispatch": "Dispatch",
     "nav.monitoring": "Monitoring",
@@ -156,9 +153,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "One starting point per truck: the date and odometer when its current tyres were fitted.": "One starting point per truck: the date and odometer when its current tyres were fitted.",
     "Prism already measures the distance each truck covers, so nothing else has to be entered by hand — only the starting point is missing.": "Prism already measures the distance each truck covers, so nothing else has to be entered by hand — only the starting point is missing.",
 
-    // ── Sign in ──
-    "OMD Fleet Operations": "OMD Fleet Operations",
-    "Welcome back": "Welcome back",
+// ── Sign in ──
     "Continuous live tracking,": "Continuous live tracking,",
     "maximum efficiency.": "maximum efficiency.",
     "Real-time GPS control, automated route adherence, and instant fuel variance for your entire fleet.": "Real-time GPS control, automated route adherence, and instant fuel variance for your entire fleet.",
@@ -391,8 +386,8 @@ export const translations: Record<Language, Record<string, string>> = {
     "admin.subtitle": "Geofence management, user accounts, and connection settings.",
   },
   fr: {
-    "brand.title": "Suivi des itinéraires",
-    "brand.subtitle": "OMD Transport",
+    "brand.title": "Prism",
+    "brand.subtitle": "Prism",
     "nav.dashboard": "Tableau de bord",
     "nav.dispatch": "Répartition",
     "nav.monitoring": "Surveillance",
@@ -464,9 +459,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "One starting point per truck: the date and odometer when its current tyres were fitted.": "Un point de départ par camion : la date et le kilométrage de montage des pneus actuels.",
     "Prism already measures the distance each truck covers, so nothing else has to be entered by hand — only the starting point is missing.": "Prism mesure déjà la distance parcourue par chaque camion : rien d'autre n'est à saisir, seul le point de départ manque.",
 
-    // ── Sign in ──
-    "OMD Fleet Operations": "Opérations de flotte OMD",
-    "Welcome back": "Bon retour",
+// ── Sign in ──
     "Continuous live tracking,": "Suivi continu en direct,",
     "maximum efficiency.": "efficacité maximale.",
     "Real-time GPS control, automated route adherence, and instant fuel variance for your entire fleet.": "Contrôle GPS en temps réel, respect automatisé des itinéraires et écart carburant instantané pour toute votre flotte.",
@@ -698,8 +691,8 @@ export const translations: Record<Language, Record<string, string>> = {
     "vs the same days last month": "مقارنة بالأيام نفسها من الشهر الماضي",
     "vs the month before": "مقارنة بالشهر السابق",
     "vs the previous {n} days": "مقارنة بالـ {n} أيام السابقة",
-    "brand.title": "مراقبة مسارات الأسطول",
-    "brand.subtitle": "OMD للنقل",
+    "brand.title": "Prism",
+    "brand.subtitle": "Prism",
     "nav.dashboard": "لوحة التحكم",
     "nav.dispatch": "الإرسال",
     "nav.monitoring": "المراقبة",

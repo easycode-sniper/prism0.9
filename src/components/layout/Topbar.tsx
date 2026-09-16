@@ -2,7 +2,7 @@ import { getCurrentProfile } from "@/lib/supabase/auth";
 import { signOut } from "@/lib/supabase/actions";
 import { TopbarNav, FleetActiveCount } from "./TopbarNav";
 import { LanguageSwitcher } from "./LanguageSwitcher";
-import { SignOutButton } from "./SignOutButton";
+import { ProfileMenu } from "./ProfileMenu";
 
 export async function Topbar({ profile }: { profile: Awaited<ReturnType<typeof getCurrentProfile>> }) {
   async function handleSignOut() {
@@ -17,7 +17,7 @@ export async function Topbar({ profile }: { profile: Awaited<ReturnType<typeof g
       <div id="topbar-stats">
         <FleetActiveCount />
         <LanguageSwitcher />
-        <SignOutButton action={handleSignOut} />
+        <ProfileMenu name={profile?.full_name ?? ""} email={profile?.email ?? ""} action={handleSignOut} />
       </div>
     </header>
   );

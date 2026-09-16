@@ -640,6 +640,104 @@ input::placeholder, textarea::placeholder {
 
 .topbar-active { white-space: nowrap; }
 
+/* ── The account menu ────────────────────────────────────────
+   The operator's initials in a circle, opening the name/email/sign-out
+   panel. Chrome, so it is achromatic: the same surface-step-and-
+   hairline vocabulary as the tabs, no hue spent on it. The avatar ring
+   lifts to --line-strong on hover exactly the way a hairline button
+   does; the open panel reuses .dropdown, so it inherits the shared
+   pop-in entrance and --panel-2 surface. */
+.profile-menu { position: relative; flex: none; }
+
+.profile-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--dur-hover) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .profile-avatar:hover { border-color: var(--line-strong); }
+}
+
+.profile-avatar[aria-expanded="true"] { border-color: var(--line-strong); }
+
+.profile-menu__drop {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  min-width: 224px;
+  max-width: 280px;
+  padding: 6px;
+}
+
+.profile-menu__id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+}
+
+.profile-menu__name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-menu__email {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-menu__sep {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0;
+}
+
+.profile-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    color var(--dur-hover) var(--ease-out),
+    background-color var(--dur-hover) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .profile-menu__item:hover { color: var(--text); background: var(--surface-raised); }
+}
+
+.profile-menu__item:active { transform: scale(0.995); }
+
 #operations-strip {
   display: flex;
   flex-wrap: wrap;

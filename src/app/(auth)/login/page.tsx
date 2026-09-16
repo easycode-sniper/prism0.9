@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Mail, MessageCircle } from "lucide-react";
+import { Eye, EyeOff, Mail, MessageCircle, Route, Fuel, Banknote, Gauge, Scale } from "lucide-react";
 import { signIn } from "@/lib/supabase/actions";
 import { LoginMapBackground } from "@/components/layout/LoginMapBackground";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
@@ -28,9 +28,68 @@ const FEEDBACK_MAILTO =
 const WHATSAPP_URL =
   `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent("Hello — I'm contacting you about Prism.")}`;
 
+// ── The hero panel's figures ─────────────────────────────────────
+// A FROZEN SNAPSHOT, not live data, and that distinction matters:
+// this page renders unauthenticated, so it cannot read the fleet
+// tables — RLS stops at `authenticated` — and these are the 30-day
+// dashboard as it stood when the page was designed, kept the way
+// LoginMapBackground's routes are kept: illustration of what Prism
+// tracks, not a reading of it. If they ever need to move again, that
+// is a public-aggregates endpoint plus an RLS story — a security
+// decision, not CSS.
+//
+// Tone follows the dashboard's own rule (direction is not tone): the
+// three growing totals read green, consumption falling reads green,
+// variance growing reads red.
+const HERO_KPIS: {
+  icon: typeof Route;
+  label: string;
+  value: number;
+  unit: string;
+  decimals?: number;
+  delta: number;
+  bad?: boolean;
+}[] = [
+  { icon: Route, label: "Kilometres driven", value: 900757, unit: "km", delta: 0.127 },
+  { icon: Fuel, label: "Litres consumed", value: 419085, unit: "L", delta: 0.119 },
+  { icon: Banknote, label: "Amount filled", value: 13089098, unit: "DA", delta: 0.118 },
+  { icon: Gauge, label: "Average consumption", value: 46.53, unit: "L/100km", decimals: 2, delta: -0.036 },
+  { icon: Scale, label: "Total variance", value: 426093, unit: "DA", delta: 0.058, bad: true },
+];
+
+// Same snapshot reasoning as above. Off-route and sites stay cream:
+// on a panel that cannot know the fleet's state, spending red or pink
+// would imply a live alert the page has no way to have read.
+const HERO_STATUS: { value: number; label: string; color: string }[] = [
+  { value: 48, label: "On route", color: "var(--green)" },
+  { value: 15, label: "Idle", color: "var(--amber)" },
+  { value: 7, label: "Parking", color: "var(--cyan)" },
+  { value: 3, label: "Off route", color: "var(--text)" },
+  { value: 3, label: "Sites", color: "var(--text)" },
+];
+
+/** Locale-aware figure for the hero strip: French groups in narrow
+ *  spaces where English groups in commas, and the strip must read
+ *  correctly in both card languages. */
+function int(n: number, decimals: number, language: string): string {
+  return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n);
+}
+
+/** One-decimal share, French-style ("12,7 %") where French is on. */
+function pct(f: number, language: string): string {
+  return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US", {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(f);
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -66,11 +125,53 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="signin-page">
-      <LoginMapBackground />
+    <div className="signin-page signin-page--split">
+      <section className="signin-hero" aria-label={t("OMD Fleet Operations")}>
+        <LoginMapBackground />
+        <div className="signin-hero__inner">
+          <p className="signin-live">
+            <span className="signin-live__dot" aria-hidden="true" />
+            LIVE · DZ
+          </p>
 
+          <div className="signin-kpis">
+            {HERO_KPIS.map((k) => (
+              <div key={k.label} className="signin-kpi">
+                <k.icon size={16} strokeWidth={2} aria-hidden="true" className="signin-kpi__icon" />
+                <span className="signin-kpi__label">{t(k.label)}</span>
+                <span className="signin-kpi__value">
+                  {int(k.value, k.decimals ?? 0, language)} <small>{k.unit}</small>
+                </span>
+                <span className={`signin-kpi__delta${k.bad ? " signin-kpi__delta--bad" : ""}`}>
+                  {k.delta >= 0 ? "▲" : "▼"} {pct(Math.abs(k.delta), language)}
+                  <small>{t("vs the previous 30 days")}</small>
+                </span>
+              </div>
+            ))}
+          </div>
 
-      <main className="glass signin-card">
+          <div className="signin-hero__copy">
+            <p className="signin-eyebrow">{t("OMD Fleet Operations")}</p>
+            <h1 className="signin-h1">
+              {t("Continuous live tracking,")} <span>{t("maximum efficiency.")}</span>
+            </h1>
+            <p className="signin-desc">
+              {t("Real-time GPS control, automated route adherence, and instant fuel variance for your entire fleet.")}
+            </p>
+            <div className="signin-status">
+              {HERO_STATUS.map((s) => (
+                <div key={s.label} className="signin-stat">
+                  <strong style={{ color: s.color }}>{s.value}</strong>
+                  <span>{t(s.label)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="signin-side">
+        <main className="glass signin-card">
         {/* The one place the language can be chosen before signing in.
             I18nProvider keeps a copy in localStorage precisely so this
             screen can render in the operator's language, but setLanguage
@@ -189,7 +290,8 @@ export default function LoginPage() {
             {t("Contact on WhatsApp")}
           </a>
         </div>
-      </main>
+        </main>
+      </section>
     </div>
   );
 }

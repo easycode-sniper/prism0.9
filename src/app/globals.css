@@ -3665,6 +3665,221 @@ html[dir="rtl"] table { text-align: right; }
 /* Keeps the glyph on its own baseline so a wrapped label cannot squash it. */
 .signin-contact__link svg { flex: none; }
 
+/* ── Sign-in split ────────────────────────────────────────────
+   Marketing left, task right. The left panel is a frozen illustration
+   — see HERO_KPIS in the login page — over the existing animated map
+   background; everything on it resolves through the same tokens as the
+   app, and the one hue the panel spends beyond data is the theme's own
+   green: the headline accent, the live dot, the map's routes. Flat
+   surfaces throughout — no blur, no shadow, the retired glass never
+   comes back for this. */
+.signin-page--split {
+  display: grid;
+  grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  overflow: visible;
+}
+
+.signin-hero {
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.signin-hero__inner {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 680px;
+  padding: 56px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+.signin-live {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.signin-live__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.signin-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.signin-kpi {
+  box-sizing: border-box;
+  padding: 16px 14px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.signin-kpi:last-child { border-right: none; }
+
+.signin-kpi__icon { color: var(--text-dim); }
+
+.signin-kpi__label {
+  margin-top: 8px;
+  /* Two lines tall, always: the longest labels wrap and the values
+     below stay on one line across the strip. Truncating "KILOMETRES
+     DRIVEN" to "KILOMETRES D…" would hide the one word that says what
+     the figure is. */
+  min-height: 3em;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.signin-kpi__value {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.signin-kpi__value small {
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.signin-kpi__delta {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.signin-kpi__delta--bad { color: var(--red); }
+
+.signin-kpi__delta small {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.58rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.signin-eyebrow {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.signin-h1 {
+  margin: 14px 0 12px;
+  font-size: clamp(1.7rem, 1.1rem + 2vw, 2.4rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.signin-h1 span { color: var(--green); }
+
+.signin-desc {
+  margin: 0;
+  max-width: 600px;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.signin-status {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 36px;
+}
+
+.signin-stat strong {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.signin-stat span {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.signin-side {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+}
+
+.signin-page--split .signin-card { max-width: 420px; }
+
+/* Stacked below the width where five KPI cells plus a card stop
+   fitting side by side: hero on top, card below, the hairline moving
+   from the column's edge to the row's. The strip reflows to whatever
+   fits rather than squeezing mono figures it cannot shrink. */
+@media (max-width: 1020px) {
+  .signin-page--split { grid-template-columns: minmax(0, 1fr); }
+  .signin-hero {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .signin-hero__inner { padding: 44px 28px; gap: 36px; }
+  /* 1px gaps over the line-coloured ground draw the cell dividers for
+     free, whatever the wrap (2+2+1, 3+2) — no nth-child arithmetic that
+     only holds for one row count. */
+  .signin-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--line);
+  }
+  .signin-kpi { border-right: none; background: var(--panel); }
+  .signin-side { padding: 40px 20px; }
+}
+
 /* Selected state for the small pill filters. Cream, not a hue — a filter
    chip is chrome, and the colour channel belongs to the trucks.
    (This rule was dead until now: removing the light theme left a

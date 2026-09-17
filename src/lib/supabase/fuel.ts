@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 // it are noise on a page meant to be read at a glance.
 
 export interface FuelTransactionRow {
+  sheetRow: number | null;
   model: string | null;
   truckId: string | null;
   category: "truck" | "vh_service";
@@ -27,59 +28,108 @@ export interface FuelTransactionRow {
   varianceDa: number | null;
 }
 
-// A fixed number of rows rather than a time window. A 24-hour window
-// answers "what happened today", which is a different question from the
-// one this page is asked — the sheet syncs in bursts, so a quiet day
-// showed a nearly empty table and a catch-up sync showed several
-// hundred rows at once. A hundred is a page you can scroll to the end
-// of, and it is the same size whenever you open it.
+// One page of the month, read through fuel_page_transactions (068).
+// The RPC is what makes this page possible at all: it paginates in SQL
+// (PostgREST silently truncates at 1000 rows, and a month at current
+// volume outgrew that), matches drivers through norm_driver_name the
+// way every other fuel surface does, and carries the filtered month's
+// totals alongside the rows so the header costs no second call.
 //
 // Not exported: every export of a "use server" file has to be an async
 // function, so a bare const here fails the build outright.
-const FUEL_ROW_LIMIT = 100;
+const FUEL_PAGE_SIZE = 200;
 
-export async function listRecentFuelTransactions(): Promise<{
-  data: FuelTransactionRow[];
-  error?: string;
-}> {
+export interface FuelPageFilters {
+  driver: string | null;
+  truck: string | null;
+  model: string | null;
+}
+
+export interface FuelPageData {
+  rows: FuelTransactionRow[];
+  totalRows: number;
+  totalLitres: number;
+  totalAmountDa: number;
+}
+
+export async function getFuelPage(params: {
+  from: string;
+  to: string;
+  filters: FuelPageFilters;
+  page: number;
+}): Promise<{ data: FuelPageData | null; error?: string }> {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { data: [], error: "Not authenticated" };
+  if (!userData.user) return { data: null, error: "Not authenticated" };
 
-  const { data, error } = await supabase
-    .from("fuel_transactions")
-    .select(
-      "model, truck_id, category, driver_name, occurred_at, occurred_raw, sheet_row, card_no, station, fuel_type, amount_da, odometer_km, distance_km, litres_filled, variance_da"
-    )
-    // Ordered by position in the sheet, not by occurred_at. The sheet is
-    // append-only, so its last rows are the last logged — and occurred_at
-    // is wrong for every row the sheet wrote month/day (its first 509),
-    // which scattered them across Jan-Dec and sorted the ones that
-    // landed in future months above today. This page was showing 44
-    // fills read as December, 41 as November and 15 as October, and not
-    // one recent one. nullsFirst: false keeps any row synced before
-    // sheet_row existed at the bottom rather than the top.
-    .order("sheet_row", { ascending: false, nullsFirst: false })
-    .limit(FUEL_ROW_LIMIT);
+  const { data, error } = await supabase.rpc("fuel_page_transactions", {
+    p_from: params.from,
+    p_to: params.to,
+    p_driver: params.filters.driver,
+    p_truck: params.filters.truck,
+    p_model: params.filters.model,
+    p_page: params.page,
+    p_page_size: FUEL_PAGE_SIZE,
+  });
+  if (error) return { data: null, error: error.message };
 
-  if (error) return { data: [], error: error.message };
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const first = rows[0] ?? null;
 
   return {
-    data: (data ?? []).map((r) => ({
-      model: r.model as string | null,
-      truckId: r.truck_id as string | null,
-      category: r.category as "truck" | "vh_service",
-      driverName: r.driver_name as string | null,
-      occurredAt: r.occurred_at as string,
-      occurredRaw: (r.occurred_raw as string | null) ?? null,
-      cardNo: r.card_no as string | null,
-      station: r.station as string | null,
-      fuelType: r.fuel_type as string | null,
-      amountDa: Number(r.amount_da),
-      odometerKm: r.odometer_km != null ? Number(r.odometer_km) : null,
-      distanceKm: r.distance_km != null ? Number(r.distance_km) : null,
-      litresFilled: r.litres_filled != null ? Number(r.litres_filled) : null,
-      varianceDa: r.variance_da != null ? Number(r.variance_da) : null,
-    })),
+    data: {
+      rows: rows.map((r) => ({
+        sheetRow: r.sheet_row != null ? Number(r.sheet_row) : null,
+        model: (r.model as string | null) ?? null,
+        truckId: (r.truck_id as string | null) ?? null,
+        category: r.category as "truck" | "vh_service",
+        driverName: (r.driver_name as string | null) ?? null,
+        occurredAt: r.occurred_at as string,
+        occurredRaw: (r.occurred_raw as string | null) ?? null,
+        cardNo: (r.card_no as string | null) ?? null,
+        station: (r.station as string | null) ?? null,
+        fuelType: (r.fuel_type as string | null) ?? null,
+        amountDa: Number(r.amount_da),
+        odometerKm: r.odometer_km != null ? Number(r.odometer_km) : null,
+        distanceKm: r.distance_km != null ? Number(r.distance_km) : null,
+        litresFilled: r.litres_filled != null ? Number(r.litres_filled) : null,
+        varianceDa: r.variance_da != null ? Number(r.variance_da) : null,
+      })),
+      totalRows: Number(first?.total_rows ?? 0),
+      totalLitres: Number(first?.total_litres ?? 0),
+      totalAmountDa: Number(first?.total_amount_da ?? 0),
+    },
+  };
+}
+
+// The pickers' options, scoped to the month on screen — a driver who
+// only filled in August does not belong in a September dropdown.
+export interface FuelPageOptions {
+  drivers: string[];
+  trucks: string[];
+  models: string[];
+}
+
+export async function getFuelPageOptions(params: {
+  from: string;
+  to: string;
+}): Promise<{ data: FuelPageOptions | null; error?: string }> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { data: null, error: "Not authenticated" };
+
+  const { data, error } = await supabase.rpc("fuel_page_options", {
+    p_from: params.from,
+    p_to: params.to,
+  });
+  if (error) return { data: null, error: error.message };
+
+  const o = (data ?? {}) as Record<string, unknown>;
+  return {
+    data: {
+      drivers: (o.drivers as string[]) ?? [],
+      trucks: (o.trucks as string[]) ?? [],
+      models: (o.models as string[]) ?? [],
+    },
   };
 }

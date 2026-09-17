@@ -567,21 +567,19 @@ input::placeholder, textarea::placeholder {
    strapline, then the tabs go to icons and the wordmark goes with them.
    Nothing is removed — the label stays in the accessibility tree and
    returns as a tooltip. */
-/* Three explicit columns rather than a flex row, so the tabs sit in the
-   middle of the header instead of wherever the two side groups leave
-   them. space-between could not do this: the wordmark and the stats
-   group are different widths, so the strip always sat off-centre, and
-   under 1399px — where the wordmark is hidden entirely — it collapsed
-   flush against the left edge.
+/* Three explicit columns, LEFT-PACKED (2026-09-17, owner's call): the
+   tabs sit directly after the brand, and the language/profile group
+   takes the right edge. They used to be 1fr auto 1fr with the tabs
+   centred — on a wide screen all the slack collected in column one,
+   a dead gap between the wordmark and "Dashboard" the owner circled.
 
-   The columns are assigned by hand for that same reason. Hiding .brand
-   removes it from the grid, and with automatic placement the tabs would
-   simply slide up into the empty first column and be left-aligned
-   again; pinned to column 2, they stay centred whether or not the
-   wordmark is drawn. */
+   The columns stay assigned by hand rather than left to automatic
+   placement: hiding .brand removes it from the grid, and with auto
+   flow the tabs would slide up into the empty first column. Pinned,
+   they cannot move. */
 .topbar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
   gap: 12px;
   padding: 11px 20px;

@@ -3724,6 +3724,10 @@ html[dir="rtl"] table { text-align: right; }
   color: var(--text);
 }
 
+/* "Prism fleet" rides the same green as the slogan's second half —
+   the greeting and the promise colour-matched, owner's call. */
+.signin-welcome span { color: var(--green); }
+
 .signin-kpis {
   display: grid;
   /* Detached mini-cards with air between them, never an attached strip:

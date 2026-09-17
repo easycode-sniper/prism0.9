@@ -134,7 +134,9 @@ export default function LoginPage() {
             LIVE · DZ
           </p>
 
-          <p className="signin-welcome">{t("Welcome back")}</p>
+          <p className="signin-welcome">
+            {t("Welcome back to")} <span>Prism fleet</span>
+          </p>
 
           <div className="signin-kpis">
             {HERO_KPIS.map((k, i) => (
@@ -187,7 +189,7 @@ export default function LoginPage() {
 
         <span className="signin-mark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/prism-mark.svg" alt="" width={28} height={28} />
+          <img src="/prism-mark.svg" alt="" width={44} height={44} />
         </span>
 
         {/* Prism is a name, not copy: it reads the same in every

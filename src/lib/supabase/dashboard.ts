@@ -312,12 +312,12 @@ async function readDashboardSeries(
   // with 2020-2022 — three years of history and not one recent day on a
   // dashboard about now.
   //
-  // SCOPED, the km column changes source — see migration 060. Fleet-wide
-  // it is telemetry from fleet_day_metrics, real distance per calendar
-  // day; for one truck that table has nothing to offer, so km becomes
-  // the fuel sheet's distance BETWEEN FILLS, credited to the later
-  // fill's day. The page relabels the chart rather than letting it read
-  // as the fleet chart with a filter on it.
+  // The km column reads the fuel sheet's distance BETWEEN FILLS in every
+  // scope since migration 067 — credited to the later fill's day, so the
+  // chart's columns sum exactly to the "Kilometres driven" scorecard. It
+  // used to be telemetry fleet-wide (fleet_day_metrics) and sheet scoped,
+  // until the owner met the seam: one day, 23,419 on the chart against
+  // 12,899 on the scorecard. The scorecard won.
   const { driver, truck } = scopeArgs(scope);
   const { data, error } = await supabase.rpc("dashboard_daily_series", {
     p_from: range.from,

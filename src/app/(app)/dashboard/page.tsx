@@ -742,15 +742,6 @@ export default function DashboardPage() {
 
   const labels = (series?.km ?? []).map((p) => axisLabel(p.day));
 
-  // The first day that actually carries a telemetry reading, but only
-  // when the range reaches back past it — otherwise there is no gap on
-  // screen to explain and the sentence would be noise.
-  const kmGapDay = useMemo(() => {
-    const km = series?.km;
-    if (!km || km.length === 0 || km[0].value != null) return null;
-    return km.find((p) => p.value != null)?.day ?? null;
-  }, [series]);
-
   // The same sentence for deliveries, and for the same reason: client
   // sites were not logged at all before runSiteZoneCheck shipped, so the
   // early days of a long range are a gap rather than a fleet that
@@ -1094,40 +1085,25 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div style={{ minWidth: 0 }}>
-                {/* THE CHART CHANGES MEANING WHEN SCOPED, so it changes
-                    its name. Fleet-wide it is telemetry: real distance
-                    driven, per calendar day. fleet_day_metrics has no
-                    per-truck breakdown and cannot be given one — it
-                    derives from fleet_snapshots, which prunes after
-                    seven days — so scoped, km becomes the fuel sheet's
-                    distance BETWEEN FILLS, credited to the later fill's
-                    day. Same axis, different question; calling both
-                    "Distance per day" would be the quiet kind of wrong.
-                    Owner's call, 2026-09-10. Migration 060 has the
-                    reasoning in full. */}
-                <div className="dash-panel__title">
-                  {isFleet(scope) ? t("Distance per day") : t("Distance between fills")}
-                </div>
+                {/* ONE MEANING IN EVERY SCOPE now, so one name. The km
+                    column used to switch source with the scope —
+                    telemetry fleet-wide, the sheet scoped — and the
+                    owner met the seam on 2026-09-17: a day where the
+                    chart said 23,419 km and the scorecard said 12,899.
+                    The scorecard won (migration 067): km is the sheet's
+                    distance between fills everywhere, so the columns
+                    always sum to "Kilometres driven" over the range. */}
+                <div className="dash-panel__title">{t("Distance between fills")}</div>
                 <div className="dash-panel__sub">
-                  {/* Today is always partial — at 02:00 it is a
-                      hundredth of a day's distance, which draws as a
-                      dive to the floor. Said plainly rather than hidden
-                      by dropping the point: the current day is the one
-                      people look for. Only worth saying when the range
-                      actually reaches today. */}
-                  {isFleet(scope)
-                    ? t("Fleet kilometres, staff cars included.")
-                    : t("Kilometres covered between two fills, plotted on the day of the later fill — not distance driven that day.")}
-                  {isFleet(scope) && (range.to == null || range.to >= opsToday()) ? " " + t("Today is still counting.") : ""}
-                  {/* A break in the line is "not recorded", never "zero
-                      km driven". This panel reads fleet_day_metrics,
-                      which pg_cron began writing on 2026-08-17 — earlier
-                      days have no telemetry and cannot get any, since
-                      fleet_snapshots is pruned after seven days. Derived
-                      from the series rather than hardcoded, so it stops
-                      appearing on its own once the range starts inside
-                      the recorded period. */}
-                  {isFleet(scope) && kmGapDay ? " " + t("No fleet tracking before {day} — those days are a gap, not zero.", { day: kmGapDay }) : ""}
+                  {/* Today is always partial — fills can still arrive
+                      for it (now within seconds of the sheet changing),
+                      and a fill logged today carries the whole distance
+                      since that truck's previous fill. Said plainly
+                      rather than hidden by dropping the point: the
+                      current day is the one people look for. Only worth
+                      saying when the range actually reaches today. */}
+                  {t("Kilometres covered between two fills, plotted on the day of the later fill — not distance driven that day.")}
+                  {range.to == null || range.to >= opsToday() ? " " + t("Today is still counting.") : ""}
                 </div>
               </div>
             </header>

@@ -3,10 +3,8 @@
 // WHY THIS EXISTS. The owner, 2026-09-14: "I want fluid movement, it
 // literally takes forever to go from dispatch to dashboard… I figured
 // since it syncs every 15 min why does it need to load every time you
-// look at it". He is right. The figures on that page come from a fuel
-// sheet synced every fifteen minutes and a metrics table refreshed every
-// five; re-asking for them the instant someone navigates back buys
-// nothing and costs the whole wait.
+// look at it". He is right. Re-asking for unchanged figures the instant
+// someone navigates back buys nothing and costs the whole wait.
 //
 // So the page keeps its last answers and paints them immediately, then
 // refreshes behind the scenes. Stale-while-revalidate, in about forty
@@ -27,11 +25,12 @@
 /** How long an entry may be served without even checking for a newer
  *  one. Under this, a revisit costs no network at all.
  *
- *  Sixty seconds is well inside what the data can actually change in:
- *  the fuel sheet syncs every fifteen minutes and fleet_day_metrics
- *  every five, so nothing served from here is staler than the pipeline
- *  behind it already was. Past this the entry is still shown at once —
- *  it is refreshed underneath, not waited for. */
+ *  Sixty seconds bounds how stale a figure can be when the sheet has
+ *  NOT changed. When it has, the fuel_sync_signals Realtime event tells
+ *  the dashboard and the whole cache is cleared — so this window is the
+ *  quiet-period fast path, not a staleness guarantee. Past it the entry
+ *  is still shown at once — it is refreshed underneath, not waited
+ *  for. */
 export const FRESH_MS = 60_000;
 
 /** Entries kept before the oldest is dropped. A range and a scope make a

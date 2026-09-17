@@ -87,8 +87,41 @@ A second job, `dispatch_fuel_sync()`, runs every 15 minutes against
 `/api/fuel-sync` with the same nonce scheme (`fuel_sync_nonces`). It reads the
 gas-consumption Google Sheet and full-refreshes `fuel_transactions` through
 `refresh_fuel_transactions(jsonb)`. Because it is a full refresh, a correction
-made in the sheet propagates to every existing row within 15 minutes with no
+made in the sheet propagates to every existing row on the next sync with no
 data migration.
+
+### Real-time fuel sync
+
+The 15-minute cron is the **backstop**. The primary path is push: an Apps
+Script bound to the sheet (`scripts/google-apps-script/fuel-push.gs`) fires on
+every change and calls the same `/api/fuel-sync` with its own credential
+(`FUEL_SYNC_SECRET`), so an edit reaches the database in seconds. Both paths
+run the identical full refresh; the route coalesces a burst of pushes into one
+trailing run, reading the sheet as it stands when that run fires, so nothing
+is lost by waiting.
+
+After every successful refresh the route touches `fuel_sync_signals` — a
+one-row table (migration `066`) in the Realtime publication — so an open
+dashboard hears one small "the sheet changed" event instead of watching
+`fuel_transactions` be rewritten row by row, and re-fetches its aggregates
+immediately. End to end: edit the sheet, the dashboard updates in roughly
+5–10 seconds, no reload.
+
+**Setup** (the sheet's owner does this once):
+
+1. In the sheet: **Extensions → Apps Script**, paste
+   `scripts/google-apps-script/fuel-push.gs`.
+2. **Project Settings → Script Properties**, add:
+   - `FUEL_SYNC_URL` — `https://prismfleet.vercel.app/api/fuel-sync`
+   - `FUEL_SYNC_SECRET` — the value of `FUEL_SYNC_SECRET` from the
+     project's `.env.local` / Vercel environment
+3. **Triggers → Add Trigger** → `onFuelSheetChange`, event source
+   "From spreadsheet", event type "On change". It must be installable —
+   a simple trigger cannot call `UrlFetchApp`.
+
+Without the secret, pushes fail with 401 and the sheet quietly falls back
+to the 15-minute cadence; the Apps Script **Executions log** shows the
+rejection verbatim.
 
 Current `cron.job` schedule:
 
@@ -96,7 +129,7 @@ Current `cron.job` schedule:
 |---|---|---|
 | `fleet-tick` | `* * * * *` | one monitoring cycle |
 | `fleet-day-metrics` | `*/5 * * * *` | rolls up `fleet_day_metrics` |
-| `fuel-sync` | `*/15 * * * *` | mirrors the fuel sheet |
+| `fuel-sync` | `*/15 * * * *` | mirrors the fuel sheet (backstop; the sheet also pushes on change) |
 | `prune-fleet-snapshots` | `17 4 * * *` | drops snapshots older than 7 days |
 | `prune-notifications` | `23 4 * * *` | drops notifications older than 40 days |
 
@@ -180,6 +213,7 @@ cp .env.local.example .env.local
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | browser + server, RLS-scoped |
 | `SUPABASE_SERVICE_ROLE_KEY` | server only — admin user management, scheduled jobs |
 | `CRON_SECRET` | server only — fallback auth for `/api/tick` and `/api/fuel-sync` |
+| `FUEL_SYNC_SECRET` | server only — auth for the sheet's Apps Script push trigger (`/api/fuel-sync`) |
 | `NEXT_PUBLIC_CARTO_BASEMAP_KEY` | browser — Leaflet basemap tiles |
 | `GOOGLE_SHEETS_CLIENT_EMAIL` | server only — fuel sheet sync |
 | `GOOGLE_SHEETS_PRIVATE_KEY` | server only — fuel sheet sync |
@@ -202,7 +236,7 @@ Two notes that cost real time when missed:
 ### 3. Run the migrations
 
 Apply `supabase/migrations/*.sql` **in numeric order** via the Supabase SQL
-editor or the CLI. There are 36; the ones worth knowing about:
+editor or the CLI. There are 66; the ones worth knowing about:
 
 | File | What it does |
 |---|---|
@@ -225,6 +259,7 @@ editor or the CLI. There are 36; the ones worth knowing about:
 | `038` | Drops staff vehicles from the speeding leaderboard |
 | `039` | `factory_loading` zone kind, `at_loading`, and the `zone_visits` log |
 | `040` | Queue time — pairs each loading visit with the waiting visit enclosing it |
+| `066` | `fuel_sync_signals` — the one-row Realtime event the dashboard hears on every sync |
 | `041` | `factory_zone_totals()` — the six Rapport Usine figures, in Postgres |
 
 When adding a notification kind, update the `notifications_kind_check`
@@ -372,10 +407,6 @@ English only, matching the original app's scope.
 - **`fleet_trucks.category` has no UI.** A vehicle can only be flagged `staff`
   by hand in SQL, which is why a staff car raised parc arrivals for weeks
   before anyone noticed.
-- **An already-open tab does not refresh itself.** The fuel sheet syncs
-  every 15 minutes, but `/dashboard` is a client component that fetches on
-  mount and never re-polls, so end to end is up to 15 minutes *plus a page
-  reload*. The live pages are unaffected — `FleetProvider` is on realtime.
 - **No test framework.** Two runnable check scripts exist —
   `scripts/check-fuel-dates.mts` and `scripts/check-optimistic-overlay.mts`
   (`node --experimental-strip-types scripts/<name>.mts`) — and everything

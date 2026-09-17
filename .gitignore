@@ -38,3 +38,8 @@ tsconfig.tsbuildinfo
 
 # Site-test output (screenshots + report.json) from scripts/site-test.mts
 .site-test/
+.vercel
+.env*
+
+# Supabase CLI link state
+supabase/.temp/

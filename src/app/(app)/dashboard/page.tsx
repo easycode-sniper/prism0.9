@@ -36,6 +36,7 @@ import {
   type TruckVariance,
   type DriverSpeeding,
 } from "@/lib/supabase/dashboard";
+import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import {
   CHART_COLORS,
@@ -433,6 +434,45 @@ export default function DashboardPage() {
     window.history.replaceState(null, "", url);
   }, [scope]);
 
+  // ── The sheet changed while you were looking at it ──
+  //
+  // The sync route touches the one-row fuel_sync_signals table (migration
+  // 066) after every successful refresh — including the 15-minute cron —
+  // so this page hears one small Realtime event per sync instead of the
+  // whole fuel_transactions table being rewritten row by row. On the
+  // signal: drop every cached bundle, because the change is global and
+  // not scoped to the range on screen, then re-run the load effect below
+  // by bumping fuelVersion. The figures already on screen stay painted
+  // while the refresh is in flight — apply() replaces them, never blanks
+  // them.
+  const [supabase] = useState(() => createClient());
+  const [fuelVersion, setFuelVersion] = useState(0);
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("dashboard-fuel-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "fuel_sync_signals" }, () => {
+        // Debounced, because trailing pushes and the cron can land a
+        // second apart; one refetch 800ms after the last signal covers
+        // them all.
+        if (reloadTimer.current) clearTimeout(reloadTimer.current);
+        reloadTimer.current = setTimeout(() => {
+          reloadTimer.current = null;
+          bundles.clear();
+          setFuelVersion((v) => v + 1);
+        }, 800);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+      if (reloadTimer.current) {
+        clearTimeout(reloadTimer.current);
+        reloadTimer.current = null;
+      }
+    };
+  }, [supabase]);
+
   // Every historical panel reads the same range, in ONE effect. Five
   // separate effects on the same dependency would fire five renders as
   // they landed and let the page sit briefly in a state where the
@@ -489,13 +529,15 @@ export default function DashboardPage() {
 
     const key = bundleKey(range, scope);
     const hit = bundles.get(key, Date.now());
-    if (hit) {
-      apply(hit.value);
-      // Fresh enough to stand on its own — no request at all. This is
-      // the case the owner asked for: the sheet syncs every fifteen
-      // minutes, so re-asking the moment someone navigates back buys
-      // nothing and costs the whole wait.
-      if (isFresh(hit.ageMs)) return;
+      if (hit) {
+        apply(hit.value);
+        // Fresh enough to stand on its own — no request at all. This is
+        // the case the owner asked for: between syncs, re-asking the
+        // moment someone navigates back buys nothing and costs the whole
+        // wait. When the sheet DOES change, the fuel_sync_signals
+        // subscription above clears this cache, so the bump to
+        // fuelVersion re-runs this effect against an empty one.
+        if (isFresh(hit.ageMs)) return;
     } else {
       // Nothing to show yet, so clear a stale error rather than leaving
       // the last failure sitting over a load that has not failed.
@@ -534,7 +576,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [range, scope]);
+  }, [range, scope, fuelVersion]);
 
   /**
    * What the deltas are measured against, in the reader's words.

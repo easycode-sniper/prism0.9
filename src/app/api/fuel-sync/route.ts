@@ -1,17 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { fetchSheetRows } from "@/lib/fuel/googleSheets";
 import { dateCellOf, parseFuelRow, parseSheetDateTime, resolveOccurredAt, type FuelTransaction } from "@/lib/fuel/parse";
 
-// Scheduled fuel-sheet sync. Called every 15 minutes by pg_cron + pg_net
-// from Supabase — same mechanism as /api/tick, and the same reason: no
-// Vercel cron, no plan change.
+// Fuel-sheet sync. Two ways in:
 //
-// This route is a public URL, so the nonce is the only thing standing
-// between the internet and an unauthenticated trigger. Middleware does
-// not protect it (its matcher would redirect an unauthenticated caller
-// to /login), so the check has to be here — identical to /api/tick.
+// 1. pg_cron + pg_net every 15 minutes (x-fuel-sync-nonce) — the
+//    backstop, same mechanism as /api/tick, and the same reason: no
+//    Vercel cron, no plan change.
+// 2. The Google Apps Script onChange trigger on the sheet itself
+//    (x-fuel-sync-secret) — the primary path, which makes an edit land
+//    in seconds. Google can only say "the sheet changed", so the
+//    response is always the same idempotent full refresh.
+//
+// This route is a public URL, so the credential is the only thing
+// standing between the internet and an unauthenticated trigger.
+// Middleware does not protect it (its matcher would redirect an
+// unauthenticated caller to /login), so the check has to be here —
+// identical to /api/tick.
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -55,6 +62,44 @@ function matchesSecret(request: NextRequest): boolean {
   return timingSafeEqual(a, b);
 }
 
+// The Apps Script push trigger's own credential. Separate from
+// CRON_SECRET so the sheet script can be granted (and revoked) without
+// touching the cron fallback, and so its scope on Vercel can be decided
+// per environment — CRON_SECRET today only exists on Preview.
+function matchesFuelPushSecret(request: NextRequest): boolean {
+  const secret = process.env.FUEL_SYNC_SECRET;
+  if (!secret) return false;
+
+  const provided =
+    request.headers.get("x-fuel-sync-secret") ??
+    request.headers.get("authorization")?.replace(/^Bearer /, "") ??
+    "";
+  if (!provided) return false;
+
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+// ── Push coalescing ──────────────────────────────────────────────
+//
+// The Apps Script fires on every edit, and the owner sometimes pastes a
+// batch of rows — several change events seconds apart, each of which
+// would otherwise read the whole sheet and rewrite the whole table.
+//
+// So: the first call runs at once; calls inside the quiet window answer
+// immediately ("deferred") and schedule ONE trailing run that fires
+// after the window closes. The trailing run reads the sheet as it stands
+// then, so coalescing N pushes into it loses nothing — its snapshot
+// covers every row of the burst. Worst case across serverless instances
+// is two refreshes running close together, which is harmless: the
+// refresh is idempotent.
+const MIN_RUN_INTERVAL_MS = 30_000;
+
+let lastRunAt = 0;
+let trailingScheduled = false;
+
 const SPREADSHEET_ID = "1UI6xFOLcCouej53DtUYSg3X9NHw1-mgepKHw6AIIznY";
 const RANGE = "gas consumption!A2:Q";
 
@@ -93,11 +138,7 @@ function toDbRow(t: FuelTransaction) {
   };
 }
 
-async function handle(request: NextRequest) {
-  if (!(await redeemedNonce(request)) && !matchesSecret(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+async function runSync(): Promise<NextResponse> {
   // Phase timings, logged as we go rather than only at the end. A
   // serverless timeout kills the process without running any catch
   // block, so a function that only logs on success tells you nothing
@@ -190,6 +231,21 @@ async function handle(request: NextRequest) {
     if (error) throw new Error(`refresh_fuel_transactions failed: ${error.message}`);
 
     console.log(`[fuel-sync] synced ${refreshedCount} transactions (${skipped} unparseable rows skipped) in ${since()}`);
+
+    // Touch the one-row signal so an open dashboard hears the change as
+    // a single Realtime event rather than subscribing to this table
+    // being rewritten row by row. Best-effort on purpose: the refresh
+    // has already committed, and a failed touch must not report a
+    // successful sync as failed — the 15-minute cron covers the gap.
+    const { error: signalError } = await supabase
+      .from("fuel_sync_signals")
+      .upsert({
+        id: 1,
+        synced_at: new Date().toISOString(),
+        synced_count: Number(refreshedCount ?? 0),
+      });
+    if (signalError) console.warn("[fuel-sync] signal touch failed:", signalError.message);
+
     return NextResponse.json({
       ok: true,
       synced: refreshedCount,
@@ -202,6 +258,35 @@ async function handle(request: NextRequest) {
     console.error(`[fuel-sync] failed at ${since()}:`, err);
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
   }
+}
+
+async function handle(request: NextRequest) {
+  if (!(await redeemedNonce(request)) && !matchesSecret(request) && !matchesFuelPushSecret(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const now = Date.now();
+  const sinceLast = now - lastRunAt;
+  if (lastRunAt === 0 || sinceLast >= MIN_RUN_INTERVAL_MS) {
+    lastRunAt = now;
+    return runSync();
+  }
+
+  // Inside the quiet window: acknowledge at once and let one trailing
+  // run — which reads the sheet as it stands when it fires — pick up
+  // everything this burst changed.
+  if (!trailingScheduled) {
+    trailingScheduled = true;
+    const waitMs = MIN_RUN_INTERVAL_MS - sinceLast;
+    console.log(`[fuel-sync] deferred, trailing run in ${waitMs}ms`);
+    after(async () => {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      trailingScheduled = false;
+      lastRunAt = Date.now();
+      await runSync();
+    });
+  }
+  return NextResponse.json({ ok: true, deferred: true });
 }
 
 export async function POST(request: NextRequest) {

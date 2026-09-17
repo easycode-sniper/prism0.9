@@ -20,16 +20,13 @@ import {
 import { translateNotificationTitle, translateNotificationMessage } from "@/lib/notifications/translateText";
 
 /**
- * How many rows a group shows before it asks to be expanded.
- *
- * Grouping exists so the four kinds of work can be seen at once. Without
- * a cap the first group swallows the page: parc arrivals are the most
- * common alert in the system — 110 of 204 rows today — so "Factory"
- * sat about ten thousand pixels below "Parc" and the feed read as
- * nothing but parc entries. Six is enough to see what a group is doing
- * and short enough that all four headings share one screen.
+ * "All" is the timeline: every notification in one chronological stream,
+ * newest first — no destination sections, no preview cap. The owner read
+ * the old four-stacked-sections layout and wanted the day back in order
+ * (2026-09-17). The chips keep the grouping for whoever is working one
+ * kind of alert; pressing a chip means "show me this list", so it shows
+ * its whole slice.
  */
-const GROUP_PREVIEW = 6;
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
@@ -38,15 +35,6 @@ export default function NotificationsPage() {
   const { notifications, optimistic } = useFleet();
   const [markError, setMarkError] = useState<string | null>(null);
   const [only, setOnly] = useState<NotificationGroup | "all">("all");
-  const [expanded, setExpanded] = useState<Set<NotificationGroup>>(new Set());
-
-  const toggleExpanded = (g: NotificationGroup) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(g)) next.delete(g);
-      else next.add(g);
-      return next;
-    });
 
   // Optimistic, and deliberately WITHOUT a refresh afterwards. This used
   // to cost three server round trips to flip one boolean: the write, an
@@ -79,10 +67,12 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  // Grouped by where the truck is, not by severity: a parc entry, a
-  // factory load and a client delivery are different jobs to different
-  // people, and mixing them into one stream is what made the feed hard
-  // to scan. Order within a group stays newest-first, as it arrives.
+  // The grouping now exists only to power the chips' counts and the
+  // per-group slices. "All" itself is deliberately NOT these groups: it
+  // is one chronological stream, newest first — the four stacked
+  // sections, with parc arrivals swallowing the page, were what the
+  // owner called out. Within any slice the order stays newest-first, as
+  // it arrives.
   const grouped = useMemo(() => {
     const map = new Map<NotificationGroup, NotificationRecord[]>();
     for (const g of GROUP_ORDER) map.set(g, []);
@@ -90,9 +80,16 @@ export default function NotificationsPage() {
     return map;
   }, [notifications]);
 
-  const visibleGroups = GROUP_ORDER.filter(
-    (g) => (only === "all" || only === g) && (grouped.get(g)?.length ?? 0) > 0
-  );
+  // The one list the page renders: everything ("all") or one group,
+  // always chronological. `notifications` arrives newest-first from the
+  // provider, but the sort is written out anyway so the page cannot
+  // silently depend on that ordering surviving a refactor elsewhere.
+  const visible = useMemo(() => {
+    const list = only === "all" ? notifications : grouped.get(only) ?? [];
+    return [...list].sort((a, b) =>
+      a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0
+    );
+  }, [notifications, grouped, only]);
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -152,46 +149,16 @@ export default function NotificationsPage() {
         <p className="mt-8 text-center text-sm t-dim">
           Nothing in the last {NOTIFICATION_FEED_HOURS} hours.
         </p>
-      ) : visibleGroups.length === 0 ? (
+      ) : visible.length === 0 ? (
         <p className="mt-8 text-center text-sm t-dim">Nothing in this group.</p>
       ) : (
-        <div className="mt-6 space-y-6">
-          {visibleGroups.map((g) => {
-            const items = grouped.get(g)!;
-            const unread = items.filter((n) => !n.read).length;
-            // Filtering to a group with the chip IS asking for that group,
-            // so it opens fully without a second click.
-            const isExpanded = only === g || expanded.has(g);
-            const shown = isExpanded ? items : items.slice(0, GROUP_PREVIEW);
-            const hidden = items.length - shown.length;
-            return (
-              <section key={g}>
-                <div className="mb-2 flex items-baseline gap-2">
-                  <h2 className="text-xs font-semibold uppercase tracking-wider t-dim">
-                    {GROUP_LABEL[g]}
-                  </h2>
-                  <span className="font-mono text-xs t-faint">
-                    {items.length}
-                    {unread > 0 ? ` · ${unread} new` : ""}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {shown.map((n) => (
-                    <NotificationRow key={n.id} n={n} onMarkRead={handleMarkRead} />
-                  ))}
-                </div>
-                {hidden > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => toggleExpanded(g)}
-                    className="notif-more"
-                  >
-                    {isExpanded ? "Show fewer" : `Show all ${items.length}`}
-                  </button>
-                )}
-              </section>
-            );
-          })}
+        // One flat stream — chronological under "All", the chosen group's
+        // own list under a chip. The chips above carry the counts and the
+        // unread dots, so the rows need no section furniture around them.
+        <div className="mt-6 space-y-2">
+          {visible.map((n) => (
+            <NotificationRow key={n.id} n={n} onMarkRead={handleMarkRead} />
+          ))}
         </div>
       )}
     </div>

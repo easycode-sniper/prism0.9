@@ -101,7 +101,13 @@ let lastRunAt = 0;
 let trailingScheduled = false;
 
 const SPREADSHEET_ID = "1UI6xFOLcCouej53DtUYSg3X9NHw1-mgepKHw6AIIznY";
-const RANGE = "gas consumption!A2:Q";
+// A2:Z rather than ending at the last used column (Q when this was
+// written): the parser reads positionally, and a column the owner adds
+// later pushes Variance right. Ending the range at the current last
+// column would put a future Variance OUTSIDE the fetch, where it reads
+// as null — the silent kind of wrong. Z leaves room for several more
+// columns before anyone has to touch this again.
+const RANGE = "gas consumption!A2:Z";
 
 /**
  * FuelTransaction is camelCase, as TypeScript should be; the table and

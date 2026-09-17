@@ -171,14 +171,22 @@ const COL = {
   // (see the note above) and both re-derived below under their real
   // names, so they stay unread.
   //
-  // 15 IS READ, as of 2026-09-09. It is the sheet's own Variance, and
-  // the fuel desk works from that number, so the app has to show that
-  // number. See varianceDa below for what changed and why.
-  variance: 15,
-  // 16 is "VH SERVICE": a copy of Amount Filled, present only on Vh
+  // 15 is "L/100KM", added 2026-09-17: litres per 100 km, pasted in by
+  // the owner from the original sheet his coworkers keep. Unread, like
+  // 13 and 14 — this app derives consumption itself from litres_filled
+  // and distance_km (the dashboard's L/100km figures), so a hand-maintained
+  // copy cannot drift from what the screens say.
+  //
+  // 16 IS READ, as of 2026-09-09. It is the sheet's own Variance —
+  // pushed from column 15 to 16 the day L/100KM was inserted before it —
+  // and the fuel desk works from that number, so the app has to show
+  // that number. See varianceDa below for what changed and why.
+  //
+  // 17 is "VH SERVICE": a copy of Amount Filled, present only on Vh
   // Service rows. The owner added it so he can total service-vehicle
   // spend without filtering; it carries nothing column 9 does not
   // already give us, so it stays unread.
+  variance: 16,
 } as const;
 
 /** The Date & Time cell of a raw sheet row. Exported so the sync can

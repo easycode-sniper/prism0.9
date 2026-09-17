@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Users, Building2, Fuel, Wrench, Bell, Settings} from "lucide-react";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { useFleet } from "@/components/providers/FleetProvider";
+import { NavBar, type TubelightNavItem } from "@/components/ui/tubelight-navbar";
 
 const NAV_ITEMS: { href: string; key: string; icon: typeof LayoutDashboard }[] = [
   { href: "/dashboard", key: "nav.dashboard", icon: LayoutDashboard },
@@ -20,8 +21,15 @@ const NAV_ITEMS: { href: string; key: string; icon: typeof LayoutDashboard }[] =
 ];
 
 export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
-  const pathname = usePathname();
   const { t } = useTranslation();
+  const items: TubelightNavItem[] = NAV_ITEMS.map(({ href, key, icon }) => ({
+    name: t(key),
+    url: href,
+    icon,
+  }));
+  if (isAdmin) {
+    items.push({ name: t("nav.admin"), url: "/admin", icon: Settings });
+  }
 
   return (
     <>
@@ -49,31 +57,16 @@ export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {
         </div>
       </Link>
 
-      <nav id="tabs" className="seg">
-        {NAV_ITEMS.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            title={t(item.key)}
-            className={`seg-item${pathname === item.href ? " is-active" : ""}`}
-            aria-current={pathname === item.href ? "page" : undefined}
-          >
-            <item.icon size={15} strokeWidth={2} />
-            <span className="nav-label">{t(item.key)}</span>
-          </Link>
-        ))}
-        {isAdmin && (
-          <Link
-            href="/admin"
-            title={t("nav.admin")}
-            className={`seg-item${pathname.startsWith("/admin") ? " is-active" : ""}`}
-            aria-current={pathname.startsWith("/admin") ? "page" : undefined}
-          >
-            <Settings size={15} strokeWidth={2} />
-            <span className="nav-label">{t("nav.admin")}</span>
-          </Link>
-        )}
-      </nav>
+      {/* The tubelight pill replaces the old segment strip. Labels are
+          gone — eleven translated names never fit a centred pill on a
+          common screen — so each tab's name rides its title and
+          aria-label. Under md the pill detaches to a fixed bottom bar
+          (see the component), which is why #tabs must not hide it: the
+          wrapper stays display:contents on phones so the fixed pill
+          escapes the topbar entirely. */}
+      <div id="tabs">
+        <NavBar items={items} />
+      </div>
     </>
   );
 }

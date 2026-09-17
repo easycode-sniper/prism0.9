@@ -760,26 +760,15 @@ input::placeholder, textarea::placeholder {
    short of the truth and 1600px was clipping. At full size the strip
    now needs 1102px and the header leaves it 1052px at 1600, so the
    first step starts at 1699 rather than 1599. */
+/* The pill is icons-only (the tubelight redesign, 2026-09-17), so the
+   per-breakpoint label-shrink tiers #tabs used to have are gone —
+   eleven icons at one fixed size need ~510px and do not care what the
+   viewport is. The stats group still tightens. */
 @media (max-width: 1699px) {
-  #tabs .seg-item { padding: 6px 10px; font-size: 0.78rem; gap: 5px; }
   #topbar-stats { gap: 10px; }
 }
 
-@media (max-width: 1479px) {
-  #tabs .seg-item { padding: 5px 8px; font-size: 0.72rem; gap: 4px; }
-}
-
-/* The tabs keep both the icon and the name here; the room comes from
-   the two things in the header that carry the least. Measured at 960px
-   against 894px of usable header: icon and label together need 1015px,
-   903px once the fleet count goes, 875px once the wordmark goes with
-   it. Nothing else in the row gets close to covering a 121px gap.
-
-   The count is repeated directly below — the operations strip carries
-   "Active runs" two rows down — and the mark is pure identity on a
-   screen where you already know which app you are in. */
 @media (max-width: 1399px) {
-  #tabs .seg-item { padding: 5px 7px; font-size: 0.68rem; gap: 4px; }
   #topbar-stats .seg--sm .seg-item { padding: 3px 6px; font-size: 0.66rem; }
 
   .topbar-active { display: none; }
@@ -798,20 +787,13 @@ input::placeholder, textarea::placeholder {
   .brand-text { display: none; }
 }
 
-/* THE TABS TAKE A ROW OF THEIR OWN, AND WRAP. Below about 1180 the
-   labelled strip needs 832px and the first row has less than that, and
-   every tier above has already spent what padding and type had to give.
-   The next saving would be the labels — icons alone fit to 700px — but
-   the owner ruled that out on 2026-09-07: an icon without its word is
-   not a tab you can find, and a header that fits by becoming unreadable
-   has not been fixed. DO NOT re-introduce an icon-only tier.
-
-   So the width comes from the layout instead. The strip moves to its own
-   full-width row and is allowed to wrap onto a second and third, which
-   keeps every label legible and — the actual ask — means nothing is ever
-   reached by scrolling sideways. The header grows taller on a narrow
-   screen, which is the right thing to spend: vertical space is what a
-   phone has. */
+/* THE TABS ARE AN ICON PILL NOW. The labelled strip this tier used to
+   manage — measured to the pixel, wrapped, and explicitly forbidden
+   from going icon-only on 2026-09-07 — was replaced on 2026-09-17 by
+   the tubelight pill, icons-only everywhere, by the owner's choice.
+   Eleven icons need ~510px: from 768 to 1179 the pill takes its own
+   centred row under brand and stats; under 768 it detaches to a fixed
+   bottom bar and this grid slot collapses. */
 @media (max-width: 1179px) {
   .topbar {
     grid-template-columns: auto 1fr;
@@ -821,23 +803,21 @@ input::placeholder, textarea::placeholder {
   .topbar > .brand { grid-column: 1; grid-row: 1; }
   .topbar > #topbar-stats { grid-column: 2; grid-row: 1; justify-self: end; }
 
-  /* Both columns, so the strip is measured against the whole header
-     rather than against what the first row happened to leave over. */
   .topbar > #tabs {
     grid-column: 1 / -1;
     grid-row: 2;
-    justify-self: stretch;
+    justify-self: center;
   }
+}
 
-  #tabs {
-    flex-wrap: wrap;
-    justify-content: center;
-    row-gap: 2px;
-    /* The pill shape is for a single line. Two or three rows of tabs in
-       a 999px-radius capsule pinches the corner items; a panel radius
-       reads as the block it has become. */
-    border-radius: var(--r-md);
-  }
+/* Phones: the pill is a bottom bar, so the page scroller keeps its
+   content clear of it — and the now-empty #tabs slot must not add a
+   9px ghost row: display:contents removes the wrapper's box while the
+   fixed pill inside it stays exactly where it is. */
+@media (max-width: 767px) {
+  #app-shell main { padding-bottom: 84px; }
+
+  .topbar > #tabs { display: contents; }
 }
 
 /* Phones: the shell's own margins are the cheapest width to give back to

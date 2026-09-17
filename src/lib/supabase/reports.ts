@@ -356,10 +356,13 @@ export interface FleetSiteTotalRow {
   fleet_sites: number;
 }
 
-/** Every client-site visit the fleet made in the range, grouped by truck.
+/** Every client-site visit the fleet made in the range, in time order.
  *
- *  OVERLAP, not entry time — 042's rule, so this and Geo cannot disagree
- *  about which day a delivery belongs to. */
+ *  Chronological, not grouped by truck — the owner reads all five
+ *  reports top-to-bottom in time order (2026-09-17; migration 069 moved
+ *  this and Chargements off their old truck-first ordering). OVERLAP,
+ *  not entry time — 042's rule, so this and Geo cannot disagree about
+ *  which day a delivery belongs to. */
 export async function getFleetSiteVisits(
   fromIso: string,
   toIso: string
@@ -559,7 +562,9 @@ export interface FleetLoadingTotalRow {
   fleet_trucks: number;
 }
 
-/** Every loading the fleet did at Amouda in the range, grouped by truck.
+/** Every loading the fleet did at Amouda in the range, in time order —
+ *  chronological like Livraisons and Geo, no longer truck-first
+ *  (migration 069).
  *
  *  OVERLAP, not entry time — 042's rule, so this, Livraisons and Geo
  *  cannot disagree about which day a visit belongs to. */

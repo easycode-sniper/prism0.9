@@ -4,10 +4,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { withRetry } from "@/lib/supabase/retry";
 import { runFleetTick } from "@/lib/fleet/tick";
 
-// Scheduled fleet monitoring. Called every minute by pg_cron + pg_net
+// Scheduled fleet monitoring. Called every two minutes by pg_cron + pg_net
 // from Supabase, which is where the schedule lives — Postgres does
 // minute-level cron on the free plan, so this needs no Vercel cron and
-// no plan change.
+// no plan change. (Every-minute until 2026-09-18, when the Vercel free
+// tier's Fluid CPU budget bought the cadence down.)
 //
 // This route is a public URL, so the shared secret is the only thing
 // standing between the internet and an unauthenticated trigger of the

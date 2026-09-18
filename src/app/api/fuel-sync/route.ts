@@ -6,9 +6,10 @@ import { dateCellOf, parseFuelRow, parseSheetDateTime, resolveOccurredAt, type F
 
 // Fuel-sheet sync. Two ways in:
 //
-// 1. pg_cron + pg_net every 15 minutes (x-fuel-sync-nonce) — the
+// 1. pg_cron + pg_net every hour (x-fuel-sync-nonce) — the
 //    backstop, same mechanism as /api/tick, and the same reason: no
-//    Vercel cron, no plan change.
+//    Vercel cron, no plan change. (Every 15 minutes until 2026-09-18,
+//    when the Apps Script push took over and the cadence relaxed.)
 // 2. The Google Apps Script onChange trigger on the sheet itself
 //    (x-fuel-sync-secret) — the primary path, which makes an edit land
 //    in seconds. Google can only say "the sheet changed", so the

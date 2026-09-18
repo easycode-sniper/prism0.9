@@ -26,7 +26,7 @@ history) lives in **Supabase**.
 
 Monitoring runs **server-side on a schedule**, not in the browser.
 
-Every minute `pg_cron` (inside Supabase) calls `dispatch_fleet_tick()`,
+Every two minutes `pg_cron` (inside Supabase) calls `dispatch_fleet_tick()`,
 which uses `pg_net` to POST to `/api/tick` on this app. That handler
 (`src/lib/fleet/tick.ts`) runs one cycle with the Supabase service role:
 
@@ -83,7 +83,7 @@ therefore impossible and minting one needs database write access.
 `CRON_SECRET` is kept as a fallback for manual `curl` testing and is
 compared with `timingSafeEqual`.
 
-A second job, `dispatch_fuel_sync()`, runs every 15 minutes against
+A second job, `dispatch_fuel_sync()`, runs every hour against
 `/api/fuel-sync` with the same nonce scheme (`fuel_sync_nonces`). It reads the
 gas-consumption Google Sheet and full-refreshes `fuel_transactions` through
 `refresh_fuel_transactions(jsonb)`. Because it is a full refresh, a correction
@@ -92,7 +92,9 @@ data migration.
 
 ### Real-time fuel sync
 
-The 15-minute cron is the **backstop**. The primary path is push: an Apps
+The 15-minute cron was the backstop until 2026-09-18, when the owner's call
+on the Vercel free tier's CPU budget relaxed it to hourly. The primary path
+is push: an Apps
 Script bound to the sheet (`scripts/google-apps-script/fuel-push.gs`) fires on
 every change and calls the same `/api/fuel-sync` with its own credential
 (`FUEL_SYNC_SECRET`), so an edit reaches the database in seconds. Both paths
@@ -127,9 +129,9 @@ Current `cron.job` schedule:
 
 | Job | Schedule | What |
 |---|---|---|
-| `fleet-tick` | `* * * * *` | one monitoring cycle |
+| `fleet-tick` | `*/2 * * * *` | one monitoring cycle |
 | `fleet-day-metrics` | `*/5 * * * *` | rolls up `fleet_day_metrics` |
-| `fuel-sync` | `*/15 * * * *` | mirrors the fuel sheet (backstop; the sheet also pushes on change) |
+| `fuel-sync` | `0 * * * *` | mirrors the fuel sheet (backstop; the sheet also pushes on change) |
 | `prune-fleet-snapshots` | `17 4 * * *` | drops snapshots older than 7 days |
 | `prune-notifications` | `23 4 * * *` | drops notifications older than 40 days |
 

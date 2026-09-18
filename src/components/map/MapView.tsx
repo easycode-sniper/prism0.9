@@ -9,6 +9,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { Moon, Satellite as SatelliteIcon, MapPin, Truck, Fuel, ArrowRight, X } from "lucide-react";
 import { formatAge } from "@/lib/format";
 import { stationWatchRadius, TRACK_WINDOW_HOURS } from "@/lib/constants";
+import { findClosestWilaya } from "@/lib/wilayas";
 
 // Marker HTML is assembled as strings, so anything coming out of the
 // database — site names, client names — has to be escaped on the way in.
@@ -32,6 +33,7 @@ const SVG_ICONS = {
   plant: `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21h20"/><path d="M17 21V6a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v15"/><path d="M13 21v-7l-4.5 3V14L4 17v4"/><path d="M15 5V2.5"/><path d="M6.5 10.5c0-1.5 1.5-1.5 1.5-3"/></svg>`,
   depot: `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M4 21V9.5L12 4l8 5.5V21"/><path d="M9 21v-6h6v6"/><path d="M9 11h6"/></svg>`,
   truck: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7V8Z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="17.5" cy="18.5" r="1.5"/></svg>`,
+  pin: `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`,
 };
 
 export interface TruckMarkerData {
@@ -608,6 +610,10 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       });
 
       const eta = formatEta(m.etaSeconds);
+      // Which wilaya the truck sits in, per the module's own caveat: a
+      // nearest-capital answer, reliable across the dense north and an
+      // approximation near a southern border.
+      const wilaya = findClosestWilaya(m.lat, m.lng);
       marker.bindPopup(
         `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text); min-width: 160px;">
           <strong style="font-size: 13px; color: var(--cyan);">${m.label}</strong>
@@ -616,6 +622,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
             <span style="color: ${statusTextColor(m.status, m.offRoute)}; text-transform: capitalize; font-weight: 600;">● ${m.status}</span>
             ${m.speed != null ? `<span>${Math.round(m.speed)} km/h</span>` : ""}
           </div>
+          <div style="color: var(--text-dim); margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.pin} ${wilaya.wilaya.nameEn}</div>
           ${m.offRoute ? `<div style="color: var(--red); margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.alert} Off route</div>` : ""}
           ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 5px;">${SVG_ICONS.target} <span>${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</span></div>` : ""}
           ${m.ageMinutes != null ? `<div style="color: var(--text-dim); margin-top: 6px; font-size: 11px;">Updated ${formatAge(m.ageMinutes)}</div>` : ""}

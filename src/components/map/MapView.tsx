@@ -10,6 +10,7 @@ import { Moon, Satellite as SatelliteIcon, MapPin, Truck, Fuel, ArrowRight, X } 
 import { formatAge } from "@/lib/format";
 import { stationWatchRadius, TRACK_WINDOW_HOURS } from "@/lib/constants";
 import { findClosestWilaya } from "@/lib/wilayas";
+import type { NearestCommune } from "@/lib/wilayas/communes";
 
 // Marker HTML is assembled as strings, so anything coming out of the
 // database — site names, client names — has to be escaped on the way in.
@@ -493,6 +494,22 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
   const [showZones, setShowZones] = useState(() => getOrCreateMapCore().ui.showZones);
   const [showUnits, setShowUnits] = useState(() => getOrCreateMapCore().ui.showUnits);
   const [showStations, setShowStations] = useState(() => getOrCreateMapCore().ui.showStations);
+  // Commune-level lookup, loaded OUT OF BAND: 1,540 rows of places is
+  // not something every page that shows a map should carry in its first
+  // payload, so the chunk is pulled when the map itself mounts and the
+  // popups start on wilaya-only until it lands (the marker effect below
+  // re-runs when it does — the next tick would rebuild them anyway).
+  const [nearestCommuneFn, setNearestCommuneFn] = useState<((lat: number, lng: number) => NearestCommune | null) | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void import("@/lib/wilayas/communes").then((m) => {
+      if (!cancelled) setNearestCommuneFn(() => m.nearestCommune);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Re-parent the persistent map container into this mount point; on
   // unmount, park it in the hidden holder instead of destroying it.
@@ -610,10 +627,14 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
       });
 
       const eta = formatEta(m.etaSeconds);
-      // Which wilaya the truck sits in, per the module's own caveat: a
-      // nearest-capital answer, reliable across the dense north and an
-      // approximation near a southern border.
-      const wilaya = findClosestWilaya(m.lat, m.lng);
+      // Where the truck is, finest source first: the commune once its
+      // chunk has loaded, the wilaya capital before that. Both are
+      // nearest-centre answers; the module headers carry the honesty
+      // about what that means near a border.
+      const place = nearestCommuneFn?.(m.lat, m.lng);
+      const locLabel = place
+        ? `${place.name} · ${place.wilaya.nameEn}`
+        : findClosestWilaya(m.lat, m.lng).wilaya.nameEn;
       marker.bindPopup(
         `<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; color: var(--text); min-width: 160px;">
           <strong style="font-size: 13px; color: var(--cyan);">${m.label}</strong>
@@ -622,7 +643,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
             <span style="color: ${statusTextColor(m.status, m.offRoute)}; text-transform: capitalize; font-weight: 600;">● ${m.status}</span>
             ${m.speed != null ? `<span>${Math.round(m.speed)} km/h</span>` : ""}
           </div>
-          <div style="color: var(--text-dim); margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.pin} ${wilaya.wilaya.nameEn}</div>
+          <div style="color: var(--text-dim); margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.pin} ${locLabel}</div>
           ${m.offRoute ? `<div style="color: var(--red); margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.alert} Off route</div>` : ""}
           ${m.siteName ? `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 5px;">${SVG_ICONS.target} <span>${m.siteName}${m.client ? ` — ${m.client}` : ""}${eta ? `<br>ETA ${eta}` : ""}</span></div>` : ""}
           ${m.ageMinutes != null ? `<div style="color: var(--text-dim); margin-top: 6px; font-size: 11px;">Updated ${formatAge(m.ageMinutes)}</div>` : ""}
@@ -661,8 +682,10 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
     //
     // focusTruckId is a dependency for the same reason: it is baked into
     // the icon HTML as data-focus, and a marker already built cannot
-    // learn it was the one asked for.
-  }, [truckMarkers, showUnits, onQuickTrack, trackLoadingId, focusTruckId]);
+    // learn it was the one asked for. nearestCommuneFn is here for the
+    // third time of the same lesson: the popups print its answer, so the
+    // markers must be rebuilt when it arrives.
+  }, [truckMarkers, showUnits, onQuickTrack, trackLoadingId, focusTruckId, nearestCommuneFn]);
 
   // Site markers
   useEffect(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Combobox, { type ComboOption } from "@/components/forms/Combobox";
 import {
   getFuelPage,
@@ -160,19 +160,51 @@ export default function CarburantPage() {
   const showingTo = Math.min((page + 1) * PAGE_SIZE, totalRows);
   const filtersActive = Boolean(filters.driver || filters.truck || filters.model);
 
+  // The five month totals, as pills. Read from the SAME call as the
+  // rows (fuel_page_transactions carries them as window aggregates), so
+  // they cost no second round trip, honour the filters, and repaint
+  // with the table when a fuel_sync_signals event bumps `version`.
+  const varianceLabel = (v: number | null) =>
+    v == null ? "—" : `${v > 0 ? "+" : ""}${nf(v)}`;
+
+  const varianceTone = (v: number | null): "good" | "bad" | null =>
+    v == null ? null : v > 0 ? "bad" : v < 0 ? "good" : null;
+
   return (
     <div style={{ padding: "24px 28px", height: "100%", overflowY: "auto" }}>
-      <div style={{ marginBottom: "16px" }}>
+      <div style={{ marginBottom: "12px" }}>
         <h2 style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", fontWeight: 600 }}>Carburant</h2>
         <p className="t-dim" style={{ fontSize: ".85rem", marginTop: "4px" }}>
-          {data
-            ? t("{n} fills · {litres} L · {da} DA", {
-                n: nf(data.totalRows),
-                litres: nf(data.totalLitres),
-                da: nf(data.totalAmountDa),
-              })
-            : t("Reading the fuel sheet…")}
+          {data ? t("{n} fills", { n: nf(data.totalRows) }) : t("Reading the fuel sheet…")}
         </p>
+      </div>
+
+      {/* ── The month's five totals ──
+          Little pills, not the dashboard's KPI cards: these answer
+          "what does the month cost" in one glance and are read below
+          the heading rather than replacing it. Achromatic except the
+          variance pill — a signed figure against a known baseline
+          keeps the money-column rule the dashboard already grants it
+          (red overspend, green saving). */}
+      <div className="totals-pills" aria-label={t("Month totals")}>
+        <TotalPill label={t("Amount filled")} value={data ? nf(data.totalAmountDa) : "…"} unit="DA" />
+        <TotalPill label={t("Litres consumed")} value={data ? nf(data.totalLitres) : "…"} unit="L" />
+        <TotalPill
+          label={t("Kilometres driven")}
+          value={data ? (data.totalKm != null ? nf(data.totalKm) : "—") : "…"}
+          unit="km"
+        />
+        <TotalPill
+          label={t("Average consumption")}
+          value={data ? (data.totalLitresPer100Km != null ? data.totalLitresPer100Km.toFixed(2) : "—") : "…"}
+          unit="L/100km"
+        />
+        <TotalPill
+          label={t("Total variance")}
+          value={data ? varianceLabel(data.totalVarianceDa) : "…"}
+          unit="DA"
+          tone={data ? varianceTone(data.totalVarianceDa) : null}
+        />
       </div>
 
       {error && (
@@ -360,6 +392,26 @@ export default function CarburantPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function TotalPill({
+  label,
+  value,
+  unit,
+  tone,
+}: {
+  label: ReactNode;
+  value: string;
+  unit: string;
+  tone?: "good" | "bad" | null;
+}) {
+  return (
+    <div className={`total-pill${tone ? ` total-pill--${tone}` : ""}`}>
+      <span className="total-pill__label">{label}</span>
+      <span className="total-pill__value">{value}</span>
+      <span className="total-pill__unit">{unit}</span>
     </div>
   );
 }

@@ -50,6 +50,9 @@ export interface FuelPageData {
   totalRows: number;
   totalLitres: number;
   totalAmountDa: number;
+  totalKm: number | null;
+  totalLitresPer100Km: number | null;
+  totalVarianceDa: number | null;
 }
 
 export async function getFuelPage(params: {
@@ -96,8 +99,12 @@ export async function getFuelPage(params: {
         varianceDa: r.variance_da != null ? Number(r.variance_da) : null,
       })),
       totalRows: Number(first?.total_rows ?? 0),
+      totalKm: first?.total_km != null ? Number(first.total_km) : null,
       totalLitres: Number(first?.total_litres ?? 0),
       totalAmountDa: Number(first?.total_amount_da ?? 0),
+      totalLitresPer100Km:
+        first?.total_litres_per_100km != null ? Number(first.total_litres_per_100km) : null,
+      totalVarianceDa: first?.total_variance_da != null ? Number(first.total_variance_da) : null,
     },
   };
 }

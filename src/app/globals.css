@@ -1079,6 +1079,70 @@ input::placeholder, textarea::placeholder {
 .status-pill.stopped { background: rgba(255, 179, 0, 0.15); color: var(--amber); }
 .status-pill.dispatched { background: rgba(0, 207, 255, 0.15); color: var(--cyan); }
 
+/* Totals pills — the Carburant page's five month figures, at a glance.
+   The anatomy is the status pill's: pill radius, a hairline, a panel
+   surface. The difference is the content: these are quantities, not
+   truck states, so they take a neutral --panel surface and cream type
+   like every number in the app — with ONE deliberate exception. The
+   variance pill is a signed figure against a known baseline, the same
+   rule the money column and the KPI strip already grant: red overspend,
+   green saving, tinted in the pill's own low-alpha ring rather than
+   flooded, so the figure keeps a cream background. */
+.totals-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.total-pill {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 6px 13px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+
+.total-pill__label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.total-pill__value {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.total-pill__unit {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.total-pill--bad {
+  color: var(--red);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 30%, transparent);
+}
+
+.total-pill--good {
+  color: var(--green);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 30%, transparent);
+}
+
+.total-pill--bad .total-pill__value,
+.total-pill--good .total-pill__value {
+  color: inherit;
+}
+
 /* KPI cards — base surface (fill, blur, rim, specular) comes from the
    shared .glass, .kpi-card rules above; this is just the layout and the
    value/label typography.

@@ -16,11 +16,13 @@
 --                       burned.
 --   variance            the sum of every fill's variance_da, signed.
 --
--- The signature is unchanged, so CREATE OR REPLACE replaces the 068
--- function in place — no second overload, and the grants below are
--- re-asserted for a fresh apply.
+-- Recreating, not CREATE OR REPLACE: the OUT rows grow three columns,
+-- and Postgres rejects a return-type change on an existing function
+-- (42P13). DROP first, then CREATE, then re-assert the grants below.
 
-CREATE OR REPLACE FUNCTION public.fuel_page_transactions(
+DROP FUNCTION IF EXISTS public.fuel_page_transactions(date, date, text, text, text, integer, integer);
+
+CREATE FUNCTION public.fuel_page_transactions(
   p_from      DATE DEFAULT NULL,
   p_to        DATE DEFAULT NULL,
   p_driver    TEXT DEFAULT NULL,

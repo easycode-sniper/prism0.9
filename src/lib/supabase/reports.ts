@@ -8,6 +8,9 @@ export interface ParcEntry {
   truck_id: string;
   driver_name: string | null;
   entered_at: string;
+  /** MAN / Renault / Shacman, derived from the plate by truck_model
+   *  (063/064) — "the model is read from the plate", nothing stored. */
+  model: string | null;
 }
 
 // Cap so a careless range (or a year of data) can't try to render tens of
@@ -70,33 +73,17 @@ export async function getParcEntries(
   const invalid = validateRange(fromIso, toIso);
   if (invalid) return { data: [], truncated: false, total: 0, error: invalid };
 
-  // Staff vehicles are left out, and the filter has to be in the QUERY
-  // rather than applied to the result: MAX_ROWS is a cap on rows coming
-  // back, so filtering afterwards would truncate against a count that
-  // includes rows the report never shows.
-  //
-  // The tick stopped writing parc entries for staff cars when they were
-  // dropped from runHqArrivalCheck, so nothing new arrives — but 21 rows
-  // were already on record, and a report that lists them while never
-  // gaining another is inconsistent with itself across time. This is a
-  // display filter over a true log, not a deletion: the rows stay.
-  //
-  // Read as a list rather than joined because hq_entries has no foreign
-  // key to fleet_trucks — 011 dropped that relationship deliberately,
-  // since Wialon is the roster. Ten staff vehicles is a small `in`.
-  const { data: staffRows, error: staffError } = await supabase
-    .from("fleet_trucks")
-    .select("truck_id")
-    .eq("category", "staff");
-  if (staffError) return { data: [], truncated: false, total: 0, error: staffError.message };
-  const staffIds = (staffRows ?? []).map((r) => r.truck_id as string);
-
-  let query = supabase
-    .from("hq_entries")
-    .select("id, truck_id, driver_name, entered_at")
+  // Reads hq_entries_parc, a security-invoker view, rather than the
+  // table (073). The view does two things this query used to do itself:
+  // it applies truck_model to stamp each entry's Model column, and it
+  // excludes staff vehicles — so the exact count AND the returned rows
+  // are staff-free by construction, and PostgREST never sees a staff
+  // row to accidentally count or cap against.
+  const query = supabase
+    .from("hq_entries_parc")
+    .select("id, truck_id, driver_name, entered_at, model")
     .gte("entered_at", fromIso)
     .lte("entered_at", toIso);
-  if (staffIds.length > 0) query = query.not("truck_id", "in", `(${staffIds.join(",")})`);
 
   const { data, error, count } = await query
     .order("entered_at", { ascending: true })

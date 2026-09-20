@@ -107,6 +107,36 @@ export async function getParcEntries(
   return finish((data ?? []) as ParcEntry[], count);
 }
 
+/** How far each truck drove in a trailing window, as truck_id → km.
+ *
+ *  The parc report's "Distance (24h)" column. Computed on read from
+ *  fleet_snapshots by the truck_distance_window RPC — one cheap query
+ *  against Supabase, nothing running on Vercel. Earlier in this file's
+ *  history a report that read a live table live had to keep its row
+ *  count right; this one just has to keep the joins right, and the map
+ *  is the shape that makes them trivially so at the page.
+ *
+ *  A truck absent from the map is a truck Wialon never heard from in the
+ *  window — offline the whole time. The page prints a dash for it,
+ *  never a zero: 0 would claim it drove nothing, which the data cannot
+ *  separate from "was never seen". */
+export async function getTruckDistances(
+  hours: number
+): Promise<{ data: Record<string, number>; error: string | null }> {
+  const supabase = await createClient();
+  const user = await supabase.auth.getUser();
+  if (!user.data.user) return { data: {}, error: "Not authenticated" };
+
+  const { data, error } = await supabase.rpc("truck_distance_window", { p_hours: hours });
+  if (error) return { data: {}, error: error.message };
+
+  const map: Record<string, number> = {};
+  for (const r of (data ?? []) as { truck_id: string; km: number }[]) {
+    map[String(r.truck_id)] = Number(r.km ?? 0);
+  }
+  return { data: map, error: null };
+}
+
 /**
  * The one place a report decides whether it showed everything.
  *

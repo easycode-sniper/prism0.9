@@ -11,6 +11,7 @@ import {
   getFleetLoadingVisits,
   getFleetLoadingTotals,
   getVoyageReport,
+  getTruckDistances,
   type ParcEntry,
   type GeoVisit,
   type GeoTotalRow,
@@ -102,6 +103,11 @@ function hms(seconds: number | null | undefined): string {
 // distinction would say they are different kinds of place rather than
 // two parts of one.
 const PARC_COLUMNS = ["Truck ID", "Driver", "Entry date"] as const;
+// "Distance (24h)" is appended per-run, because its header names the
+// window the control above the table is currently set to (072). It
+// stays out of this constant the way the per-row copy button stays out
+// of GEO_COLUMNS: the constant is what row builders read, and the
+// distance has to be computed, not constant.
 // The owner's Wialon export — zone, entrée, sortie, temps — plus three
 // columns it does not have.
 //
@@ -236,8 +242,28 @@ function geoRows(visits: GeoVisit[]): string[][] {
   ]);
 }
 
-function parcRows(entries: ParcEntry[]): string[][] {
-  return entries.map((e) => [e.truck_id, e.driver_name || "—", formatOpsDateTime(e.entered_at)]);
+function parcRows(
+  entries: ParcEntry[],
+  distances: Record<string, number>,
+  hours: number
+): string[][] {
+  return entries.map((e) => [
+    e.truck_id,
+    e.driver_name || "—",
+    formatOpsDateTime(e.entered_at),
+    // A dash for a truck the tracker never heard from in the window —
+    // offline does not mean "drove nothing". A tracked truck that
+    // stayed put comes back as 0, via the map, and prints "0 km".
+    distances[e.truck_id] == null
+      ? "—"
+      // One decimal under 10 km (an oil change reads 1.4, not "1"),
+      // whole kilometres over it (583, not "583.4") — the column is
+      // discriminating orders of magnitude, and the decimals are only
+      // interesting at the bottom of the range.
+      : distances[e.truck_id] < 10
+        ? `${distances[e.truck_id].toFixed(1)} km`
+        : `${nfr(Math.round(distances[e.truck_id]))} km`,
+  ]);
 }
 
 
@@ -259,6 +285,20 @@ export default function ReportsPage() {
   const [to, setTo] = useState(() => startOfRange("today").to);
 
   const [entries, setEntries] = useState<ParcEntry[] | null>(null);
+
+  // The parc report's discriminator: how far each truck drove, which is
+  // how the owner tells a truck back from a long run from one that
+  // slipped out for an hour. The window is a choice (2h/12h/24h),
+  // because a truck back from a long run is a different statement at
+  // each resolution — 600 km says "got here" whether the window is 2
+  // hours or 24, but an errand reads ~1 km across all of them and the
+  // 12h figure is the one that separates "headed out an hour ago" from
+  // "been gone since yesterday".
+  const [distWindow, setDistWindow] = useState<"2h" | "12h" | "24h">("24h");
+  const distHours = (w: "2h" | "12h" | "24h") => (w === "2h" ? 2 : w === "12h" ? 12 : 24);
+  // truck_id → km, or null before the first run. Absent key = truck
+  // never heard from in the window, printed as a dash.
+  const [distances, setDistances] = useState<Record<string, number> | null>(null);
 
   const [trucks, setTrucks] = useState<{ truck_id: string; name: string | null }[]>([]);
   const [truckId, setTruckId] = useState("");
@@ -309,6 +349,7 @@ export default function ReportsPage() {
     if (next === report) return;
     setReport(next);
     setEntries(null);
+    setDistances(null);
     setGeoVisits(null);
     setGeoTotals(null);
     setLivVisits(null);
@@ -400,17 +441,36 @@ export default function ReportsPage() {
         setTotal(v.total);
       }
     } else {
-      const result = await getParcEntries(fromIso, toIso);
-      if (result.error) {
-        setError(result.error);
+      // Entries and the distance column together: the two describe the
+      // same truck set and a second round trip would paint the table
+      // without the figures it exists to carry.
+      const [e, d] = await Promise.all([
+        getParcEntries(fromIso, toIso),
+        getTruckDistances(distHours(distWindow)),
+      ]);
+      if (e.error || d.error) {
+        setError(e.error ?? d.error);
         setEntries(null);
+        setDistances(null);
       } else {
-        setEntries(result.data);
-        setTruncated(result.truncated);
-        setTotal(result.total);
+        setEntries(e.data);
+        setDistances(d.data);
+        setTruncated(e.truncated);
+        setTotal(e.total);
       }
     }
     setLoading(false);
+  }
+
+  // Re-reading just the distance column: switching the window must not
+  // wipe the entries, which are a different question entirely.
+  async function refreshDistances(hours: number) {
+    const d = await getTruckDistances(hours);
+    if (d.error) {
+      setError(d.error);
+      return;
+    }
+    setDistances(d.data);
   }
 
   function clear() {
@@ -418,6 +478,7 @@ export default function ReportsPage() {
     setFrom(r.from);
     setTo(r.to);
     setEntries(null);
+    setDistances(null);
     setGeoVisits(null);
     setGeoTotals(null);
     setLivVisits(null);
@@ -447,7 +508,7 @@ export default function ReportsPage() {
           // and a folder of identically named files is unusable.
           slug: `rapport-geo-${truckId || "truck"}`,
         }
-      : { columns: PARC_COLUMNS, rows: parcRows(entries ?? []), slug: "rapport-parc" };
+      : { columns: [...PARC_COLUMNS, `Distance (${distWindow})`], rows: parcRows(entries ?? [], distances ?? {}, distHours(distWindow)), slug: "rapport-parc" };
 
   async function copyTable() {
     if (active.rows.length === 0) return;
@@ -845,6 +906,30 @@ export default function ReportsPage() {
       {hasRun && (
         <div className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+            {report === "parc" && entries !== null && (
+              // The window the Distance column measures. Segmented and
+              // labelled in hours, not words: 2h/12h/24h is the unit
+              // of the column header above it, and the four other
+              // reports have no such control, so it rides here above
+              // the table rather than in the shared filter row.
+              <div className="seg" style={{ width: "fit-content" }}>
+                {(["2h", "12h", "24h"] as const).map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    className={`seg-item${distWindow === w ? " is-active" : ""}`}
+                    aria-pressed={distWindow === w}
+                    onClick={() => {
+                      setDistWindow(w);
+                      refreshDistances(distHours(w));
+                    }}
+                  >
+                    {w}
+                  </button>
+                ))}
+              </div>
+            )}
             <span className="text-sm t-dim">
               {active.rows.length}{" "}
               {report === "parc"
@@ -866,6 +951,7 @@ export default function ReportsPage() {
                   5001 rows could arrive to trigger it. */}
               {truncated && ` of ${total.toLocaleString("en-GB")} — narrow the range to see the rest`}
             </span>
+            </div>
             {active.rows.length > 0 && (
               <div className="flex gap-2">
                 <button type="button" onClick={copyTable} className="btn-sm inline-flex items-center gap-1.5">
@@ -1080,7 +1166,7 @@ export default function ReportsPage() {
             <div className="mt-3 table-wrap">
               <table>
                 <thead>
-                  <tr>{PARC_COLUMNS.map((c) => <th key={c}>{c}</th>)}</tr>
+                  <tr>{[...PARC_COLUMNS, `Distance (${distWindow})`].map((c) => <th key={c}>{c}</th>)}</tr>
                 </thead>
                 <tbody>
                   {entries!.map((e) => (
@@ -1090,6 +1176,18 @@ export default function ReportsPage() {
                         {e.driver_name || "—"}
                       </td>
                       <td style={monoCell}>{formatOpsDateTime(e.entered_at)}</td>
+                      {/* Distance printed by the same rule as the export:
+                          one decimal under 10 km, whole km over it, a
+                          dash when the tracker never heard from the
+                          truck in the window. The one colourless figure
+                          is the one that does the work. */}
+                      <td style={{ ...numCell, color: "var(--text-dim)" }}>
+                        {(() => {
+                          const d = distances?.[e.truck_id];
+                          if (d == null) return "—";
+                          return d < 10 ? `${d.toFixed(1)} km` : `${nfr(Math.round(d))} km`;
+                        })()}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

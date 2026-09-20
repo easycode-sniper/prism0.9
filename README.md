@@ -24,11 +24,9 @@ history) lives in **Supabase**.
 
 ## How it works
 
-Monitoring runs **server-side on a schedule**, not in the browser.
-
-Every two minutes `pg_cron` (inside Supabase) calls `dispatch_fleet_tick()`,
-which uses `pg_net` to POST to `/api/tick` on this app. That handler
-(`src/lib/fleet/tick.ts`) runs one cycle with the Supabase service role:
+Monitoring runs on **two clocks** (2026-09-18, migration 070). Every
+minute `pg_cron` calls the **live** cycle — `dispatch_fleet_tick()` →
+`/api/tick` — which runs with the Supabase service role:
 
 1. Fetches the whole fleet from Wialon in one shot — one login, then units
    and the driver library in parallel (`src/lib/fleet/wialon.ts`), and reads
@@ -65,6 +63,25 @@ which uses `pg_net` to POST to `/api/tick` on this app. That handler
    an alert nobody acts on buries the ones they do. Offline units are
    dropped rather than treated as under the limit, so a truck that stops
    reporting freezes its flag instead of re-alerting when it comes back.
+
+Steps 3 and 6 above, together with the fleet-wide client-site zone
+log, are the **deep** half — they moved to a three-minute cycle
+(`/api/tick/deep`, `dispatch_fleet_deep_tick()`) when the Vercel CPU
+budget forced the question of which checks need a fast clock. The
+**live** minute cycle keeps steps 1, 2, 4, 5 and 7: the snapshot plus
+parc arrivals, factory arrivals with the loading-bay log, and
+blacklisted-station stops — the I/O-bound work and the alerts the
+owner acts on in real time. The deep checks are the CPU-heavy,
+latency-tolerant ones; zone-visit durations quantize to three minutes,
+which was the accepted trade.
+
+The two cycles share one rule that keeps them race-free: every check
+owns its transition state in its own columns, so nothing reads another
+check's flags across the cadence boundary. And one pairing constraint,
+easy to forget: the loading-bay check must run in the same invocation
+as the factory-arrival check that precedes it, or a truck can enter
+the bay with no waiting visit to subtract — queue time silently null
+in the Chargements report.
 7. Checks every **idle** vehicle against blacklisted fuel stations
    (`station_stop`). Idle-only is the feature, not an optimisation: the
    fleet feed calls a truck idle at ≤ 5 km/h on a fix under 30 minutes old,
@@ -129,7 +146,8 @@ Current `cron.job` schedule:
 
 | Job | Schedule | What |
 |---|---|---|
-| `fleet-tick` | `*/2 * * * *` | one monitoring cycle |
+| `fleet-tick` | `* * * * *` | live cycle: snapshot, parc/factory/station alerts |
+| `fleet-deep-tick` | `*/3 * * * *` | deep cycle: route deviation, ETA, site zones, speeding |
 | `fleet-day-metrics` | `*/5 * * * *` | rolls up `fleet_day_metrics` |
 | `fuel-sync` | `0 * * * *` | mirrors the fuel sheet (backstop; the sheet also pushes on change) |
 | `prune-fleet-snapshots` | `17 4 * * *` | drops snapshots older than 7 days |

@@ -1,10 +1,30 @@
-// One cycle of fleet monitoring, run server-side on a schedule.
+// Fleet monitoring, run server-side on a schedule — in TWO cycles with
+// different clocks and different jobs (2026-09-18):
 //
-// This is the work FleetProvider used to do in every operator's browser,
-// every 60s, per open tab: fetch the fleet from Wialon, snapshot it, and
-// check each active dispatch plus HQ arrivals. Doing it in the client
-// meant nothing was monitored while the app was closed, and N tabs meant
-// N Wialon logins and N racing generations of the same writes.
+//   LIVE (every minute, /api/tick): the Wialon fetch, the snapshot the
+//   whole browser reads, and the alerts the owner acts on in real time —
+//   parc arrivals, factory arrivals, station stops. Almost entirely
+//   I/O-bound, which is what makes a one-minute cadence affordable on
+//   the Vercel free tier's CPU budget.
+//
+//   DEEP (every 3 minutes, /api/tick/deep): the latency-tolerant,
+//   CPU-heavier checks — per-dispatch route deviation and ETA, the
+//   client-site zone log, speeding. Zone-visit durations quantize to
+//   the deep cadence; that was the accepted trade for the CPU saving.
+//
+// The two cycles share one rule: each check owns its transition state in
+// its own columns (station flags on fleet_trucks.at_blacklisted_station_id,
+// speeding on is_speeding, route/arrival flags on the dispatch row), so
+// nothing races across the cadence boundary. The one PAIRING constraint,
+// recorded where it is easy to forget: the loading-bay check must run in
+// the SAME invocation as the factory-arrival check that precedes it, or
+// a truck can enter the bay with no waiting visit to subtract — queue
+// time silently null in the Chargements report.
+//
+// This used to be one tick doing everything every minute, then every two
+// minutes, until the Vercel CPU warning forced the question of what was
+// actually latency-sensitive. The browser never calls Wialon either way;
+// it only reads the latest snapshot and Supabase Realtime.
 //
 // Runs with the service role, so RLS write policies don't apply.
 
@@ -23,8 +43,11 @@ import {
   runBlacklistedStationCheck,
 } from "@/lib/fleet/positionCheck";
 
+export type TickMode = "live" | "deep";
+
 export interface TickResult {
   ok: boolean;
+  mode: TickMode;
   trucks: number;
   dispatchesChecked: number;
   durationMs: number;
@@ -32,8 +55,49 @@ export interface TickResult {
   warnings: string[];
 }
 
-export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult> {
-  const startedAt = Date.now();
+function resultFor(
+  mode: TickMode,
+  startedAt: number,
+  patch: Partial<TickResult> & { error: string | null; warnings: string[] }
+): TickResult {
+  return {
+    ok: patch.ok ?? true,
+    mode,
+    trucks: patch.trucks ?? 0,
+    dispatchesChecked: patch.dispatchesChecked ?? 0,
+    durationMs: Date.now() - startedAt,
+    error: patch.error,
+    warnings: patch.warnings,
+  };
+}
+
+// ── The shared first half: Wialon in, typed fleet out ───────────────
+//
+// Everything a cycle needs before its own work can start: resolve the
+// Wialon config, fetch the whole fleet, classify each unit. Both cycles
+// run this — the deep tick deliberately fetches Wialon itself rather
+// than reading the latest snapshot, because the fetch is I/O (Fluid
+// barely bills it) and self-containment means a dead live cycle cannot
+// stall deep monitoring.
+//
+// Staff cars are tracked and mapped like everything else, but they
+// shuttle in and out of HQ all day and their arrivals aren't
+// actionable — they buried the real ones. Classification is per
+// vehicle in fleet_trucks, never a rule about ID shape, because the ID
+// range does not reliably say which is which and muting a real truck
+// by accident is the failure nobody notices.
+//
+// This comment used to cite 00031-115-35 as a cargo truck inside the
+// staff-looking range. It is NOT one: the owner reclassified it on
+// 2026-08-27, and the data agreed — zero dispatches and zero fuel
+// transactions in the whole sheet, which no working cargo truck has.
+// It is now category 'staff'. Left recorded here so the example is not
+// reinstated from the old note.
+async function loadFleet(
+  supabase: SupabaseClient,
+  mode: TickMode,
+  startedAt: number
+): Promise<{ trucks: FleetTruck[]; cargoTrucks: FleetTruck[]; warnings: string[]; error: string | null }> {
   const warnings: string[] = [];
 
   // Resolved with the tick's own (service-role) client. Reading it via
@@ -43,10 +107,9 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   const configResult = await loadWialonConfigResult(supabase);
   if (!configResult.config) {
     return {
-      ok: false,
-      trucks: 0,
-      dispatchesChecked: 0,
-      durationMs: Date.now() - startedAt,
+      trucks: [],
+      cargoTrucks: [],
+      warnings,
       // TWO DIFFERENT ANSWERS, said differently. A failed read is not a
       // missing token, and telling someone to go and set a token that is
       // already set costs them the real diagnosis — which is what
@@ -54,36 +117,14 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
       error: configResult.error
         ? `Could not read the Wialon configuration: ${configResult.error}`
         : "Wialon is not configured — set the API token in Admin → Settings.",
-      warnings,
     };
   }
-  const config = configResult.config;
 
-  const fleet = await fetchFleetData(config);
+  const fleet = await fetchFleetData(configResult.config);
   if (fleet.error) {
-    return {
-      ok: false,
-      trucks: 0,
-      dispatchesChecked: 0,
-      durationMs: Date.now() - startedAt,
-      error: fleet.error,
-      warnings,
-    };
+    return { trucks: [], cargoTrucks: [], warnings, error: fleet.error };
   }
 
-  // Staff cars are tracked and mapped like everything else, but they
-  // shuttle in and out of HQ all day and their arrivals aren't
-  // actionable — they buried the real ones. Classification is per
-  // vehicle in fleet_trucks, never a rule about ID shape, because the ID
-  // range does not reliably say which is which and muting a real truck
-  // by accident is the failure nobody notices.
-  //
-  // This comment used to cite 00031-115-35 as a cargo truck inside the
-  // staff-looking range. It is NOT one: the owner reclassified it on
-  // 2026-08-27, and the data agreed — zero dispatches and zero fuel
-  // transactions in the whole sheet, which no working cargo truck has.
-  // It is now category 'staff'. Left recorded here so the example is not
-  // reinstated from the old note.
   const { data: categoryRows, error: categoryError } = await supabase
     .from("fleet_trucks")
     .select("truck_id, category");
@@ -101,6 +142,26 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     category: categoryOf.get(t.truck_id) ?? "truck",
   }));
   const cargoTrucks = trucks.filter((t) => t.category !== "staff");
+
+  return { trucks, cargoTrucks, warnings, error: null };
+}
+
+// ── LIVE: positions + the alerts the owner acts on ──────────────────
+//
+// Runs every minute via /api/tick. Writes the snapshot the whole
+// browser reads, then sweeps the cheap, high-action checks: parc
+// arrivals, factory arrivals with the loading-bay log, blacklisted
+// stations. I/O-bound by construction — this is the cadence the free
+// tier's CPU budget can afford.
+
+export async function runLiveTick(supabase: SupabaseClient): Promise<TickResult> {
+  const startedAt = Date.now();
+  const fleet = await loadFleet(supabase, "live", startedAt);
+  const warnings = [...fleet.warnings];
+  if (fleet.error) {
+    return resultFor("live", startedAt, { error: fleet.error, warnings, ok: false });
+  }
+  const { trucks, cargoTrucks } = fleet;
 
   // The snapshot doubles as this job's heartbeat — pg_net is
   // fire-and-forget and won't report a failed tick, so a gap in
@@ -131,48 +192,8 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
   );
   if (snapshotError) warnings.push(`snapshot: ${snapshotError.message}`);
 
-  const [{ data: geofences, error: geofenceError }, { data: dispatches, error: dispatchError }] =
-    await Promise.all([
-      loadGeofences(supabase),
-      supabase.from("dispatches").select("id, truck_id").eq("status", "active"),
-    ]);
-
+  const { data: geofences, error: geofenceError } = await loadGeofences(supabase);
   if (geofenceError) warnings.push(`geofences: ${geofenceError}`);
-  if (dispatchError) warnings.push(`dispatches: ${dispatchError.message}`);
-
-  const truckById = new Map(trucks.map((t) => [t.truck_id, t]));
-  const active = (dispatches ?? []) as { id: string; truck_id: string }[];
-
-  // Sequential rather than Promise.all: a tick runs inside one
-  // serverless invocation with a hard duration cap, and a burst of
-  // parallel Wialon/Postgres work is what makes an invocation spike.
-  // Each check is a handful of same-region queries, so serial is
-  // comfortably fast and far more predictable.
-  let checked = 0;
-  for (const dispatch of active) {
-    const truck = truckById.get(dispatch.truck_id);
-    if (truck?.lat == null || truck.lng == null) continue;
-
-    try {
-      const loaded = await loadDispatchAndSite(supabase, dispatch.id);
-      if ("error" in loaded) {
-        warnings.push(`dispatch ${dispatch.truck_id}: ${loaded.error}`);
-        continue;
-      }
-      await runPositionCheck(
-        supabase,
-        loaded.dispatch,
-        loaded.site,
-        [truck.lat, truck.lng],
-        truck.speed,
-        truck.driverName,
-        geofences
-      );
-      checked++;
-    } catch (err) {
-      warnings.push(`dispatch ${dispatch.truck_id}: ${(err as Error).message}`);
-    }
-  }
 
   // HQ is the one 'site' geofence with no site_id — a real customer site
   // always has one. Same rule the dashboard's location split uses.
@@ -224,9 +245,10 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
 
   // The loading bay, inside the waiting area. Raises no alert — it
   // writes the zone_visits rows the factory report reads, so queue time
-  // and loading time are measurable per truck per day. Runs after the
-  // waiting-area check so that on the tick a truck first appears at the
-  // plant, the outer visit is opened before the inner one.
+  // and loading time are measurable per truck per day. Runs in the SAME
+  // invocation as the waiting-area check — that ordering is the pairing
+  // constraint that put factory arrivals in this bucket at all (see the
+  // module header).
   const loadingBay = selectLoadingGeofence(geofences);
   if (loadingBay) {
     try {
@@ -236,6 +258,110 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
       });
     } catch (err) {
       warnings.push(`loading: ${(err as Error).message}`);
+    }
+  }
+
+  // Trucks stopped at a station known to take money from drivers.
+  //
+  // Every vehicle, not just cargo — a station that shorts a driver does
+  // it whatever he is driving.
+  try {
+    const { data: stationRows, error: stationError } = await supabase
+      .from("gas_stations")
+      .select("id, name, lat, lng, radius_meters, blacklisted")
+      .eq("blacklisted", true);
+
+    if (stationError) {
+      warnings.push(`stations: ${stationError.message}`);
+    } else if ((stationRows ?? []).length > 0) {
+      // Returns the email warnings. The alert itself is already written
+      // by the time these come back, so a mail server that is down shows
+      // up in the tick's warnings rather than costing an alert.
+      const mailWarnings = await runBlacklistedStationCheck(
+        supabase,
+        // EVERY vehicle, unfiltered — the check owns the status rules now.
+        // This used to pass `status === "idle"`, and that filter was the
+        // bug: a truck that drove away was never in the list the
+        // departure branch loops over, so it was never seen to leave and
+        // stayed flagged, and a flagged truck returning to the same
+        // station raises nothing. Splitting the rule between here and
+        // there is what allowed the two halves to disagree, so the
+        // decision lives in one place.
+        trucks,
+        (stationRows ?? []).map((r) => ({
+          id: r.id as string,
+          name: r.name as string,
+          lat: r.lat as number,
+          lng: r.lng as number,
+          radiusMeters: (r.radius_meters as number) ?? 50,
+          blacklisted: true,
+        }))
+      );
+      warnings.push(...mailWarnings);
+    }
+  } catch (err) {
+    warnings.push(`stations: ${(err as Error).message}`);
+  }
+
+  return resultFor("live", startedAt, { trucks: trucks.length, error: null, warnings });
+}
+
+// ── DEEP: the CPU-heavier checks, on the tolerant clock ─────────────
+//
+// Runs every 3 minutes via /api/tick/deep. Route deviation needs the
+// route projection (haversine per route segment per active dispatch);
+// the site sweep walks every polygon; these tolerate a 3-minute clock
+// and were the reason the monolithic tick was expensive to shorten.
+
+export async function runDeepTick(supabase: SupabaseClient): Promise<TickResult> {
+  const startedAt = Date.now();
+  const fleet = await loadFleet(supabase, "deep", startedAt);
+  const warnings = [...fleet.warnings];
+  if (fleet.error) {
+    return resultFor("deep", startedAt, { error: fleet.error, warnings, ok: false });
+  }
+  const { trucks, cargoTrucks } = fleet;
+
+  const [{ data: geofences, error: geofenceError }, { data: dispatches, error: dispatchError }] =
+    await Promise.all([
+      loadGeofences(supabase),
+      supabase.from("dispatches").select("id, truck_id").eq("status", "active"),
+    ]);
+
+  if (geofenceError) warnings.push(`geofences: ${geofenceError}`);
+  if (dispatchError) warnings.push(`dispatches: ${dispatchError.message}`);
+
+  const truckById = new Map(trucks.map((t) => [t.truck_id, t]));
+  const active = (dispatches ?? []) as { id: string; truck_id: string }[];
+
+  // Sequential rather than Promise.all: a tick runs inside one
+  // serverless invocation with a hard duration cap, and a burst of
+  // parallel Wialon/Postgres work is what makes an invocation spike.
+  // Each check is a handful of same-region queries, so serial is
+  // comfortably fast and far more predictable.
+  let checked = 0;
+  for (const dispatch of active) {
+    const truck = truckById.get(dispatch.truck_id);
+    if (truck?.lat == null || truck.lng == null) continue;
+
+    try {
+      const loaded = await loadDispatchAndSite(supabase, dispatch.id);
+      if ("error" in loaded) {
+        warnings.push(`dispatch ${dispatch.truck_id}: ${loaded.error}`);
+        continue;
+      }
+      await runPositionCheck(
+        supabase,
+        loaded.dispatch,
+        loaded.site,
+        [truck.lat, truck.lng],
+        truck.speed,
+        truck.driverName,
+        geofences
+      );
+      checked++;
+    } catch (err) {
+      warnings.push(`dispatch ${dispatch.truck_id}: ${(err as Error).message}`);
     }
   }
 
@@ -290,59 +416,10 @@ export async function runFleetTick(supabase: SupabaseClient): Promise<TickResult
     warnings.push(`speeding: ${(err as Error).message}`);
   }
 
-  // Trucks stopped at a station known to take money from drivers.
-  //
-  // IDLE ONLY, and that filter is the feature: the fleet feed calls a
-  // truck idle when its fix is under 30 minutes old and its speed is at
-  // or below 5km/h, so a truck driving PAST a blacklisted station raises
-  // nothing. The alert is about the stop.
-  //
-  // Every vehicle, not just cargo — a station that shorts a driver does
-  // it whatever he is driving.
-  try {
-    const { data: stationRows, error: stationError } = await supabase
-      .from("gas_stations")
-      .select("id, name, lat, lng, radius_meters, blacklisted")
-      .eq("blacklisted", true);
-
-    if (stationError) {
-      warnings.push(`stations: ${stationError.message}`);
-    } else if ((stationRows ?? []).length > 0) {
-      // Returns the email warnings. The alert itself is already written
-      // by the time these come back, so a mail server that is down shows
-      // up in the tick's warnings rather than costing an alert.
-      const mailWarnings = await runBlacklistedStationCheck(
-        supabase,
-        // EVERY vehicle, unfiltered — the check owns the status rules now.
-        // This used to pass `status === "idle"`, and that filter was the
-        // bug: a truck that drove away was never in the list the
-        // departure branch loops over, so it was never seen to leave and
-        // stayed flagged, and a flagged truck returning to the same
-        // station raises nothing. Splitting the rule between here and
-        // there is what allowed the two halves to disagree, so the
-        // decision lives in one place.
-        trucks,
-        (stationRows ?? []).map((r) => ({
-          id: r.id as string,
-          name: r.name as string,
-          lat: r.lat as number,
-          lng: r.lng as number,
-          radiusMeters: (r.radius_meters as number) ?? 50,
-          blacklisted: true,
-        }))
-      );
-      warnings.push(...mailWarnings);
-    }
-  } catch (err) {
-    warnings.push(`stations: ${(err as Error).message}`);
-  }
-
-  return {
-    ok: true,
+  return resultFor("deep", startedAt, {
     trucks: trucks.length,
     dispatchesChecked: checked,
-    durationMs: Date.now() - startedAt,
     error: null,
     warnings,
-  };
+  });
 }

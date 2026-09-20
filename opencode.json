@@ -1,11 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "graphify": {
-      "type": "remote",
-      "url": "https://api.graphify.com/mcp",
-      "enabled": true
-    },
     "supabase": {
       "type": "remote",
       "url": "https://mcp.supabase.com/mcp?project_ref=znaebnyvlbycalawfnhu",

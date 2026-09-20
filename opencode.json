@@ -5,6 +5,14 @@
       "type": "remote",
       "url": "https://api.graphify.com/mcp",
       "enabled": true
+    },
+    "supabase": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp?project_ref=znaebnyvlbycalawfnhu",
+      "headers": {
+        "Authorization": "Bearer {env:SUPABASE_ACCESS_TOKEN}"
+      },
+      "enabled": true
     }
   }
 }

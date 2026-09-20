@@ -103,11 +103,19 @@ function hms(seconds: number | null | undefined): string {
 // distinction would say they are different kinds of place rather than
 // two parts of one.
 const PARC_COLUMNS = ["Truck ID", "Driver", "Entry date"] as const;
-// "Distance (24h)" is appended per-run, because its header names the
-// window the control above the table is currently set to (072). It
-// stays out of this constant the way the per-row copy button stays out
-// of GEO_COLUMNS: the constant is what row builders read, and the
-// distance has to be computed, not constant.
+// What Copy table and Download CSV write for the parc — nothing more.
+// The two look-only columns — Model (derived from the plate by
+// truck_model) and Distance, whose window the toggle above the table
+// sets — stay OFF-screen-off-the-page: Model is the owner's on-eye
+// filter, Distance is his way of telling a fresh arrival from an
+// errand, and neither belongs in a spreadsheet he pastes into his own
+// records. Like the copy button staying out of GEO_COLUMNS, the arrays
+// row builders READ are the screen's, and the exports are what this
+// constant is.
+//
+// The on-screen columns are Model + these three, with Distance (24h)
+// appended per-run because its header must name the window:
+const PARC_SCREEN_COLUMNS = ["Model", ...PARC_COLUMNS] as const;
 // The owner's Wialon export — zone, entrée, sortie, temps — plus three
 // columns it does not have.
 //
@@ -242,28 +250,12 @@ function geoRows(visits: GeoVisit[]): string[][] {
   ]);
 }
 
-function parcRows(
-  entries: ParcEntry[],
-  distances: Record<string, number>,
-  hours: number
-): string[][] {
-  return entries.map((e) => [
-    e.truck_id,
-    e.driver_name || "—",
-    formatOpsDateTime(e.entered_at),
-    // A dash for a truck the tracker never heard from in the window —
-    // offline does not mean "drove nothing". A tracked truck that
-    // stayed put comes back as 0, via the map, and prints "0 km".
-    distances[e.truck_id] == null
-      ? "—"
-      // One decimal under 10 km (an oil change reads 1.4, not "1"),
-      // whole kilometres over it (583, not "583.4") — the column is
-      // discriminating orders of magnitude, and the decimals are only
-      // interesting at the bottom of the range.
-      : distances[e.truck_id] < 10
-        ? `${distances[e.truck_id].toFixed(1)} km`
-        : `${nfr(Math.round(distances[e.truck_id]))} km`,
-  ]);
+function parcRows(entries: ParcEntry[]): string[][] {
+  // The EXPORT shape: Truck ID / Driver / Entry date, and nothing else.
+  // The screen's Model and Distance columns are look-only (073) and are
+  // deliberately not carried into the clipboard or the CSV — see the
+  // comment above PARC_COLUMNS.
+  return entries.map((e) => [e.truck_id, e.driver_name || "—", formatOpsDateTime(e.entered_at)]);
 }
 
 
@@ -508,7 +500,7 @@ export default function ReportsPage() {
           // and a folder of identically named files is unusable.
           slug: `rapport-geo-${truckId || "truck"}`,
         }
-      : { columns: [...PARC_COLUMNS, `Distance (${distWindow})`], rows: parcRows(entries ?? [], distances ?? {}, distHours(distWindow)), slug: "rapport-parc" };
+      : { columns: PARC_COLUMNS, rows: parcRows(entries ?? []), slug: "rapport-parc" };
 
   async function copyTable() {
     if (active.rows.length === 0) return;
@@ -1166,18 +1158,30 @@ export default function ReportsPage() {
             <div className="mt-3 table-wrap">
               <table>
                 <thead>
-                  <tr>{[...PARC_COLUMNS, `Distance (${distWindow})`].map((c) => <th key={c}>{c}</th>)}</tr>
+                  <tr>{[...PARC_SCREEN_COLUMNS, `Distance (${distWindow})`].map((c) => <th key={c}>{c}</th>)}</tr>
                 </thead>
                 <tbody>
                   {entries!.map((e) => (
                     <tr key={e.id}>
+                      {/* Model first — the owner reads the parc by it.
+                          Derived from the plate by truck_model, never
+                          stored, so a truck with a null model prints a
+                          dash rather than a blank that could read as a
+                          column nobody filled in. */}
+                      <td style={{ color: e.model ? "var(--text)" : "var(--text-dim)" }}>
+                        {e.model ?? "—"}
+                      </td>
                       <td className="truck-id">{e.truck_id}</td>
                       <td style={{ color: e.driver_name ? "var(--text)" : "var(--text-dim)" }}>
                         {e.driver_name || "—"}
                       </td>
                       <td style={monoCell}>{formatOpsDateTime(e.entered_at)}</td>
-                      {/* Distance printed by the same rule as the export:
-                          one decimal under 10 km, whole km over it, a
+                      {/* Distance is SCREEN-ONLY: Copy table and CSV
+                          write Truck ID / Driver / Entry date (see the
+                          PARC_COLUMNS comment), so this figure can tell
+                          the owner on screen without leaking into a
+                          spreadsheet he pastes into his own records.
+                          One decimal under 10 km, whole km over it, a
                           dash when the tracker never heard from the
                           truck in the window. The one colourless figure
                           is the one that does the work. */}

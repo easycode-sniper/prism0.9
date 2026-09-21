@@ -85,6 +85,9 @@ export interface StationMarkerData {
   radiusMeters: number;
   blacklisted: boolean;
   blacklistNote?: string | null;
+  /** Per-station approach ring (m), when the approach tier is armed.
+   *  Drawn dashed so the invisible zone the tick enforces has an owner. */
+  approachRadiusMeters?: number | null;
 }
 
 export interface ZoneData {
@@ -730,6 +733,24 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
         })
       );
 
+      // The approach ring, when the station is armed with one — dashed
+      // and unfilled so it reads as a zone to be crossed, not a place,
+      // and can never be mistaken for the watch circle the stop check
+      // enforces. It exists to be SEEN: the email says "there is still
+      // time", and the map is where the desk finds the driver in it.
+      if (s.approachRadiusMeters) {
+        stationLayer.addLayer(
+          L.circle([s.lat, s.lng], {
+            radius: s.approachRadiusMeters,
+            color: s.blacklisted ? "#ff2d3f" : "#00cfff",
+            weight: 1,
+            dashArray: "8 8",
+            fill: false,
+            interactive: false,
+          })
+        );
+      }
+
       const marker = L.marker([s.lat, s.lng], {
         icon: buildStationIcon(!!s.truckHere, s.blacklisted),
       });
@@ -750,6 +771,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           <strong style="color: ${s.blacklisted ? "var(--red)" : "var(--cyan)"}; display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${escapeHtml(s.name)}</strong>
           ${s.blacklisted ? `<div style="margin-top:4px;color:var(--red);font-size:11px;">Blacklisted · watched to ${watch}m</div>` : `<div style="margin-top:4px;color:var(--text-dim);font-size:11px;">Watched to ${watch}m</div>`}
           ${s.blacklisted && s.blacklistNote ? `<div style="margin-top:3px;color:var(--text-dim);font-size:11px;">${escapeHtml(s.blacklistNote)}</div>` : ""}
+          ${s.approachRadiusMeters ? `<div style="margin-top:3px;color:var(--amber);font-size:11px;">Approach ring · ${(s.approachRadiusMeters / 1000).toFixed(0)} km</div>` : ""}
           ${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${escapeHtml(s.truckHere)} fueling</div>` : ""}
           ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:7px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--text-dim);">${label}</button>` : ""}
         </div>`

@@ -138,5 +138,13 @@ export function playAlertTone(kind: string) {
       beep(300, 170, 0.22);
       beep(300, 240, 0.44);
       break;
+    case "station_approach":
+      // The advance-warning tier: a slow two-tone swing, lower and
+      // calmer than the stop's urgent triple. "He is coming" must not
+      // sound like "he is already there" — the first asked for a phone
+      // call, the second for a driver.
+      beep(440, 200, 0);
+      beep(330, 240, 0.22);
+      break;
   }
 }

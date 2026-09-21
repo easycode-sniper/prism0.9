@@ -1,4 +1,4 @@
-import { TriangleAlert, Gauge, Flag, Timer, Factory, ParkingCircle, Ban } from "lucide-react";
+import { TriangleAlert, Gauge, Flag, Timer, Factory, ParkingCircle, Ban, Radar } from "lucide-react";
 
 // One description of what each alert kind is, used by the feed, the
 // toast and the chart. These had drifted apart: the notifications page
@@ -13,7 +13,8 @@ export type NotificationKind =
   | "site_arrival"
   | "factory_arrival"
   | "hq_arrival"
-  | "station_stop";
+  | "station_stop"
+  | "station_approach";
 
 /**
  * Which section of the feed a kind belongs to.
@@ -57,6 +58,10 @@ export const KIND_META: Record<NotificationKind, KindMeta> = {
   // take money from drivers is the same class of thing as off-route and
   // speeding, and belongs in the same colour and the same group.
   station_stop: { icon: Ban, color: "var(--red)", group: "alerts" },
+  // Amber, not stop's red: this is the "still time to phone the driver"
+  // tier — a warning with a window, like site_approaching, not the
+  // "he is there now" alarm. Same group, both conduct.
+  station_approach: { icon: Radar, color: "var(--amber)", group: "alerts" },
 };
 
 /** Unknown kinds are possible — a row written by a newer deploy, read by

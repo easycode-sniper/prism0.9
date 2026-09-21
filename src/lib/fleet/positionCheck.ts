@@ -19,7 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { projectPointOntoRoute, haversineMeters, formatDuration, isWithinGeofence, pointInPolygon } from "../geometry/index.ts";
 import type { GeofenceRecord } from "../supabase/geofenceShape.ts";
 import { selectFactoryGeofence } from "./geofences.ts";
-import { sendStationStopEmails } from "../notifications/email.ts";
+import { sendStationApproachEmails, sendStationStopEmails } from "../notifications/email.ts";
 import { FACTORY_LAT, FACTORY_LNG, SPEED_LIMIT_KMH, stationWatchRadius } from "../constants.ts";
 import { boundSiteZone, siteZoneAt, type SiteZone, type BoundedSiteZone } from "./siteZones.ts";
 export type { SiteZone } from "./siteZones.ts";
@@ -864,6 +864,11 @@ export interface BlacklistStation {
   lng: number;
   radiusMeters: number;
   blacklisted: boolean;
+  /** Per-station approach ring in metres. NULL (the default) = the
+   *  approach tier is OFF for this station; the stop alert is all it
+   *  gets. Set by the operator only for stations worth warning about
+   *  while a truck is still kms away. */
+  approachRadiusMeters?: number | null;
 }
 
 /**
@@ -1042,6 +1047,173 @@ export async function runBlacklistedStationCheck(
     // station forever, and a truck that never leaves can never be seen
     // to arrive again.
     if (error) throw new Error(`station departure write failed: ${error.message}`);
+  }
+
+  return warnings;
+}
+
+/**
+ * A truck ENTERING the approach ring of a station known to take money
+ * from drivers — the advance-warning tier the stop alert cannot give.
+ *
+ * The stop check above only fires once a truck is IDLE inside 150m, and
+ * that is by design: presence is not arrival, and a driving pass must
+ * raise nothing. But for a station the owner is suing, 150m is a 10-minute
+ * warning — the truck is already on the forecourt. This check arms a big
+ * ring (per-station `approach_radius_meters`, NULL = off) and raises ONE
+ * `station_approach` alert when any positioned truck enters it, which is
+ * the office's "there is still time to phone the driver" window.
+ *
+ * ANY truck inside the ring, no heading filter and no idle requirement:
+ * the owner's call. A corridor few trucks travel plus one-shot-per-entry
+ * keeps the volume acceptable without pretending to know intent the fleet
+ * feed does not carry. The feature is TEMPORARY per station — when the
+ * legal case ends the column goes back to NULL and this check stops
+ * reading that station, nothing else.
+ *
+ * ONE ALERT PER ENTRY, guaranteed the same way the stop check guarantees
+ * one alert per stop: state lives in fleet_trucks.approaching_blacklisted_station_id
+ * — WHICH station, like at_blacklisted_station_id — and the alert fires
+ * only on the CAS transition INTO the ring. A truck lingering inside the
+ * ring keeps its flag and raises nothing further; leaving clears the
+ * flag, so a return later alerts again.
+ *
+ * Offline excluded on the same rule as the stop check: a truck whose
+ * tracker went quiet has not been seen to leave, and clearing its flag
+ * would re-alert the moment it reported again.
+ *
+ * Emails the same desk as a stop, because the whole point is a phone call
+ * while the truck is still minutes away. Mail failures become warnings,
+ * never lost alerts — the notification row is written first.
+ */
+export async function runBlacklistedStationApproachCheck(
+  supabase: SupabaseClient,
+  trucks: ZoneTruck[],
+  stations: BlacklistStation[]
+): Promise<string[]> {
+  const warnings: string[] = [];
+
+  // Per-station opt-in: no armed ring, no work at all. Half the point of
+  // the column is that the other 50 stations cost nothing on every tick.
+  const armed = stations.filter((s) => s.approachRadiusMeters != null && s.approachRadiusMeters > 0);
+  if (armed.length === 0) return warnings;
+
+  const positioned = freshestPerTruck(
+    trucks.filter(
+      (t): t is PositionedTruck =>
+        t.lat != null && t.lng != null && t.status !== "offline"
+    )
+  );
+
+  // Where each truck is now: the NEAREST armed ring that contains it.
+  // Nearest rather than first, so two overlapping rings cannot make the
+  // answer depend on row order. The metres are kept for the email's
+  // "X km out" line — the office's ETA is distance over speed.
+  const nowIn = new Map<string, { station: BlacklistStation; metres: number }>();
+  for (const t of positioned) {
+    let best: { station: BlacklistStation; metres: number } | null = null;
+    for (const st of armed) {
+      const metres = haversineMeters(t.lat, t.lng, st.lat, st.lng);
+      if (metres > (st.approachRadiusMeters as number)) continue;
+      if (!best || metres < best.metres) best = { station: st, metres };
+    }
+    if (best) nowIn.set(t.truck_id, best);
+  }
+
+  // What the database currently believes, for these trucks only.
+  const { data: rows, error: readError } = await supabase
+    .from("fleet_trucks")
+    .select("truck_id, approaching_blacklisted_station_id")
+    .in("truck_id", positioned.map((t) => t.truck_id));
+  if (readError) throw new Error(`approach state read failed: ${readError.message}`);
+
+  const wasIn = new Map(
+    (rows ?? []).map((r) => [r.truck_id as string, (r.approaching_blacklisted_station_id as string | null) ?? null])
+  );
+
+  // Grouped by destination station, because the RPC sets one station for
+  // a batch of trucks — and one call per station keeps that contract.
+  const enteredByStation = new Map<string, string[]>();
+  const left: string[] = [];
+
+  for (const t of positioned) {
+    const inside = nowIn.get(t.truck_id);
+    const now = inside?.station ?? null;
+    const before = wasIn.get(t.truck_id) ?? null;
+    if (now?.id === before) continue;
+    if (now) {
+      const list = enteredByStation.get(now.id) ?? [];
+      list.push(t.truck_id);
+      enteredByStation.set(now.id, list);
+    } else if (before) {
+      left.push(t.truck_id);
+    }
+  }
+
+  const nameOf = new Map(armed.map((s) => [s.id, s.name]));
+  const driverOf = new Map(positioned.map((t) => [t.truck_id, t.driverName ?? null]));
+  const speedOf = new Map(positioned.map((t) => [t.truck_id, t.speed ?? null]));
+
+  for (const [stationId, truckIds] of enteredByStation) {
+    const { data: changed, error } = await supabase.rpc("mark_trucks_approaching_state", {
+      p_truck_ids: truckIds,
+      p_station_id: stationId,
+    });
+    // Thrown rather than logged, for the reason the zone checks are: the
+    // flag and the alert have to agree. A written flag with no alert
+    // suppresses the alert for as long as the truck stays inside.
+    if (error) throw new Error(`approach state write failed, alerts skipped: ${error.message}`);
+
+    const toNotify = ((changed ?? []) as { truck_id: string }[]).map((r) => r.truck_id);
+    if (toNotify.length === 0) continue;
+
+    const station = nameOf.get(stationId) ?? "a blacklisted station";
+    const { error: notifyError } = await supabase.from("notifications").insert(
+      toNotify.map((truck_id) => ({
+        truck_id,
+        driver_name: driverOf.get(truck_id) ?? null,
+        kind: "station_approach",
+        title: "Truck approaching a blacklisted station",
+        message: `${truck_id} entered the approach zone of ${station}.`,
+      }))
+    );
+    // Checked, never fire-and-forget: a kind the CHECK constraint does
+    // not allow comes back as 23514, and swallowing it is what left the
+    // client-approach alert dead from the day it shipped (migration 026).
+    if (notifyError) {
+      throw new Error(
+        `station approach alert insert failed (flags already set, so these will not retry): ${notifyError.message}`
+      );
+    }
+
+    // Only once the row is in. The app is the system of record and the
+    // email is a copy of it, so there must be no case where the desk is
+    // emailed about an approach that /notifications cannot show them.
+    warnings.push(
+      ...(await sendStationApproachEmails(
+        toNotify.map((truck_id) => {
+          const inside = nowIn.get(truck_id);
+          return {
+            truckId: truck_id,
+            driverName: driverOf.get(truck_id) ?? null,
+            stationName: station,
+            distanceMeters: inside?.metres ?? 0,
+            speedKmh: speedOf.get(truck_id) ?? null,
+          };
+        })
+      ))
+    );
+  }
+
+  if (left.length > 0) {
+    const { error } = await supabase.rpc("mark_trucks_approaching_state", {
+      p_truck_ids: left,
+      p_station_id: null,
+    });
+    // A departure that fails to persist leaves the truck pinned to the
+    // ring forever, and a truck that never leaves can never be seen to
+    // approach again.
+    if (error) throw new Error(`approach departure write failed: ${error.message}`);
   }
 
   return warnings;

@@ -41,6 +41,7 @@ import {
   runSiteZoneCheck,
   runFleetSpeedingCheck,
   runBlacklistedStationCheck,
+  runBlacklistedStationApproachCheck,
 } from "@/lib/fleet/positionCheck";
 
 export type TickMode = "live" | "deep";
@@ -268,12 +269,27 @@ export async function runLiveTick(supabase: SupabaseClient): Promise<TickResult>
   try {
     const { data: stationRows, error: stationError } = await supabase
       .from("gas_stations")
-      .select("id, name, lat, lng, radius_meters, blacklisted")
+      .select("id, name, lat, lng, radius_meters, blacklisted, approach_radius_meters")
       .eq("blacklisted", true);
 
     if (stationError) {
       warnings.push(`stations: ${stationError.message}`);
     } else if ((stationRows ?? []).length > 0) {
+      // Every vehicle, unfiltered — each check owns its own status rules
+      // (see the 2026-09-07 note below), and approach wants a DIFFERENT
+      // rule from stop: approach raises for ANY truck inside the ring,
+      // stop only for a truck that is idle. If the caller filtered for
+      // one, the other would silently lose its cases.
+      const stations = (stationRows ?? []).map((r) => ({
+        id: r.id as string,
+        name: r.name as string,
+        lat: r.lat as number,
+        lng: r.lng as number,
+        radiusMeters: (r.radius_meters as number) ?? 50,
+        blacklisted: true,
+        approachRadiusMeters: (r.approach_radius_meters as number | null) ?? null,
+      }));
+
       // Returns the email warnings. The alert itself is already written
       // by the time these come back, so a mail server that is down shows
       // up in the tick's warnings rather than costing an alert.
@@ -288,16 +304,18 @@ export async function runLiveTick(supabase: SupabaseClient): Promise<TickResult>
         // there is what allowed the two halves to disagree, so the
         // decision lives in one place.
         trucks,
-        (stationRows ?? []).map((r) => ({
-          id: r.id as string,
-          name: r.name as string,
-          lat: r.lat as number,
-          lng: r.lng as number,
-          radiusMeters: (r.radius_meters as number) ?? 50,
-          blacklisted: true,
-        }))
+        stations
       );
       warnings.push(...mailWarnings);
+
+      // The approach tier — a per-station ring (NULL = off), one alert
+      // when any truck enters it. Same clock, same feed, its own flags.
+      const approachWarnings = await runBlacklistedStationApproachCheck(
+        supabase,
+        trucks,
+        stations
+      );
+      warnings.push(...approachWarnings);
     }
   } catch (err) {
     warnings.push(`stations: ${(err as Error).message}`);

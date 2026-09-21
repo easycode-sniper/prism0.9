@@ -1,6 +1,9 @@
 // Email delivery for alerts that someone has to act on away from the
-// screen. Right now that is one kind: a truck stopped at a blacklisted
-// station, which the fuel desk needs while the truck is still there.
+// screen. Two kinds: a truck STOPPED at a blacklisted station, which the
+// fuel desk needs while the truck is still there, and a truck that has
+// ENTERED a blacklisted station's approach ring — the "there is still
+// time to phone the driver" warning that made the stop alert a 10-minute
+// window and not a call.
 //
 // SMTP rather than an HTTP mail API because the alert goes out through
 // OMD's own mailbox, so the fuel desk sees it arrive from an address
@@ -220,6 +223,130 @@ export async function sendStationStopEmails(alerts: StationStopAlert[]): Promise
     }
   } catch (err) {
     warnings.push(`email transport failed: ${(err as Error).message}`);
+  } finally {
+    transport?.close();
+  }
+
+  return warnings;
+}
+
+/**
+ * One truck entering a blacklisted station's approach ring.
+ *
+ * distanceMeters is the great-circle distance at the moment the ring was
+ * entered — what the desk divides by the truck's speed to know how long
+ * the phone call they are about to make can be.
+ */
+export interface StationApproachAlert {
+  truckId: string;
+  driverName: string | null;
+  stationName: string;
+  distanceMeters: number;
+  /** km/h from the unit's last message, when it had one. */
+  speedKmh: number | null;
+  /** When the approach was detected. Defaults to now. */
+  at?: Date;
+}
+
+export function approachSubjectFor(alert: StationApproachAlert): string {
+  return `Truck entering blacklisted-station zone — ${alert.truckId}`;
+}
+
+/** Deliberately the same sentence the in-app notification carries, so the
+ *  mailbox and the app never appear to describe different events. */
+export function approachBodyFor(alert: StationApproachAlert, at: Date): { text: string; html: string } {
+  const kmOut = (alert.distanceMeters / 1000).toFixed(1);
+  const etaMinutes =
+    alert.speedKmh && alert.speedKmh > 5
+      ? Math.round((alert.distanceMeters / 1000 / alert.speedKmh) * 60)
+      : null;
+
+  const lines = [
+    `${alert.truckId} entered the approach zone of ${alert.stationName}.`,
+    "",
+    `Truck:     ${alert.truckId}`,
+    `Station:   ${alert.stationName}`,
+    `Distance:  ${kmOut} km`,
+    `Speed:     ${alert.speedKmh != null ? `${alert.speedKmh} km/h` : "unknown"}`,
+    etaMinutes != null ? `ETA:       ~${etaMinutes} min` : `Driver:    ${alert.driverName ?? "unknown"}`,
+    `Time:      ${stampAlgiers(at)} (Africa/Algiers)`,
+    "",
+    "This station is on Prism's blacklist and the truck has entered its",
+    "approach ring — there is still time to phone the driver.",
+    "",
+    "Open Prism: https://prism0-9.vercel.app/notifications",
+    "",
+    "— Prism, automatically. Nobody is monitoring replies to this address.",
+  ];
+
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const rows = [
+    ["Truck", alert.truckId],
+    ["Station", alert.stationName],
+    ["Distance", `${kmOut} km`],
+    ["Speed", alert.speedKmh != null ? `${alert.speedKmh} km/h` : "unknown"],
+    ...(etaMinutes != null ? [["ETA", `~${etaMinutes} min`]] : [["Driver", alert.driverName ?? "unknown"]]),
+    ["Time", `${stampAlgiers(at)} (Africa/Algiers)`],
+  ] as const;
+
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:14px;color:#111">
+  <p style="font-size:16px;margin:0 0 12px"><strong>${esc(alert.truckId)}</strong> entered the approach zone of <strong>${esc(alert.stationName)}</strong>.</p>
+  <table cellpadding="4" style="border-collapse:collapse;font-size:14px">
+    ${rows.map(([k, v]) => `<tr><td style="color:#666">${esc(k)}</td><td><strong>${esc(v)}</strong></td></tr>`).join("")}
+  </table>
+  <p style="color:#444">This station is on Prism's blacklist and the truck has entered its approach ring — there is still time to phone the driver.</p>
+  <p><a href="https://prism0-9.vercel.app/notifications">Open Prism</a></p>
+  <p style="color:#888;font-size:12px">Prism, automatically. Nobody is monitoring replies to this address.</p>
+</div>`;
+
+  return { text: lines.join("\n"), html };
+}
+
+/**
+ * Send one email per approach, with exactly the same never-throws
+ * contract as sendStationStopEmails: called after the notification row is
+ * written, so a mail server that is down must cost nothing but a warning.
+ */
+export async function sendStationApproachEmails(alerts: StationApproachAlert[]): Promise<string[]> {
+  if (alerts.length === 0) return [];
+
+  const read = readConfig();
+  if ("reason" in read) return [`email skipped: ${read.reason}`];
+  const { config } = read;
+
+  const warnings: string[] = [];
+  let transport: Transporter | null = null;
+
+  try {
+    transport = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: { user: config.user, pass: config.pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
+    });
+
+    for (const alert of alerts) {
+      const at = alert.at ?? new Date();
+      const { text, html } = approachBodyFor(alert, at);
+      try {
+        await transport.sendMail({
+          from: config.from,
+          to: config.to,
+          subject: approachSubjectFor(alert),
+          text,
+          html,
+        });
+      } catch (err) {
+        warnings.push(`approach email for ${alert.truckId} failed: ${(err as Error).message}`);
+      }
+    }
+  } catch (err) {
+    warnings.push(`approach email transport failed: ${(err as Error).message}`);
   } finally {
     transport?.close();
   }

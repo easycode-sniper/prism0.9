@@ -10,6 +10,7 @@
     "check:i18n": "node --experimental-strip-types scripts/check-i18n.mts",
     "check:email": "node --experimental-strip-types scripts/check-station-email.mts",
     "check:stations": "node --experimental-strip-types scripts/check-station-transitions.mts",
+    "check:approach": "node --experimental-strip-types scripts/check-station-approach-transitions.mts",
     "check:range": "node --experimental-strip-types scripts/check-previous-range.mts",
     "check:drivers": "node --experimental-strip-types scripts/check-driver-union.mts",
     "check:scope": "bash scripts/check-dashboard-scope.sh",

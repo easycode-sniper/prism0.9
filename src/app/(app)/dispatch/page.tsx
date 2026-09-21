@@ -390,6 +390,7 @@ export default function DispatchPage() {
           radiusMeters: s.radiusMeters,
           blacklisted: s.blacklisted,
           blacklistNote: s.blacklistNote,
+          approachRadiusMeters: s.approachRadiusMeters,
           truckHere: truckHere?.label ?? null,
         };
       }),

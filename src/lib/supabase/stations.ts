@@ -14,6 +14,9 @@ export interface GasStation {
   radiusMeters: number;
   blacklisted: boolean;
   blacklistNote: string | null;
+  /** Per-station approach ring (m), NULL = the approach tier is off.
+   *  Drawn dashed on the map so the invisible zone has an owner. */
+  approachRadiusMeters: number | null;
 }
 
 function toStation(r: Record<string, unknown>): GasStation {
@@ -25,6 +28,7 @@ function toStation(r: Record<string, unknown>): GasStation {
     radiusMeters: (r.radius_meters as number) ?? 50,
     blacklisted: (r.blacklisted as boolean) ?? false,
     blacklistNote: (r.blacklist_note as string | null) ?? null,
+    approachRadiusMeters: (r.approach_radius_meters as number | null) ?? null,
   };
 }
 
@@ -32,7 +36,7 @@ export async function listGasStations(): Promise<{ data: GasStation[]; error: st
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("gas_stations")
-    .select("id, name, lat, lng, radius_meters, blacklisted, blacklist_note")
+    .select("id, name, lat, lng, radius_meters, blacklisted, blacklist_note, approach_radius_meters")
     .order("name");
 
   if (error) return { data: [], error: error.message };
@@ -65,7 +69,7 @@ export async function createGasStation(
   const { data, error } = await supabase
     .from("gas_stations")
     .insert({ name: cleanName, lat, lng })
-    .select("id, name, lat, lng, radius_meters, blacklisted, blacklist_note")
+    .select("id, name, lat, lng, radius_meters, blacklisted, blacklist_note, approach_radius_meters")
     .single();
 
   if (error) {

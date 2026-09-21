@@ -19,6 +19,9 @@ import {
   subjectFor,
   bodyFor,
   sendStationStopEmails,
+  approachSubjectFor,
+  approachBodyFor,
+  sendStationApproachEmails,
 } from "../src/lib/notifications/email.ts";
 
 let failures = 0;
@@ -171,6 +174,43 @@ const nasty = bodyFor({ ...alert, stationName: 'A<script>alert("x")</script>B' }
 check("station name is escaped in the html", !nasty.html.includes("<script>"), "raw <script> reached the html");
 check("escaping is visible as entities", nasty.html.includes("&lt;script&gt;"));
 
+console.log("\napproach message:");
+
+// The advance-warning tier: same desk, different sentence — the app says
+// "approached", so the mailbox must not say "stopped" for an approach.
+const approach = {
+  truckId: "00032-523-35",
+  driverName: "S. DJEMILA",
+  stationName: "SARL OULED DJEMILA",
+  distanceMeters: 22_431,
+  speedKmh: 62,
+};
+
+const approachSubject = approachSubjectFor(approach);
+check("approach subject carries the truck id", approachSubject.includes("00032-523-35"), approachSubject);
+check("approach subject says 'entering', not 'stopped'", approachSubject.includes("entering"), approachSubject);
+
+const approachMail = approachBodyFor(approach, utc);
+check(
+  "approach body opens with the app's own sentence",
+  approachMail.text.includes("00032-523-35 entered the approach zone of SARL OULED DJEMILA."),
+  approachMail.text.split("\n")[0],
+);
+check("the distance appears as km", approachMail.text.includes("22.4 km"), approachMail.text);
+check("the speed appears", approachMail.text.includes("62 km/h"), approachMail.text);
+check("an ETA is derived from distance over speed", approachMail.text.includes("~22 min"), approachMail.text);
+check("approach html carries the same truck", approachMail.html.includes("00032-523-35"));
+
+const slow = approachBodyFor({ ...approach, speedKmh: 3 }, utc);
+check("a near-stationary truck has no ETA", !slow.text.includes("ETA"), slow.text);
+check("and the driver line appears instead", slow.text.includes("S. DJEMILA"));
+
+const nastyApproach = approachBodyFor(
+  { ...approach, stationName: 'A<script>alert("x")</script>B' },
+  utc,
+);
+check("approach station name is escaped in the html", !nastyApproach.html.includes("<script>"), "raw <script> reached the html");
+
 console.log("\ncontract:");
 
 // The one that matters most: this is called after the notification row
@@ -204,6 +244,38 @@ try {
   emptyThrew = (err as Error).message;
 }
 check("no alerts is a no-op", emptyThrew === null && emptyWarnings.length === 0);
+
+// The same two contracts hold for the approach email: called after the
+// notification row is written, so it must never throw, and an empty list
+// must cost nothing.
+let approachThrew: string | null = null;
+let approachWarnings: string[] = [];
+try {
+  const saved = { ...process.env };
+  process.env.SMTP_HOST = "smtp.invalid.example";
+  process.env.SMTP_PORT = "587";
+  process.env.SMTP_USER = "alerts@omd-dz.com";
+  process.env.SMTP_PASSWORD = "x";
+  process.env.ALERT_EMAIL_TO = "service.carburant.omd@omd-dz.com";
+  approachWarnings = await sendStationApproachEmails([approach]);
+  for (const k of ENV_KEYS) {
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
+  }
+} catch (err) {
+  approachThrew = (err as Error).message;
+}
+check("an unreachable mail host does not throw for an approach", approachThrew === null, approachThrew ?? "");
+check("it reports the approach failure as a warning", approachWarnings.length > 0, JSON.stringify(approachWarnings));
+
+let emptyApproachThrew: string | null = null;
+let emptyApproachWarnings: string[] = [];
+try {
+  emptyApproachWarnings = await sendStationApproachEmails([]);
+} catch (err) {
+  emptyApproachThrew = (err as Error).message;
+}
+check("no approach alerts is a no-op", emptyApproachThrew === null && emptyApproachWarnings.length === 0);
 
 await withEnvAsync();
 async function withEnvAsync(): Promise<void> {

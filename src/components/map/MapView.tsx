@@ -771,7 +771,7 @@ export function MapView({ truckMarkers, siteMarkers = [], stationMarkers = [], z
           <strong style="color: ${s.blacklisted ? "var(--red)" : "var(--cyan)"}; display: inline-flex; align-items: center; gap: 5px;">${SVG_ICONS.fuel} ${escapeHtml(s.name)}</strong>
           ${s.blacklisted ? `<div style="margin-top:4px;color:var(--red);font-size:11px;">Blacklisted · watched to ${watch}m</div>` : `<div style="margin-top:4px;color:var(--text-dim);font-size:11px;">Watched to ${watch}m</div>`}
           ${s.blacklisted && s.blacklistNote ? `<div style="margin-top:3px;color:var(--text-dim);font-size:11px;">${escapeHtml(s.blacklistNote)}</div>` : ""}
-          ${s.approachRadiusMeters ? `<div style="margin-top:3px;color:var(--amber);font-size:11px;">Approach ring · ${(s.approachRadiusMeters / 1000).toFixed(0)} km</div>` : ""}
+          ${s.approachRadiusMeters ? `<div style="margin-top:3px;color:var(--amber);font-size:11px;">Approach ring · ${(s.approachRadiusMeters / 1000).toFixed(s.approachRadiusMeters < 10_000 ? 1 : 0)} km</div>` : ""}
           ${s.truckHere ? `<div style="margin-top: 4px; display: flex; align-items: center; gap: 5px;">${SVG_ICONS.truck} ${escapeHtml(s.truckHere)} fueling</div>` : ""}
           ${canToggle ? `<button type="button" data-blacklist-id="${escapeHtml(s.id)}" data-blacklist-next="${s.blacklisted ? "0" : "1"}" style="margin-top:8px;width:100%;padding:7px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--text-dim);">${label}</button>` : ""}
         </div>`

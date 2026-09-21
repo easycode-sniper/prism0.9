@@ -3,7 +3,7 @@
 // Run: node --experimental-strip-types scripts/check-station-approach-transitions.mts
 //
 // WHY THIS SCRIPT EXISTS: the approach tier (migration 074) is the "still
-// time to phone the driver" warning between the 30km ring and the 150m
+// time to phone the driver" warning between the 7.5km ring and the 150m
 // stop watch. Its single most important behaviour is ONE ALERT PER ENTRY
 // — a truck lingering inside the ring must not alarm on every tick, and
 // a truck that leaves and comes back must alarm again. Those guarantees
@@ -34,9 +34,12 @@ function check(label: string, ok: boolean, detail?: string): void {
   }
 }
 
-// Ring = 30,000m, the armed radius for SARL OULED DJEMILA (33.655266,
-// 0.906610) that this feature exists to serve.
-const RING = 30_000;
+// Ring = 7,500m, the armed radius for SARL OULED DJEMILA (33.655266,
+// 0.906610) that this feature exists to serve. 30km swept in half of the
+// province; 7.5km is "kind of on the way" — the phone call is still
+// worth making, but a truck on the Tamanrasset road no longer sets it
+// off.
+const RING = 7_500;
 
 const STATION_A: BlacklistStation = {
   id: "aaaaaaaa-0000-0000-0000-000000000001",
@@ -47,11 +50,13 @@ const STATION_A: BlacklistStation = {
   blacklisted: true,
   approachRadiusMeters: RING,
 };
+// ~12km from A: close enough that the two 7.5km rings OVERLAP, which is
+// what the overlap test at the bottom needs.
 const STATION_B: BlacklistStation = {
   id: "bbbbbbbb-0000-0000-0000-000000000002",
   name: "GD EL BAYADH",
-  lat: 33.85,
-  lng: 1.25,
+  lat: 33.72,
+  lng: 1.01,
   radiusMeters: 50,
   blacklisted: true,
   approachRadiusMeters: RING,
@@ -107,7 +112,7 @@ function stubClient(flags: Record<string, string | null>) {
   return { client, calls, notified, flags };
 }
 
-const INSIDE_A = { lat: STATION_A.lat + 0.15, lng: STATION_A.lng }; // ~17km north of A
+const INSIDE_A = { lat: STATION_A.lat + 0.04, lng: STATION_A.lng + 0.04 }; // ~5.4km from A
 const FAR = { lat: 34.6, lng: 2.2 }; // ~200km away, outside every ring
 
 async function run(trucks: ZoneTruck[], flags: Record<string, string | null>) {
@@ -198,21 +203,21 @@ console.log("\noffline:");
 console.log("\nstation-to-station:");
 
 {
-  // Inside B's ring (~40km from A, far outside A's 30km), so the re-alert
-  // is a true ring-to-ring transition and not merely the nearest of two.
-  const atB = { lat: STATION_B.lat - 0.05, lng: STATION_B.lng + 0.05 };
+  // Inside B's ring (6.6km from B), far outside A's 7.5km ring, so the
+  // re-alert is a true ring-to-ring transition and not just the nearest
+  // of two.
+  const atB = { lat: STATION_B.lat + 0.01, lng: STATION_B.lng + 0.07 };
   const s = await run([{ truck_id: "T1", ...atB, status: "moving" }], { T1: STATION_A.id });
   check("moving from one armed ring to another re-alerts", s.notified.includes("T1"), JSON.stringify(s.notified));
   check("and the flag follows to the new station", s.flags.T1 === STATION_B.id, String(s.flags.T1));
 }
 
 {
-  // Two rings that OVERLAP must pick the nearer one deterministically.
-  const overlap = await run(
-    [{ truck_id: "T1", lat: STATION_A.lat + 0.05, lng: STATION_A.lng + 0.2, status: "moving" }],
-    { T1: null }
-  );
-  check("when two rings overlap, the nearest one is flagged", overlap.flags.T1 === STATION_A.id, String(overlap.flags.T1));
+  // B sits ~12km from A, so the two 7.5km rings overlap; a point between
+  // them is inside BOTH and must resolve to the nearer one.
+  const insideBoth = { lat: 33.682, lng: 0.95 }; // ~5.0km from A, ~7.0km from B
+  const s = await run([{ truck_id: "T1", ...insideBoth, status: "moving" }], { T1: null });
+  check("when two rings overlap, the nearest one is flagged", s.flags.T1 === STATION_A.id, String(s.flags.T1));
 }
 
 if (failures > 0) {

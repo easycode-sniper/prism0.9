@@ -331,6 +331,7 @@ something other than an async function.
 | `/reports` | Five reports over one shared From/To range (quick ranges, clipboard copy, CSV download): **Parc** entries, **Geo** — one truck across every zone, **Livraisons** — the fleet at the client end of a trip, **Chargements** — the fleet at the plant end, with the wait before each load, and **Voyages** — fuel against trips, one row per truck |
 | `/drivers` | Driver directory — Wialon names matched to stored phone and address, with inline editing |
 | `/carburant` | Recent fuel transactions as the sheet records them |
+| `/tools` | Trip fuel estimator for the five staff vehicles (distance × city/highway/mixed rate × pump price), and the fuel-transaction spreadsheet cleaner — column reorder, oldest-first date sort, card→vehicle mapping, 20-row preview, `.xlsx` export, all client-side |
 | `/admin` | Admin hub; lists the geofences currently loaded |
 | `/admin/users` | Invite users, set roles, disable/enable accounts |
 | `/admin/settings` | Wialon relay, server and token |
@@ -349,13 +350,14 @@ src/
 │   ├── (auth)/login/          # Sign-in page
 │   ├── (app)/                 # Authenticated shell: topbar, FleetProvider, i18n
 │   │   ├── dashboard/ dispatch/ monitoring/ history/ reports/
-│   │   ├── drivers/ carburant/ notifications/ admin/
+│   │   ├── drivers/ carburant/ notifications/ tools/ admin/
 │   ├── api/tick/              # Scheduled monitoring endpoint (pg_cron calls this)
 │   ├── api/fuel-sync/         # Scheduled fuel-sheet mirror (pg_cron calls this)
 │   └── actions/auth.ts        # Sign-in / sign-out server actions
 ├── components/
 │   ├── providers/             # FleetProvider, AlertToaster (toast + sound)
 │   ├── layout/                # Topbar, nav, operations strip, login scenery
+│   ├── tools/                 # Fuel estimator + Excel transaction processor
 │   └── map/MapView.tsx        # Leaflet map (persistent singleton across navigation)
 ├── lib/
 │   ├── fleet/                 # Client-agnostic core: tick orchestration, Wialon

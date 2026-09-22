@@ -1121,12 +1121,75 @@ export default function DashboardPage() {
               </div>
             </div>
           </section>
+          {/* Directly under the distance chart: the truck table breaks
+              down the same fills the chart plots — chart first, worst
+              offenders second. Column width, not full width: five
+              columns never needed the whole band (see the grid note). */}
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div>
+                <div className="dash-panel__title">{t("Fuel variance by truck")}</div>
+                <div className="dash-panel__sub">
+                  {t("The same écart, per vehicle. A truck that is thirsty under several drivers is a truck, not a run of unlucky people.")}
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body dash-panel__body--flush">
+              {scopedTruckVariance === null ? (
+                <VarianceWaiting />
+              ) : scopedTruckVariance.length === 0 ? (
+                <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
+              ) : (
+                <SortableTable
+                  rows={scopedTruckVariance}
+                  rowKey={(t) => t.truckId}
+                  initialKey="varianceDa"
+                  unit="trucks"
+                  noteSuffix={(dir) => (dir === "desc" ? t(" — worst first") : t(" — best first"))}
+                  columns={[
+                    {
+                      key: "truckId",
+                      label: t("Truck"),
+                      value: (t) => t.truckId,
+                      render: (t) => t.truckId,
+                      cellClass: () => "truck-id",
+                    },
+                    {
+                      key: "drivers",
+                      label: t("Drivers"),
+                      value: (t) => t.drivers,
+                      render: (t) => t.drivers,
+                      // One driver means this row and that driver's row are
+                      // the same evidence counted twice, which is worth
+                      // seeing before either is treated as proof.
+                      cellClass: (t) => (t.drivers > 1 ? "t-primary" : "t-dim"),
+                    },
+                    { key: "km", label: t("Distance"), value: (tr) => tr.km, render: (tr) => `${nf(tr.km)} km` },
+                    {
+                      key: "litresPer100Km",
+                      label: t("L/100km"),
+                      value: (t) => t.litresPer100Km,
+                      render: (t) => (t.litresPer100Km != null ? t.litresPer100Km.toFixed(2) : "—"),
+                      cellClass: (t) => consumptionClass(t.litresPer100Km),
+                    },
+                    {
+                      key: "varianceDa",
+                      label: t("Variance"),
+                      value: (t) => t.varianceDa,
+                      render: (t) => signed(t.varianceDa, "DA"),
+                      cellClass: (t) => signedClass(t.varianceDa),
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          </section>
 
           {/* Second, directly under the headline series — not at the
               bottom of the column. The KPI strip opens with what the
-              month cost; this is the panel that answers it, so it reads
-              before the per-truck and per-driver tables that break the
-              same money down. It is full width because two series, two
+              month cost; this is the panel that answers it, with the
+              per-truck table now reading just above, breaking the same
+              money down first. It is full width because two series, two
               axes and a legend need the room the trio's thirds cannot
               give. Position does not change how the column ends: the
               same panels in any order still close the band the rail used
@@ -1326,66 +1389,6 @@ export default function DashboardPage() {
             </div>
           </section>
         </div>
-
-          <section className="panel dash-panel">
-            <header className="dash-panel__head">
-              <div>
-                <div className="dash-panel__title">{t("Fuel variance by truck")}</div>
-                <div className="dash-panel__sub">
-                  {t("The same écart, per vehicle. A truck that is thirsty under several drivers is a truck, not a run of unlucky people.")}
-                </div>
-              </div>
-            </header>
-            <div className="dash-panel__body dash-panel__body--flush">
-              {scopedTruckVariance === null ? (
-                <VarianceWaiting />
-              ) : scopedTruckVariance.length === 0 ? (
-                <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
-              ) : (
-                <SortableTable
-                  rows={scopedTruckVariance}
-                  rowKey={(t) => t.truckId}
-                  initialKey="varianceDa"
-                  unit="trucks"
-                  noteSuffix={(dir) => (dir === "desc" ? t(" — worst first") : t(" — best first"))}
-                  columns={[
-                    {
-                      key: "truckId",
-                      label: t("Truck"),
-                      value: (t) => t.truckId,
-                      render: (t) => t.truckId,
-                      cellClass: () => "truck-id",
-                    },
-                    {
-                      key: "drivers",
-                      label: t("Drivers"),
-                      value: (t) => t.drivers,
-                      render: (t) => t.drivers,
-                      // One driver means this row and that driver's row are
-                      // the same evidence counted twice, which is worth
-                      // seeing before either is treated as proof.
-                      cellClass: (t) => (t.drivers > 1 ? "t-primary" : "t-dim"),
-                    },
-                    { key: "km", label: t("Distance"), value: (tr) => tr.km, render: (tr) => `${nf(tr.km)} km` },
-                    {
-                      key: "litresPer100Km",
-                      label: t("L/100km"),
-                      value: (t) => t.litresPer100Km,
-                      render: (t) => (t.litresPer100Km != null ? t.litresPer100Km.toFixed(2) : "—"),
-                      cellClass: (t) => consumptionClass(t.litresPer100Km),
-                    },
-                    {
-                      key: "varianceDa",
-                      label: t("Variance"),
-                      value: (t) => t.varianceDa,
-                      render: (t) => signed(t.varianceDa, "DA"),
-                      cellClass: (t) => signedClass(t.varianceDa),
-                    },
-                  ]}
-                />
-              )}
-            </div>
-          </section>
 
           <section className="panel dash-panel">
             <header className="dash-panel__head">

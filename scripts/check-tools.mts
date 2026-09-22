@@ -19,7 +19,7 @@ import {
   parseTransactionDate,
   processTransactionRows,
 } from "../src/components/tools/excelProcess.ts";
-import { lookupCardId, CARD_NOT_FOUND } from "../src/components/tools/cardMapping.ts";
+import { lookupCard, CARD_MAPPING, CARD_NOT_FOUND } from "../src/components/tools/cardMapping.ts";
 import { FUEL_VEHICLES, estimateFuel } from "../src/components/tools/fuelVehicles.ts";
 
 let failures = 0;
@@ -64,10 +64,29 @@ console.log("\ncard lookup:");
 {
   // A real card from the mapping, with the whitespace and quotes a sheet
   // paste carries — the normaliser must absorb all three.
-  check("known card resolves", lookupCardId("  '3220160100289445'  ") === "027");
-  check("unknown card reads 'not found'", lookupCardId("3220160199999999") === CARD_NOT_FOUND);
-  check("empty cell reads 'not found'", lookupCardId("") === CARD_NOT_FOUND);
-  check("missing cell reads 'not found'", lookupCardId(undefined) === CARD_NOT_FOUND);
+  const known = lookupCard("  '3220160100289445'  ");
+  check("known card resolves id + plate", known?.id === "027" && known?.mat === "00015-523-35", JSON.stringify(known));
+  const plateless = lookupCard("3220160100274651");
+  check("card without a plate resolves id + empty mat", plateless?.id === "011" && plateless?.mat === "", JSON.stringify(plateless));
+  check("unknown card resolves null", lookupCard("3220160199999999") === null);
+  check("empty cell resolves null", lookupCard("") === null);
+  check("missing cell resolves null", lookupCard(undefined) === null);
+  check("CARD_NOT_FOUND sentinel intact", CARD_NOT_FOUND === "not found");
+}
+
+console.log("\nmapping integrity:");
+
+{
+  const cards = Object.keys(CARD_MAPPING);
+  check("every entry has a non-empty vehicle id", cards.every((c) => CARD_MAPPING[c].id !== ""));
+  check(
+    "spot checks hold (001, 119 generator, plateless 033)",
+    CARD_MAPPING["3220160100435142"]?.id === "001" &&
+      CARD_MAPPING["3220160100434135"]?.mat === "GROUPE ELECTROGENE" &&
+      CARD_MAPPING["3220160100289409"]?.mat === "" &&
+      CARD_MAPPING["3220160100496366"]?.id === "002"
+  );
+  console.log(`  info ${cards.length} cards mapped`);
 }
 
 console.log("\ndates:");
@@ -114,19 +133,20 @@ console.log("\npipeline:");
 
   const first = out[1];
   check(
-    "columns land as Date · Carte · Transaction · Station · Produit · Montant · unique",
+    "columns land as Date · Carte · Transaction · Station · Produit · Montant · unique · Matricule",
     first[0] === "01/09/2026 08:00:00" &&
       first[1] === "3220160100289445" &&
       first[2] === "TXN-3" &&
       first[3] === "Blida" &&
       first[4] === "Diesel" &&
       first[5] === 2000 &&
-      first[6] === "027",
+      first[6] === "027" &&
+      first[7] === "00015-523-35",
     JSON.stringify(first)
   );
 
   const unknown = out.find((r) => r[2] === "TXN-1")!;
-  check("unmapped card appends 'not found'", unknown[6] === "not found", String(unknown[6]));
+  check("unmapped card appends 'not found' + empty plate", unknown[6] === "not found" && unknown[7] === "", JSON.stringify(unknown.slice(6)));
 }
 
 console.log("\npreview:");

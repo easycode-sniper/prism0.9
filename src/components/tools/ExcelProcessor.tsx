@@ -198,7 +198,7 @@ export function ExcelProcessor() {
           <li>{t("Moves Date Transaction to column A")}</li>
           <li>{t("Puts N° Carte in column B, ahead of N° Transaction")}</li>
           <li>{t("Sorts oldest → newest on the transaction date")}</li>
-          <li>{t("Appends the internal vehicle id from the card mapping")}</li>
+          <li>{t("Appends the vehicle id and plate from the card mapping")}</li>
         </ol>
         <p className="t-faint" style={{ fontSize: ".7rem", marginTop: "10px", marginBottom: 0 }}>
           {t("Final columns:")} <FileSpreadsheet size={12} aria-hidden="true" style={{ verticalAlign: "-2px" }} />{" "}

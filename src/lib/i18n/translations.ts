@@ -203,7 +203,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "Moves Date Transaction to column A": "Moves Date Transaction to column A",
     "Puts N° Carte in column B, ahead of N° Transaction": "Puts N° Carte in column B, ahead of N° Transaction",
     "Sorts oldest → newest on the transaction date": "Sorts oldest → newest on the transaction date",
-    "Appends the internal vehicle id from the card mapping": "Appends the internal vehicle id from the card mapping",
+    "Appends the vehicle id and plate from the card mapping": "Appends the vehicle id and plate from the card mapping",
     "Final columns:": "Final columns:",
     // Drive-by: the carburant totals pills (d765fda, 2026-09-20) shipped
     // calling t("Month totals") with no entry, which fails check-i18n on
@@ -572,7 +572,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "Moves Date Transaction to column A": "Déplace Date Transaction en colonne A",
     "Puts N° Carte in column B, ahead of N° Transaction": "Place N° Carte en colonne B, devant N° Transaction",
     "Sorts oldest → newest on the transaction date": "Trie du plus ancien au plus récent sur la date de transaction",
-    "Appends the internal vehicle id from the card mapping": "Ajoute l'identifiant interne du véhicule depuis la table des cartes",
+    "Appends the vehicle id and plate from the card mapping": "Ajoute l'identifiant et la plaque du véhicule depuis la table des cartes",
     "Final columns:": "Colonnes finales :",
     "Month totals": "Totaux du mois",
 

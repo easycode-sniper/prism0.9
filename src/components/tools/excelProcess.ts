@@ -12,13 +12,13 @@
 //      Station · Produit · Montant (the original did this as two swaps;
 //      the net mapping is direct: [8, 1, 0, 4, 6, 7])
 //   5. sort oldest → newest on the date column
-//   6. append the internal vehicle id via the card mapping
+//   6. append the vehicle id and plate via the card mapping
 //
 // Relative import WITH the extension: check scripts run under
 // node --experimental-strip-types, which does not resolve tsconfig path
 // aliases (same reason siteZones.ts imports geometry relatively).
 
-import { lookupCardId } from "./cardMapping.ts";
+import { lookupCard, CARD_NOT_FOUND } from "./cardMapping.ts";
 
 /** The export header. Literal French, deliberately NOT a t() key — these
  *  strings are pasted into the fuel sheet, so they must never translate. */
@@ -30,6 +30,7 @@ export const PROCESSED_HEADER = [
   "Produit",
   "Montant",
   "N° carte unique",
+  "Matricule",
 ] as const;
 
 export type RawRow = unknown[];
@@ -67,8 +68,12 @@ export function processTransactionRows(sheetRows: RawRow[]): ProcessedRow[] {
     // Keep A, B, E, G, H, I; reorder to Date, Carte, Transaction, Station, Produit, Montant.
     .map((r) => [r[8], r[1], r[0], r[4], r[6], r[7]])
     .sort((a, b) => parseTransactionDate(a[0]).getTime() - parseTransactionDate(b[0]).getTime())
-    // The card number is column B of the output (index 1).
-    .map((r) => [...r, lookupCardId(r[1])]);
+    // The card number is column B of the output (index 1). Known cards
+    // append id + plate; unknown cards get "not found" and an empty plate.
+    .map((r) => {
+      const entry = lookupCard(r[1]);
+      return [...r, entry?.id ?? CARD_NOT_FOUND, entry?.mat ?? ""];
+    });
   return [[...PROCESSED_HEADER], ...dataRows];
 }
 

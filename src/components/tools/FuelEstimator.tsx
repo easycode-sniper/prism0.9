@@ -132,7 +132,10 @@ export function FuelEstimator() {
       {estimate && (
         <div
           className="panel-2"
-          style={{ marginTop: "14px", borderRadius: "var(--r-lg)", padding: "14px" }}
+          // Capped: at full page width the two headline figures sit
+          // half a screen apart and the detail rows pull to opposite
+          // edges, which reads as broken rather than spacious.
+          style={{ marginTop: "14px", borderRadius: "var(--r-lg)", padding: "14px", maxWidth: "720px" }}
           aria-live="polite"
         >
           <span

@@ -75,6 +75,8 @@ import {
 import type { PeriodDelta } from "@/lib/dashboard/delta";
 import { opsToday } from "@/lib/format";
 import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
+import { classifyIntel, deriveDriverRuns, fillRate, type IntelResult, type IntelState } from "@/lib/fuel/intelligence";
+import { getTruckFills, type TruckFill } from "@/lib/supabase/fuel";
 import { SPEED_LIMIT_KMH } from "@/lib/constants";
 
 // BarController and LineController are registered EXPLICITLY, not left to
@@ -249,6 +251,250 @@ function SortableTable<T>({
 }
 
 /**
+ * Prism Intelligence: the signal cell and the truck detail behind it.
+ *
+ * The table cell is a button, never a dead label — every state opens
+ * the same detail, because even NO BASELINE is worth showing (current
+ * figures plus the trend of what exists). The detail is evidence, not
+ * verdict: it shows what changed and what else changed around it, and
+ * stops there. No string in this component says a driver caused
+ * anything — that sentence does not exist in any language file either.
+ */
+function intelLabel(intel: IntelResult, t: (key: string) => string): string {
+  switch (intel.state) {
+    case "stable":
+      return `● ${t("STABLE")}`;
+    case "watch":
+      return `↑ ${t("Watch")}`;
+    case "up":
+      return `↑ +${intel.pct!.toFixed(1)}%`;
+    case "improving":
+      return `↓ ${intel.pct!.toFixed(1)}%`;
+    case "new_vehicle":
+      return t("NEW VEHICLE");
+    case "insufficient":
+      return t("INSUFFICIENT DATA");
+    case "no_baseline":
+    default:
+      return `— ${t("NO BASELINE")}`;
+  }
+}
+
+function intelClass(state: IntelState): string {
+  switch (state) {
+    case "up":
+      return "c-red";
+    case "improving":
+      return "c-green";
+    case "watch":
+      return "c-amber";
+    case "new_vehicle":
+      return "t-primary";
+    default:
+      return "t-dim";
+  }
+}
+
+function TruckIntelDetail({
+  truckId,
+  current,
+  previous,
+  intel,
+  fills,
+  loading,
+  fillsError,
+  onClose,
+}: {
+  truckId: string;
+  current: TruckVariance;
+  previous: TruckVariance | null;
+  intel: IntelResult;
+  fills: TruckFill[] | null;
+  loading: boolean;
+  fillsError: string | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+
+  // Actual observations only. A fill with no usable distance yields no
+  // rate — filtered out here, never plotted as zero (a zero would read
+  // as a miraculous tank, and a null would break the line into slots
+  // the tooltip then has to explain).
+  const points = (fills ?? [])
+    .map((f) => ({ day: f.occurredAt.slice(0, 10), rate: fillRate(f.litresFilled, f.distanceKm) }))
+    .filter((p): p is { day: string; rate: number } => p.rate != null);
+  const runs = deriveDriverRuns((fills ?? []).map((f) => ({ occurredAt: f.occurredAt, driverName: f.driverName })));
+  // The review line fires only on deterioration WITH a handover inside
+  // the window. An improvement after a change is good news, not a case —
+  // the same sentence there would read as suspicion.
+  const reviewRecommended = (intel.state === "up" || intel.state === "watch") && runs.length > 1;
+
+  const trendData = {
+    labels: points.map((p) => axisLabel(p.day)),
+    datasets: [
+      {
+        data: points.map((p) => p.rate),
+        ...LINE_SERIES,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+      },
+      {
+        // The existing 45 threshold, drawn not derived. Same value the
+        // consumption cells redden past, so the chart and the table
+        // cannot disagree about where the line is.
+        data: points.map(() => ASSUMED_L_PER_100KM),
+        borderColor: CHART_COLORS.red,
+        borderWidth: 1,
+        borderDash: [5, 4],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        tension: 0,
+      },
+    ],
+  };
+
+  const runSpan = (from: string, to: string) => {
+    const a = axisLabel(from.slice(0, 10));
+    const b = axisLabel(to.slice(0, 10));
+    return a === b ? a : `${a} → ${b}`;
+  };
+
+  return (
+    <div style={{ borderTop: "1px solid var(--line)", padding: "14px 16px" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "8px", flexWrap: "wrap" }}>
+        <span className="t-faint" style={{ fontSize: ".62rem", letterSpacing: ".08em" }}>
+          {t("PRISM INTELLIGENCE")}
+        </span>
+        <span style={{ fontSize: ".85rem", fontWeight: 700 }}>{t("Fuel Behavioral Intelligence")}</span>
+        <span className="truck-id">{truckId}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn-sm"
+          style={{ marginLeft: "auto", padding: "2px 10px", fontSize: ".68rem" }}
+        >
+          {t("Close")}
+        </button>
+      </div>
+      <p className="t-faint" style={{ fontSize: ".72rem", margin: "4px 0 12px" }}>
+        {t("Understand how this vehicle's consumption behavior changes over time.")}
+      </p>
+
+      <dl
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+          gap: "8px",
+          margin: "0 0 14px",
+        }}
+      >
+        <div>
+          <dt className="t-faint" style={{ fontSize: ".66rem" }}>{t("Current consumption")}</dt>
+          <dd style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }}>
+            {current.litresPer100Km != null ? `${current.litresPer100Km.toFixed(2)}` : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="t-faint" style={{ fontSize: ".66rem" }}>{t("Previous period")}</dt>
+          <dd style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }}>
+            {previous?.litresPer100Km != null ? `${previous.litresPer100Km.toFixed(2)}` : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="t-faint" style={{ fontSize: ".66rem" }}>{t("Behavior change")}</dt>
+          <dd style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }} className={intelClass(intel.state)}>
+            {intelLabel(intel, t)}
+          </dd>
+        </div>
+        <div>
+          <dt className="t-faint" style={{ fontSize: ".66rem" }}>{t("Variance")}</dt>
+          <dd style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }} className={signedClass(current.varianceDa)}>
+            {signed(current.varianceDa, "DA")}
+          </dd>
+        </div>
+      </dl>
+
+      {loading ? (
+        <p className="t-faint" style={{ fontSize: ".74rem" }}>{t("Loading fuel history…")}</p>
+      ) : fillsError ? (
+        <p style={{ fontSize: ".74rem", color: "var(--red)" }}>{t("Could not load fuel history.")}</p>
+      ) : !fills || fills.length === 0 ? (
+        <p className="dash-empty" style={{ margin: 0 }}>{t("No fills in this window.")}</p>
+      ) : (
+        <>
+          <div className="dash-chart" style={{ marginBottom: "4px" }}>
+            <Line
+              data={trendData}
+              options={timeSeriesOptions({
+                unit: " L/100km",
+                days: points.map((p) => p.day),
+                beginAtZero: false,
+              })}
+              plugins={[crosshairPlugin]}
+            />
+          </div>
+          <p className="t-faint" style={{ fontSize: ".68rem", margin: "0 0 14px" }}>
+            {t("Dots are fills that logged a distance; the dashed line is the 45 L/100km threshold.")}
+          </p>
+
+          <div>
+            <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "6px", textTransform: "uppercase", letterSpacing: ".06em" }}>
+              {t("Driver assignment")}
+            </span>
+            {runs.map((run, i) => (
+              <div key={`${run.driver ?? "—"}-${run.from}`} style={{ marginBottom: i < runs.length - 1 ? "2px" : "0" }}>
+                {/* The boundary IS the information: a change between two
+                    consecutive fills is the only assignment fact the data
+                    states, so only boundaries get marked. */}
+                {i > 0 && (
+                  <div
+                    style={{
+                      display: "inline-block",
+                      fontSize: ".62rem",
+                      fontWeight: 700,
+                      letterSpacing: ".06em",
+                      border: "1px solid var(--line)",
+                      borderRadius: "99px",
+                      padding: "1px 9px",
+                      margin: "6px 0",
+                    }}
+                  >
+                    {t("DRIVER CHANGE")}
+                  </div>
+                )}
+                {/* Achromatic on purpose. The spec forbids any color that
+                    could read as good or bad on a driver — so drivers get
+                    no color at all. The NAME is the identifier. */}
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", fontSize: ".76rem" }}>
+                  <strong style={{ fontWeight: 700 }}>
+                    {run.driver ?? t("Driver assignment unavailable")}
+                  </strong>
+                  <span className="t-faint">
+                    {runSpan(run.from, run.to)} · {t("{n} fills", { n: run.fills })}
+                  </span>
+                </div>
+              </div>
+            ))}
+            <p className="t-faint" style={{ fontSize: ".68rem", margin: "8px 0 0" }}>
+              {t("As recorded on fills — assignment between fills is unknown.")}
+            </p>
+            {reviewRecommended && (
+              <p style={{ fontSize: ".74rem", margin: "8px 0 0", color: "var(--amber)" }}>
+                {t("Consumption pattern changed following a driver assignment change. Review recommended.")}
+              </p>
+            )}
+            <p className="t-faint" style={{ fontSize: ".68rem", margin: "8px 0 0" }}>
+              {t("Possible explanations include driving behavior, operating conditions, load differences, mechanical condition, route differences, or data quality.")}
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * Who crossed the limit most often this month, as a ranked bar list.
  *
  * The bar length is the driver's share of the worst offender, not of the
@@ -376,6 +622,16 @@ export default function DashboardPage() {
   const [range, setRange] = useState<OpsRange>(() => buildPresets().find((p) => p.key === "30d")!.range);
   const [variance, setVariance] = useState<DriverVariance[] | null>(null);
   const [truckVariance, setTruckVariance] = useState<TruckVariance[] | null>(null);
+  const [previousTrucks, setPreviousTrucks] = useState<TruckVariance[] | null>(null);
+  const [historyTrucks, setHistoryTrucks] = useState<TruckVariance[] | null>(null);
+  // Intelligence detail selection: one open truck at a time. Reset when
+  // the bundle key moves (see apply) — a detail about September's rows
+  // must not linger over October's.
+  const [intelTruck, setIntelTruck] = useState<string | null>(null);
+  const [intelFills, setIntelFills] = useState<TruckFill[] | null>(null);
+  const [intelFillsError, setIntelFillsError] = useState<string | null>(null);
+  const [intelLoading, setIntelLoading] = useState(false);
+  const lastBundleKey = useRef("");
   const [speeding, setSpeeding] = useState<DriverSpeeding[] | null>(null);
   // Feeding the fuel-budget gauge, exactly as the rest of the page: the
   // bundle carries the current month's budget and the caller's right to
@@ -503,6 +759,17 @@ export default function DashboardPage() {
     // truck and the charts beneath still describe the fleet, or where a
     // delta describes a window its own figure no longer covers.
     const apply = (b: DashboardBundle) => {
+      // A new bundle key means a new range or scope: the open detail (if
+      // any) described the old rows, so it closes rather than lingering
+      // over figures it no longer matches. A refresh under the same key
+      // keeps it open — the data just got newer, not different.
+      const k = bundleKey(range, scope);
+      if (k !== lastBundleKey.current) {
+        lastBundleKey.current = k;
+        setIntelTruck(null);
+        setIntelFills(null);
+        setIntelFillsError(null);
+      }
       // The comparison's own failure is NOT folded into dataError: the
       // page is still correct without a delta, and failing the whole
       // dashboard because the previous month would not load would trade
@@ -515,6 +782,8 @@ export default function DashboardPage() {
       setSeries(b.series ?? null);
       setVariance(b.drivers ?? null);
       setTruckVariance(b.trucks ?? null);
+      setPreviousTrucks(b.previousTrucks ?? null);
+      setHistoryTrucks(b.historyTrucks ?? null);
       setSpeeding(b.speeding ?? null);
       setBudget(b.budget ?? null);
       setCanEditBudget(b.canEdit === true);
@@ -714,6 +983,92 @@ export default function DashboardPage() {
     );
     return truckVariance.filter((r) => mine.has(r.truckId));
   }, [truckVariance, variance, scope]);
+
+  // ── Prism Intelligence ──
+  //
+  // The comparison window is the SAME value the load effect passes to
+  // the bundle (previousRange over the range, calendar-aware for the
+  // month preset) — recomputed here because the effect's copy is local
+  // to it and the detail fetch below needs it in render scope. Pure
+  // function, same inputs, so the two cannot disagree.
+  const comparisonRange = useMemo(
+    () => previousRange(range, { calendar: presetKeyFor(range) === "month" }),
+    [range]
+  );
+
+  // One signal per truck, over the FULL rosters — scoping filters rows
+  // for display, but the comparison itself must see every truck in both
+  // windows, or a scoped view would read NO BASELINE for trucks whose
+  // previous rows simply were not asked for.
+  const truckIntel = useMemo(() => {
+    const prev = new Map((previousTrucks ?? []).map((r) => [r.truckId, r]));
+    const hist = new Map((historyTrucks ?? []).map((r) => [r.truckId, r]));
+    const out = new Map<string, IntelResult>();
+    for (const row of truckVariance ?? []) {
+      const p = prev.get(row.truckId) ?? null;
+      // Unknown history (no comparison ran, e.g. All time) is null, not
+      // zero — zero means "never filled before" and is exactly what
+      // separates NEW VEHICLE from NO BASELINE.
+      const h = historyTrucks == null ? null : (hist.get(row.truckId)?.fills ?? 0);
+      out.set(
+        row.truckId,
+        classifyIntel(
+          { fills: row.fills, litresPer100Km: row.litresPer100Km },
+          p ? { fills: p.fills, litresPer100Km: p.litresPer100Km } : null,
+          h
+        )
+      );
+    }
+    return out;
+  }, [truckVariance, previousTrucks, historyTrucks]);
+
+  // The detail behind an open signal: that truck's fills across BOTH
+  // windows, so the trend spans the comparison the signal summarises.
+  // One query per open panel — never per table row.
+  useEffect(() => {
+    if (!intelTruck) return;
+    let cancelled = false;
+    setIntelLoading(true);
+    setIntelFills(null);
+    setIntelFillsError(null);
+    void getTruckFills({
+      truck: intelTruck,
+      from: comparisonRange?.from ?? range.from,
+      to: range.to,
+    }).then((r) => {
+      if (cancelled) return;
+      setIntelFills(r.fills);
+      setIntelFillsError(r.error ?? null);
+      setIntelLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [intelTruck, comparisonRange, range]);
+
+  // The open panel's inputs, resolved from the same state the column
+  // reads: the visible row (scoped or whole-roster), its previous
+  // window, and a fresh classification so panel and cell can never
+  // disagree.
+  const intelDetail = useMemo(() => {
+    if (!intelTruck) return null;
+    const current =
+      (scopedTruckVariance ?? truckVariance ?? []).find((r) => r.truckId === intelTruck) ?? null;
+    if (!current) return null;
+    const previous = previousTrucks?.find((r) => r.truckId === intelTruck) ?? null;
+    const historyFills =
+      historyTrucks == null ? null : (historyTrucks.find((r) => r.truckId === intelTruck)?.fills ?? 0);
+    return {
+      truckId: intelTruck,
+      current,
+      previous,
+      intel: classifyIntel(
+        { fills: current.fills, litresPer100Km: current.litresPer100Km },
+        previous ? { fills: previous.fills, litresPer100Km: previous.litresPer100Km } : null,
+        historyFills
+      ),
+    };
+  }, [intelTruck, scopedTruckVariance, truckVariance, previousTrucks, historyTrucks]);
 
   // Drivers first, then trucks. The owner reaches for a name more often
   // than a plate, and the group headings make the two halves scannable
@@ -1179,10 +1534,59 @@ export default function DashboardPage() {
                       render: (t) => signed(t.varianceDa, "DA"),
                       cellClass: (t) => signedClass(t.varianceDa),
                     },
+                    {
+                      // Prism Intelligence: the behavioral signal. Sorts
+                      // on the percentage change; rows with no signal
+                      // sink to the bottom either way, like every other
+                      // nullable column on this page.
+                      key: "intel",
+                      label: t("Intelligence"),
+                      value: (r) => truckIntel.get(r.truckId)?.pct ?? null,
+                      render: (r) => {
+                        const intel = truckIntel.get(r.truckId) ?? { state: "no_baseline", pct: null };
+                        const open = intelTruck === r.truckId;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIntelTruck(open ? null : r.truckId);
+                            }}
+                            aria-expanded={open}
+                            title={t("Open fuel behavioral intelligence")}
+                            className={intelClass(intel.state)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              padding: 0,
+                              cursor: "pointer",
+                              font: "inherit",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {intelLabel(intel, t)}
+                          </button>
+                        );
+                      },
+                      cellClass: (r) => intelClass(truckIntel.get(r.truckId)?.state ?? "no_baseline"),
+                    },
                   ]}
                 />
               )}
             </div>
+            {intelDetail && (
+              <div className="dash-panel__body">
+                <TruckIntelDetail
+                  truckId={intelDetail.truckId}
+                  current={intelDetail.current}
+                  previous={intelDetail.previous}
+                  intel={intelDetail.intel}
+                  fills={intelFills}
+                  loading={intelLoading}
+                  fillsError={intelFillsError}
+                  onClose={() => setIntelTruck(null)}
+                />
+              </div>
+            )}
           </section>
 
           {/* Second, directly under the headline series — not at the

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 // "use server", which may only export async functions. Exporting the
 // constant from here compiled fine — nothing outside crossed a client
 // boundary with it — and then broke the render at runtime.
-import { type OpsRange, ALL_TIME, monthStart } from "@/lib/dashboard/range";
+import { type OpsRange, ALL_TIME, monthStart, addDays } from "@/lib/dashboard/range";
 import { opsToday } from "@/lib/format";
 import { isAdmin } from "@/lib/supabase/auth";
 // Passed to the RPC explicitly rather than leaning on its SQL default,
@@ -713,6 +713,15 @@ export interface DashboardBundle {
   series?: DashboardSeries;
   drivers?: DriverVariance[];
   trucks?: TruckVariance[];
+  /** The same per-truck rows over the comparison window — the previous
+   *  half of the intelligence signal. Undefined where there is nothing
+   *  to compare with (or when its own query fails: the page is still
+   *  correct showing NO BASELINE, same philosophy as previousFuel). */
+  previousTrucks?: TruckVariance[];
+  /** Per-truck fill counts over ALL history before the range — only the
+   *  `fills` field is read, to tell a truck that never filled before
+   *  (NEW VEHICLE) from one merely idle last period (NO BASELINE). */
+  historyTrucks?: TruckVariance[];
   speeding?: DriverSpeeding[];
   stations?: StationLeaders;
   /** MAN / Renault / Shacman, one row each, sized for the model mix
@@ -760,7 +769,7 @@ export async function getDashboardBundle(
   const speedingLimit = limits.speeding ?? 100;
   const stationSlices = limits.stations ?? 6;
 
-  const [f, s, dv, tv, sp, pf, st, mm, opt, bg, be] = await Promise.all([
+  const [f, s, dv, tv, sp, pf, st, mm, opt, bg, be, pt, ht] = await Promise.all([
     readFuelPeriodStats(supabase, range, scope),
     readDashboardSeries(supabase, range, scope),
     readDriverVariance(supabase, variance, range),
@@ -776,6 +785,16 @@ export async function getDashboardBundle(
       : Promise.resolve({ options: undefined, error: undefined }),
     readBudgetForMonth(supabase, monthStart(opsToday())),
     readBudgetEditable(supabase, userData.user.id),
+    // Intelligence pair, in the same round trip — never one query per
+    // truck. The history window is everything before the range, so a
+    // truck absent from both it and the comparison is new, not merely
+    // idle. Both stay undefined when there is no comparison to run.
+    comparison
+      ? readTruckVariance(supabase, variance, comparison)
+      : Promise.resolve({ trucks: undefined, error: undefined }),
+    comparison && range.from
+      ? readTruckVariance(supabase, 2000, { from: null, to: addDays(range.from, -1) })
+      : Promise.resolve({ trucks: undefined, error: undefined }),
   ]);
 
   return {
@@ -788,6 +807,8 @@ export async function getDashboardBundle(
     series: s.series,
     drivers: dv.drivers,
     trucks: tv.trucks,
+    previousTrucks: pt.trucks,
+    historyTrucks: ht.trucks,
     speeding: sp.drivers,
     stations: st.data,
     models: mm.models,

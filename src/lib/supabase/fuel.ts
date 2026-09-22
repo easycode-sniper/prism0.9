@@ -140,3 +140,47 @@ export async function getFuelPageOptions(params: {
     },
   };
 }
+
+// One truck's fills over a window, for the intelligence detail behind
+// the dashboard's truck table (trend chart + driver timeline). Called
+// lazily when a signal is opened — one query per open panel, never per
+// table row — via truck_fuel_fills (075), ordered oldest first.
+export interface TruckFill {
+  occurredAt: string;
+  litresFilled: number | null;
+  distanceKm: number | null;
+  varianceDa: number | null;
+  driverName: string | null;
+  station: string | null;
+  odometerKm: number | null;
+}
+
+export async function getTruckFills(params: {
+  truck: string;
+  from: string | null;
+  to: string | null;
+}): Promise<{ fills: TruckFill[] | null; error?: string }> {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { fills: null, error: "Not authenticated" };
+
+  const { data, error } = await supabase.rpc("truck_fuel_fills", {
+    p_truck: params.truck,
+    p_from: params.from,
+    p_to: params.to,
+  });
+  if (error) return { fills: null, error: error.message };
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return {
+    fills: rows.map((r) => ({
+      occurredAt: r.occurred_at as string,
+      litresFilled: r.litres_filled != null ? Number(r.litres_filled) : null,
+      distanceKm: r.distance_km != null ? Number(r.distance_km) : null,
+      varianceDa: r.variance_da != null ? Number(r.variance_da) : null,
+      driverName: (r.driver_name as string | null) ?? null,
+      station: (r.station as string | null) ?? null,
+      odometerKm: r.odometer_km != null ? Number(r.odometer_km) : null,
+    })),
+  };
+}

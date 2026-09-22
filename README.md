@@ -342,6 +342,22 @@ Access control: `src/middleware.ts` redirects unauthenticated traffic to
 `/login`, and `src/app/(app)/admin/layout.tsx` bounces non-admins off the admin
 section. Postgres RLS enforces the same rules at the data layer.
 
+### Prism Intelligence
+
+The dashboard's fuel-variance-by-truck table carries an INTELLIGENCE
+column: each truck's current-window L/100km against its previous
+comparable window (`previousRange` in `src/lib/dashboard/range.ts` —
+equal durations, calendar-month aware), classified in
+`src/lib/fuel/intelligence.ts` as STABLE (±5%), WATCH (+5–10%),
+significant rise (>+10%), improving (<−5%), NO BASELINE, NEW VEHICLE
+(no fills ever before the range) or INSUFFICIENT DATA (under 3 fills in
+either window). Clicking a signal opens a detail panel under the table:
+current/previous/change/variance figures, a per-fill consumption trend
+against the existing 45 L/100km line, and a driver-assignment timeline
+derived from fill records — evidence only, never blame. The 45
+threshold and the variance calculation itself are untouched. Detail
+fills come from `truck_fuel_fills` (migration 075).
+
 ## Project structure
 
 ```

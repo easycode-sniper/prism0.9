@@ -3050,6 +3050,31 @@ hr {
   color: var(--text-dim);
 }
 
+/* ── Tools ────────────────────────────────────────────────────
+   Same page-shell metrics as maintenance (the two pages share a
+   shape: a header, then working sections), under their own names so
+   neither page's restyle surprises the other. */
+.tools-page {
+  padding: 24px 28px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.tools-head { margin-bottom: 18px; }
+
+.tools-title {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tools-sub {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
 /* Two equal cards side by side, stacking before they get too narrow to
    hold the "what's needed" sentence on a sensible number of lines. */
 .mnt-grid {

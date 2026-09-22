@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Users, Building2, Fuel, Wrench, Bell, Settings} from "lucide-react";
+import { LayoutDashboard, Map, Radar, History as HistoryIcon, FileText, Users, Building2, Fuel, Wrench, Bell, Calculator, Settings} from "lucide-react";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import { useFleet } from "@/components/providers/FleetProvider";
 
@@ -17,6 +17,7 @@ const NAV_ITEMS: { href: string; key: string; icon: typeof LayoutDashboard }[] =
   { href: "/carburant", key: "nav.carburant", icon: Fuel },
   { href: "/maintenance", key: "nav.maintenance", icon: Wrench },
   { href: "/notifications", key: "nav.notifications", icon: Bell },
+  { href: "/tools", key: "nav.tools", icon: Calculator },
 ];
 
 export function TopbarNav({ isAdmin }: { isAdmin: boolean }) {

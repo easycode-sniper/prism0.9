@@ -75,8 +75,8 @@ import {
 import type { PeriodDelta } from "@/lib/dashboard/delta";
 import { opsToday } from "@/lib/format";
 import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
-import { classifyIntel, deriveDriverRuns, fillRate, type IntelResult, type IntelState } from "@/lib/fuel/intelligence";
-import { getTruckFills, type TruckFill } from "@/lib/supabase/fuel";
+import { classifyIntel, intelClass, intelLabel, type IntelResult } from "@/lib/fuel/intelligence";
+import { TruckIntelWindow } from "@/components/dashboard/TruckIntelWindow";
 import { SPEED_LIMIT_KMH } from "@/lib/constants";
 
 // BarController and LineController are registered EXPLICITLY, not left to
@@ -249,251 +249,6 @@ function SortableTable<T>({
     </>
   );
 }
-
-/**
- * Prism Intelligence: the signal cell and the truck detail behind it.
- *
- * The table cell is a button, never a dead label — every state opens
- * the same detail, because even NO BASELINE is worth showing (current
- * figures plus the trend of what exists). The detail is evidence, not
- * verdict: it shows what changed and what else changed around it, and
- * stops there. No string in this component says a driver caused
- * anything — that sentence does not exist in any language file either.
- */
-function intelLabel(intel: IntelResult, t: (key: string) => string): string {
-  switch (intel.state) {
-    case "stable":
-      return `● ${t("STABLE")}`;
-    case "watch":
-      return `↑ ${t("Watch")}`;
-    case "up":
-      return `↑ +${intel.pct!.toFixed(1)}%`;
-    case "improving":
-      return `↓ ${intel.pct!.toFixed(1)}%`;
-    case "new_vehicle":
-      return t("NEW VEHICLE");
-    case "insufficient":
-      return t("INSUFFICIENT DATA");
-    case "no_baseline":
-    default:
-      return `— ${t("NO BASELINE")}`;
-  }
-}
-
-function intelClass(state: IntelState): string {
-  switch (state) {
-    case "up":
-      return "c-red";
-    case "improving":
-      return "c-green";
-    case "watch":
-      return "c-amber";
-    case "new_vehicle":
-      return "t-primary";
-    default:
-      return "t-dim";
-  }
-}
-
-function TruckIntelDetail({
-  truckId,
-  current,
-  previous,
-  intel,
-  fills,
-  loading,
-  fillsError,
-  onClose,
-}: {
-  truckId: string;
-  current: TruckVariance;
-  previous: TruckVariance | null;
-  intel: IntelResult;
-  fills: TruckFill[] | null;
-  loading: boolean;
-  fillsError: string | null;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-
-  // Actual observations only. A fill with no usable distance yields no
-  // rate — filtered out here, never plotted as zero (a zero would read
-  // as a miraculous tank, and a null would break the line into slots
-  // the tooltip then has to explain).
-  const points = (fills ?? [])
-    .map((f) => ({ day: f.occurredAt.slice(0, 10), rate: fillRate(f.litresFilled, f.distanceKm) }))
-    .filter((p): p is { day: string; rate: number } => p.rate != null);
-  const runs = deriveDriverRuns((fills ?? []).map((f) => ({ occurredAt: f.occurredAt, driverName: f.driverName })));
-  // The review line fires only on deterioration WITH a handover inside
-  // the window. An improvement after a change is good news, not a case —
-  // the same sentence there would read as suspicion.
-  const reviewRecommended = (intel.state === "up" || intel.state === "watch") && runs.length > 1;
-
-  const trendData = {
-    labels: points.map((p) => axisLabel(p.day)),
-    datasets: [
-      {
-        data: points.map((p) => p.rate),
-        ...LINE_SERIES,
-        pointRadius: 2,
-        pointHoverRadius: 4,
-      },
-      {
-        // The existing 45 threshold, drawn not derived. Same value the
-        // consumption cells redden past, so the chart and the table
-        // cannot disagree about where the line is.
-        data: points.map(() => ASSUMED_L_PER_100KM),
-        borderColor: CHART_COLORS.red,
-        borderWidth: 1,
-        borderDash: [5, 4],
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        fill: false,
-        tension: 0,
-      },
-    ],
-  };
-
-  const runSpan = (from: string, to: string) => {
-    const a = axisLabel(from.slice(0, 10));
-    const b = axisLabel(to.slice(0, 10));
-    return a === b ? a : `${a} → ${b}`;
-  };
-
-  return (
-    <div style={{ borderTop: "1px solid var(--line)", padding: "14px 16px" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: "8px", flexWrap: "wrap" }}>
-        <span className="t-faint" style={{ fontSize: ".62rem", letterSpacing: ".08em" }}>
-          {t("PRISM INTELLIGENCE")}
-        </span>
-        <span style={{ fontSize: ".85rem", fontWeight: 700 }}>{t("Fuel Behavioral Intelligence")}</span>
-        <span className="truck-id">{truckId}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="btn-sm"
-          style={{ marginLeft: "auto", padding: "2px 10px", fontSize: ".68rem" }}
-        >
-          {t("Close")}
-        </button>
-      </div>
-      <p className="t-faint" style={{ fontSize: ".72rem", margin: "4px 0 12px" }}>
-        {t("Understand how this vehicle's consumption behavior changes over time.")}
-      </p>
-
-      <dl
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-          gap: "8px",
-          margin: "0 0 14px",
-        }}
-      >
-        <div>
-          <dt className="t-faint" style={{ fontSize: ".66rem" }}>{t("Current consumption")}</dt>
-          <dd style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }}>
-            {current.litresPer100Km != null ? `${current.litresPer100Km.toFixed(2)}` : "—"}
-          </dd>
-        </div>
-        <div>
-          <dt className="t-faint" style={{ fontSize: ".66rem" }}>{t("Previous period")}</dt>
-          <dd style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }}>
-            {previous?.litresPer100Km != null ? `${previous.litresPer100Km.toFixed(2)}` : "—"}
-          </dd>
-        </div>
-        <div>
-          <dt className="t-faint" style={{ fontSize: ".66rem" }}>{t("Behavior change")}</dt>
-          <dd style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }} className={intelClass(intel.state)}>
-            {intelLabel(intel, t)}
-          </dd>
-        </div>
-        <div>
-          <dt className="t-faint" style={{ fontSize: ".66rem" }}>{t("Variance")}</dt>
-          <dd style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }} className={signedClass(current.varianceDa)}>
-            {signed(current.varianceDa, "DA")}
-          </dd>
-        </div>
-      </dl>
-
-      {loading ? (
-        <p className="t-faint" style={{ fontSize: ".74rem" }}>{t("Loading fuel history…")}</p>
-      ) : fillsError ? (
-        <p style={{ fontSize: ".74rem", color: "var(--red)" }}>{t("Could not load fuel history.")}</p>
-      ) : !fills || fills.length === 0 ? (
-        <p className="dash-empty" style={{ margin: 0 }}>{t("No fills in this window.")}</p>
-      ) : (
-        <>
-          <div className="dash-chart" style={{ marginBottom: "4px" }}>
-            <Line
-              data={trendData}
-              options={timeSeriesOptions({
-                unit: " L/100km",
-                days: points.map((p) => p.day),
-                beginAtZero: false,
-              })}
-              plugins={[crosshairPlugin]}
-            />
-          </div>
-          <p className="t-faint" style={{ fontSize: ".68rem", margin: "0 0 14px" }}>
-            {t("Dots are fills that logged a distance; the dashed line is the 45 L/100km threshold.")}
-          </p>
-
-          <div>
-            <span className="t-faint" style={{ display: "block", fontSize: ".64rem", marginBottom: "6px", textTransform: "uppercase", letterSpacing: ".06em" }}>
-              {t("Driver assignment")}
-            </span>
-            {runs.map((run, i) => (
-              <div key={`${run.driver ?? "—"}-${run.from}`} style={{ marginBottom: i < runs.length - 1 ? "2px" : "0" }}>
-                {/* The boundary IS the information: a change between two
-                    consecutive fills is the only assignment fact the data
-                    states, so only boundaries get marked. */}
-                {i > 0 && (
-                  <div
-                    style={{
-                      display: "inline-block",
-                      fontSize: ".62rem",
-                      fontWeight: 700,
-                      letterSpacing: ".06em",
-                      border: "1px solid var(--line)",
-                      borderRadius: "99px",
-                      padding: "1px 9px",
-                      margin: "6px 0",
-                    }}
-                  >
-                    {t("DRIVER CHANGE")}
-                  </div>
-                )}
-                {/* Achromatic on purpose. The spec forbids any color that
-                    could read as good or bad on a driver — so drivers get
-                    no color at all. The NAME is the identifier. */}
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", fontSize: ".76rem" }}>
-                  <strong style={{ fontWeight: 700 }}>
-                    {run.driver ?? t("Driver assignment unavailable")}
-                  </strong>
-                  <span className="t-faint">
-                    {runSpan(run.from, run.to)} · {t("{n} fills", { n: run.fills })}
-                  </span>
-                </div>
-              </div>
-            ))}
-            <p className="t-faint" style={{ fontSize: ".68rem", margin: "8px 0 0" }}>
-              {t("As recorded on fills — assignment between fills is unknown.")}
-            </p>
-            {reviewRecommended && (
-              <p style={{ fontSize: ".74rem", margin: "8px 0 0", color: "var(--amber)" }}>
-                {t("Consumption pattern changed following a driver assignment change. Review recommended.")}
-              </p>
-            )}
-            <p className="t-faint" style={{ fontSize: ".68rem", margin: "8px 0 0" }}>
-              {t("Possible explanations include driving behavior, operating conditions, load differences, mechanical condition, route differences, or data quality.")}
-            </p>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 /**
  * Who crossed the limit most often this month, as a ranked bar list.
  *
@@ -628,9 +383,6 @@ export default function DashboardPage() {
   // the bundle key moves (see apply) — a detail about September's rows
   // must not linger over October's.
   const [intelTruck, setIntelTruck] = useState<string | null>(null);
-  const [intelFills, setIntelFills] = useState<TruckFill[] | null>(null);
-  const [intelFillsError, setIntelFillsError] = useState<string | null>(null);
-  const [intelLoading, setIntelLoading] = useState(false);
   const lastBundleKey = useRef("");
   const [speeding, setSpeeding] = useState<DriverSpeeding[] | null>(null);
   // Feeding the fuel-budget gauge, exactly as the rest of the page: the
@@ -767,8 +519,6 @@ export default function DashboardPage() {
       if (k !== lastBundleKey.current) {
         lastBundleKey.current = k;
         setIntelTruck(null);
-        setIntelFills(null);
-        setIntelFillsError(null);
       }
       // The comparison's own failure is NOT folded into dataError: the
       // page is still correct without a delta, and failing the whole
@@ -1022,30 +772,6 @@ export default function DashboardPage() {
     return out;
   }, [truckVariance, previousTrucks, historyTrucks]);
 
-  // The detail behind an open signal: that truck's fills across BOTH
-  // windows, so the trend spans the comparison the signal summarises.
-  // One query per open panel — never per table row.
-  useEffect(() => {
-    if (!intelTruck) return;
-    let cancelled = false;
-    setIntelLoading(true);
-    setIntelFills(null);
-    setIntelFillsError(null);
-    void getTruckFills({
-      truck: intelTruck,
-      from: comparisonRange?.from ?? range.from,
-      to: range.to,
-    }).then((r) => {
-      if (cancelled) return;
-      setIntelFills(r.fills);
-      setIntelFillsError(r.error ?? null);
-      setIntelLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [intelTruck, comparisonRange, range]);
-
   // The open panel's inputs, resolved from the same state the column
   // reads: the visible row (scoped or whole-roster), its previous
   // window, and a fresh classification so panel and cell can never
@@ -1282,6 +1008,7 @@ export default function DashboardPage() {
       : "";
 
   return (
+    <>
     <div className="dash" style={{ overflowY: "auto", height: "100%" }}>
       {/* Wraps, so the picker drops to its own line rather than squeezing
           the heading off screen on a phone. */}
@@ -1552,7 +1279,7 @@ export default function DashboardPage() {
                               setIntelTruck(open ? null : r.truckId);
                             }}
                             aria-expanded={open}
-                            title={t("Open fuel behavioral intelligence")}
+                            title={t("Open intelligence")}
                             className={intelClass(intel.state)}
                             style={{
                               background: "none",
@@ -1573,20 +1300,6 @@ export default function DashboardPage() {
                 />
               )}
             </div>
-            {intelDetail && (
-              <div className="dash-panel__body">
-                <TruckIntelDetail
-                  truckId={intelDetail.truckId}
-                  current={intelDetail.current}
-                  previous={intelDetail.previous}
-                  intel={intelDetail.intel}
-                  fills={intelFills}
-                  loading={intelLoading}
-                  fillsError={intelFillsError}
-                  onClose={() => setIntelTruck(null)}
-                />
-              </div>
-            )}
           </section>
 
           {/* Second, directly under the headline series — not at the
@@ -1994,6 +1707,23 @@ export default function DashboardPage() {
         </aside>
       </div>
     </div>
+      {intelDetail && (
+        <TruckIntelWindow
+          truckId={intelDetail.truckId}
+          current={intelDetail.current}
+          previous={intelDetail.previous}
+          previousLabel={
+            comparisonRange?.from && comparisonRange?.to
+              ? `${axisLabel(comparisonRange.from)} – ${axisLabel(comparisonRange.to)}`
+              : null
+          }
+          intel={intelDetail.intel}
+          from={comparisonRange?.from ?? range.from}
+          to={range.to}
+          onClose={() => setIntelTruck(null)}
+        />
+      )}
+    </>
   );
 }
 

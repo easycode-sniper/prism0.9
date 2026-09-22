@@ -5,13 +5,20 @@
 // its previous comparable period?" — answered deterministically. No
 // external AI, no model, no magic numbers outside this file.
 //
-// Pure: no imports at all, so scripts/check-intelligence.mts exercises
-// it under node with no DOM and no Supabase. (Same reason siteZones.ts
-// imports geometry relatively — check scripts cannot resolve `@/`.)
+// Pure: imports only the sibling parse module (itself import-free), so
+// scripts/check-intelligence.mts exercises it under node with no DOM
+// and no Supabase. (Same reason siteZones.ts imports geometry
+// relatively — check scripts cannot resolve `@/`.)
+
+import { ASSUMED_L_PER_100KM } from "./parse.ts";
 
 export const INTEL_STABLE_PCT = 5;
 export const INTEL_WATCH_PCT = 10;
 export const INTEL_MIN_FILLS = 3;
+
+/** Visual Y-axis ceiling for the consumption trend (spec §12). Display
+ *  only — never a threshold, never applied to data or calculations. */
+export const INTEL_CHART_CEILING = 90;
 
 export type IntelState =
   | "stable"
@@ -110,4 +117,109 @@ export function deriveDriverRuns(fills: FillPoint[]): DriverRun[] {
     }
   }
   return runs;
+}
+
+/** Signed distance to the 45 management limit, 2dp. Positive = above.
+ *  The limit itself is parse.ts's — one source of truth, never a copy. */
+export function limitDelta(litresPer100Km: number, limit = ASSUMED_L_PER_100KM): number {
+  return Math.round((litresPer100Km - limit) * 100) / 100;
+}
+
+/** The table cell's reading of a result. Lives here (not the page) so
+ *  the column and the detail cannot word the same state two ways. */
+export function intelLabel(intel: IntelResult, t: (key: string) => string): string {
+  switch (intel.state) {
+    case "stable":
+      return `● ${t("STABLE")}`;
+    case "watch":
+      return `↑ ${t("Watch")}`;
+    case "up":
+      return `↑ +${intel.pct!.toFixed(1)}%`;
+    case "improving":
+      return `↓ ${intel.pct!.toFixed(1)}%`;
+    case "new_vehicle":
+      return t("NEW VEHICLE");
+    case "insufficient":
+      return t("INSUFFICIENT DATA");
+    case "no_baseline":
+    default:
+      return `— ${t("NO BASELINE")}`;
+  }
+}
+
+export function intelClass(state: IntelState): string {
+  switch (state) {
+    case "up":
+      return "c-red";
+    case "improving":
+      return "c-green";
+    case "watch":
+      return "c-amber";
+    case "new_vehicle":
+      return "t-primary";
+    default:
+      return "t-dim";
+  }
+}
+
+export interface ConclusionSegment {
+  /** Translation key; values carry pre-formatted numbers. */
+  key: string;
+  vars: Record<string, string>;
+}
+
+/**
+ * The factual conclusion (§8–9): behavioral change AND limit status,
+ * generated from the numbers. Cases with a comparison produce one
+ * sentence; without one, the insufficiency plus whatever IS known
+ * (current figure, limit status). Never causation — the vocabulary
+ * here is improved/increased/stable/remains, never caused/responsible.
+ */
+export function buildConclusion(
+  current: number | null,
+  previous: number | null,
+  pct: number | null,
+  state: IntelState,
+  limit = ASSUMED_L_PER_100KM
+): ConclusionSegment[] {
+  const abs = pct == null ? "" : Math.abs(pct).toFixed(1);
+  const cur = current == null ? "" : current.toFixed(2);
+  if (
+    current != null &&
+    previous != null &&
+    pct != null &&
+    (state === "stable" || state === "watch" || state === "up" || state === "improving")
+  ) {
+    const above = current > limit;
+    if (state === "improving") {
+      return [
+        {
+          key: above
+            ? "Conclusion improved above limit."
+            : "Conclusion improved within limit.",
+          vars: { x: abs },
+        },
+      ];
+    }
+    if (state === "stable") {
+      return [
+        {
+          key: above ? "Conclusion stable above limit." : "Conclusion stable within limit.",
+          vars: {},
+        },
+      ];
+    }
+    return [
+      {
+        key: above ? "Conclusion worsened above limit." : "Conclusion worsened within limit.",
+        vars: { x: abs },
+      },
+    ];
+  }
+  const segments: ConclusionSegment[] = [{ key: "Conclusion no baseline.", vars: {} }];
+  if (current != null) {
+    segments.push({ key: "Conclusion current is.", vars: { x: cur } });
+    if (current > limit) segments.push({ key: "Conclusion current above limit.", vars: {} });
+  }
+  return segments;
 }

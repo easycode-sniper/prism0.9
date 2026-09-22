@@ -351,11 +351,17 @@ equal durations, calendar-month aware), classified in
 `src/lib/fuel/intelligence.ts` as STABLE (±5%), WATCH (+5–10%),
 significant rise (>+10%), improving (<−5%), NO BASELINE, NEW VEHICLE
 (no fills ever before the range) or INSUFFICIENT DATA (under 3 fills in
-either window). Clicking a signal opens a detail panel under the table:
-current/previous/change/variance figures, a per-fill consumption trend
-against the existing 45 L/100km line, and a driver-assignment timeline
-derived from fill records — evidence only, never blame. The 45
-threshold and the variance calculation itself are untouched. Detail
+either window). Clicking a signal opens a floating, draggable,
+resizable analysis window (`TruckIntelWindow`, no dashboard reflow):
+current/previous/change/variance figures with the distance to the 45
+limit, a generated factual conclusion combining behavior change AND
+limit status, a per-fill consumption trend capped at a display-only 90
+L/100km ceiling (spikes keep their real values, with tooltips and a
+summary list), the 45 reference line, wheel/pinch zoom with pan and
+double-click reset, on-chart driver-change markers with detail
+tooltips, a visual summary against the limit, and a driver-assignment
+timeline derived from fill records — evidence only, never blame. The
+45 threshold and the variance calculation itself are untouched. Detail
 fills come from `truck_fuel_fills` (migration 075).
 
 ## Project structure

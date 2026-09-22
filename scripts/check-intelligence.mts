@@ -12,9 +12,12 @@
 // would invent an assignment the data never stated.
 
 import {
+  buildConclusion,
   classifyIntel,
   deriveDriverRuns,
   fillRate,
+  limitDelta,
+  INTEL_CHART_CEILING,
   INTEL_MIN_FILLS,
   INTEL_STABLE_PCT,
   INTEL_WATCH_PCT,
@@ -83,6 +86,54 @@ console.log("\nclassifier:");
     "zero previous rate → insufficient, never a divide-by-zero",
     classifyIntel({ fills: 9, litresPer100Km: 60 }, { fills: 9, litresPer100Km: 0 }, 20).state === "insufficient"
   );
+}
+
+console.log("\nlimit + ceiling:");
+
+{
+  check("chart ceiling is a display-only 90", INTEL_CHART_CEILING === 90);
+  check("50.48 vs 45 reads +5.48 above", limitDelta(50.48) === 5.48, String(limitDelta(50.48)));
+  check("43 vs 45 reads −2 below", limitDelta(43) === -2);
+  check("exactly 45 reads zero", limitDelta(45) === 0);
+}
+
+console.log("\nconclusion:");
+
+{
+  // Spec §9 case 1: improved but still above.
+  const c1 = buildConclusion(50.0, 55.0, -9.1, "improving");
+  check("case 1 keys improved-above", c1.length === 1 && c1[0].key === "Conclusion improved above limit." && c1[0].vars.x === "9.1", JSON.stringify(c1));
+  // Case 2: worsened and above.
+  const c2 = buildConclusion(57.0, 50.0, 14.0, "up");
+  check("case 2 keys worsened-above", c2.length === 1 && c2[0].key === "Conclusion worsened above limit." && c2[0].vars.x === "14.0", JSON.stringify(c2));
+  // Case 3: stable but above.
+  const c3 = buildConclusion(57.0, 56.0, 1.8, "stable");
+  check("case 3 keys stable-above with no vars", c3.length === 1 && c3[0].key === "Conclusion stable above limit.", JSON.stringify(c3));
+  // Case 4: improved and now within.
+  const c4 = buildConclusion(43.0, 48.0, -10.4, "improving");
+  check("case 4 keys improved-within", c4.length === 1 && c4[0].key === "Conclusion improved within limit.", JSON.stringify(c4));
+  // Case 5: worsened but still below.
+  const c5 = buildConclusion(43.0, 40.0, 7.5, "watch");
+  check("case 5 keys worsened-within", c5.length === 1 && c5[0].key === "Conclusion worsened within limit.", JSON.stringify(c5));
+  // Stable below (derived symmetric): within, no alarm.
+  const c5b = buildConclusion(41.0, 40.5, 1.2, "stable");
+  check("stable-below keys stable-within", c5b.length === 1 && c5b[0].key === "Conclusion stable within limit.", JSON.stringify(c5b));
+  // Case 6: no baseline, current known and above.
+  const c6 = buildConclusion(50.48, null, null, "no_baseline");
+  check(
+    "case 6 stacks insufficiency + current + above-limit",
+    c6.length === 3 &&
+      c6[0].key === "Conclusion no baseline." &&
+      c6[1].key === "Conclusion current is." && c6[1].vars.x === "50.48" &&
+      c6[2].key === "Conclusion current above limit.",
+    JSON.stringify(c6)
+  );
+  // No baseline, current below: no above-limit tail.
+  const c6b = buildConclusion(43.0, null, null, "insufficient");
+  check("below-limit tail is omitted when within", c6b.length === 2, JSON.stringify(c6b));
+  // Nothing known at all: insufficiency alone.
+  const c6c = buildConclusion(null, null, null, "no_baseline");
+  check("unknown current yields insufficiency alone", c6c.length === 1, JSON.stringify(c6c));
 }
 
 console.log("\nper-fill rates:");

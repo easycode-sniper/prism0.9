@@ -145,18 +145,27 @@ async function readVhServiceStats(
   scope: Scope = FLEET
 ): Promise<{ stats?: VhServiceStats; error?: string }> {
   const { driver, truck } = scopeArgs(scope);
-  const { data, error } = await supabase.rpc("vh_service_fuel_totals", {
-    p_from: range.from,
-    p_to: range.to,
-    p_driver: driver,
-    p_truck: truck,
-  });
+  // .single(), exactly like readFuelPeriodStats above: this returns one
+  // aggregate row, and without .single() PostgREST hands back an ARRAY,
+  // so reading r.amount_da off it yields undefined — which is how the
+  // tile printed 0 DA against a function that returns 1,173,255.
+  const { data, error } = await supabase
+    .rpc("vh_service_fuel_totals", {
+      p_from: range.from,
+      p_to: range.to,
+      p_driver: driver,
+      p_truck: truck,
+    })
+    .single();
   if (error) return { error: error.message };
-  const r = (data ?? {}) as Record<string, unknown>;
+  if (!data) return { error: "No fuel data" };
+
+  const r = data as Record<string, unknown>;
+  const num = (v: unknown) => (v == null ? 0 : Number(v));
   return {
     stats: {
-      fills: r.fills == null ? 0 : Number(r.fills),
-      amountDa: r.amount_da == null ? 0 : Number(r.amount_da),
+      fills: num(r.fills),
+      amountDa: num(r.amount_da),
     },
   };
 }

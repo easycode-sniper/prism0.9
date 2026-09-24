@@ -1,14 +1,17 @@
--- 076: the Vh Service spend, as its own aggregate.
+-- 076: the Staff & service spend, as its own aggregate.
 --
 -- Every fuel surface on the dashboard — fuel_period_stats (the five
 -- scorecards), the variance leaders, the model treemap, the station
--- donut, the daily series — reads the CARGO fleet. A Vh Service fill
--- carries no odometer and no distance (the parser buckets model or
--- plate "VH SERVICE" into its own category for exactly that reason), so
--- it has no km, no L/100km and no variance to put in those tables. What
--- it does carry is money, and that money is currently invisible
--- everywhere: 871 fills and ~1.17M DA over Jan-Sep 2026, about 1% of
--- the fuel bill, shown as nothing at all.
+-- donut, the daily series — reads the CARGO fleet. The staff cars,
+-- workshop, generator and pool vehicles are logged in the sheet under
+-- "VH SERVICE" rather than by plate (zero fills name a staff plate —
+-- checked 2026-09-24), so `category = 'vh_service'` IS the non-cargo
+-- fleet. Those fills carry no odometer and no distance (the parser
+-- buckets them separately for exactly that reason), so they have no km,
+-- no L/100km and no variance to put in those tables. What they do
+-- carry is money, and that money is currently invisible everywhere:
+-- 871 fills and ~1.17M DA over Jan-Sep 2026, about 1% of the fuel bill,
+-- shown as nothing at all.
 --
 -- This aggregate gives the page ONE number for that pot — the money —
 -- with no km, no consumption rate and no comparison, because the data
@@ -43,7 +46,7 @@ AS $function$
 $function$;
 
 COMMENT ON FUNCTION public.vh_service_fuel_totals(DATE, DATE, TEXT, TEXT) IS
-  'Fills and amount for the Vh Service fleet (pool, workshop, generator vehicles) over a window. Backs the sixth dashboard scorecard. No km, no L/100km, no variance: these fills carry no odometer or distance.';
+  'Fills and amount for the non-cargo fleet — staff cars, workshop, generator and pool vehicles, logged as VH SERVICE. Backs the "Staff & service" dashboard scorecard. No km, no L/100km, no variance: these fills carry no odometer or distance.';
 
 -- Same lockdown as 061/063: revoke from PUBLIC and anon first, then
 -- grant to the app's users — the revoke alone would lock the app out.

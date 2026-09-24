@@ -1156,15 +1156,16 @@ export default function DashboardPage() {
         />
         {/* The sixth tile, and the only one whose money is in none of the
             five above it: every other aggregate on this page reads the
-            cargo fleet, because a Vh Service fill carries no odometer
-            and no distance. The workshop, generator and pool vehicles
-            cost real dinars — ~1% of the bill — and until this tile
-            existed that money was in no panel at all. No delta: the
-            comparison half would double a query to draw a number off a
-            pot of ~1,000 DA a month, and the third line says what the
-            figure IS rather than pretending to be a trend. */}
+            cargo fleet. The staff cars, workshop, generator and pool
+            vehicles are logged in the sheet under "VH SERVICE" rather
+            than by plate (zero fills name a staff plate, checked
+            2026-09-24), so this pot is the fleet's non-cargo fuel bill —
+            ~1% of the total. No delta: the comparison half would double
+            a query to draw a number off a pot of ~1,000 DA a month, and
+            the third line says what the figure IS rather than pretending
+            to be a trend. */}
         <Kpi
-          label={t("Vh Service")}
+          label={t("Staff & service")}
           value={vhService ? nf(vhService.amountDa) : null}
           unit="DA"
           footNote={t("Pool, workshop and generator — not in the figures above")}

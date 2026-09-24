@@ -83,6 +83,9 @@ export const SAME_IN_FRENCH = new Set<string>([
   "nav.maintenance",
   // The feature brand — English in every language, by spec.
   "PRISM INTELLIGENCE",
+  // English in French too: the pot is the same fleet whoever names it,
+  // and the sheet itself writes VH SERVICE.
+  "Staff & service",
   // French spells all three the same way.
   "Intelligence",
   "STABLE",
@@ -380,8 +383,8 @@ export const translations: Record<Language, Record<string, string>> = {
     "No budget set for this month.": "No budget set for this month.",
     "Average consumption": "Average consumption",
     "Total variance": "Total variance",
-    // ── Vh Service scorecard (migration 076) ──
-    "Vh Service": "Vh Service",
+    // ── Staff & service scorecard (migration 076) ──
+    "Staff & service": "Staff & service",
     "Pool, workshop and generator — not in the figures above": "Pool, workshop and generator — not in the figures above",
     "Today is still counting.": "Today is still counting.",
     "Deliveries per day": "Deliveries per day",
@@ -796,8 +799,8 @@ export const translations: Record<Language, Record<string, string>> = {
     "No budget set for this month.": "Aucun budget défini pour ce mois.",
     "Average consumption": "Consommation moyenne",
     "Total variance": "Écart total",
-    // ── Vh Service scorecard (migration 076) ──
-    "Vh Service": "VH de service",
+    // ── Staff & service scorecard (migration 076) ──
+    "Staff & service": "Staff & service",
     "Pool, workshop and generator — not in the figures above": "Pool, atelier et groupe électrogène — hors chiffres ci-dessus",
     "Today is still counting.": "La journée est encore en cours.",
     "Deliveries per day": "Livraisons par jour",

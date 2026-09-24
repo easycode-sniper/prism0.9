@@ -124,11 +124,13 @@ async function readFuelPeriodStats(
   };
 }
 
-// ── The Vh Service pot (migration 076) ────────────────────────
+// ── The Staff & service pot (migration 076) ──────────────────
 //
-// The one fuel figure the scorecards could not show: the workshop,
-// generator and pool vehicles the parser buckets as category
-// 'vh_service'. They carry no odometer and no distance, so km,
+// The one fuel figure the scorecards could not show: the staff cars,
+// workshop, generator and pool vehicles, which the sheet records under
+// "VH SERVICE" rather than by plate (zero fills name a staff plate —
+// checked 2026-09-24), so `category = 'vh_service'` in fuel_transactions
+// IS the non-cargo fleet. They carry no odometer and no distance, so km,
 // L/100km and variance are null for every one of them — but they carry
 // money, and until this read existed that money was in no panel at all.
 // One aggregate, same scope as fuel_period_stats so the sixth tile and
@@ -782,8 +784,8 @@ export interface DashboardBundle {
   budget?: FuelBudget;
   /** Whether the caller may edit the budget. */
   canEdit?: boolean;
-  /** The Vh Service fleet's fills and money for the window — the sixth
-   *  scorecard. Undefined on a refresh means "not requested", like
+  /** The staff & service fleet's fills and money for the window — the
+   *  sixth scorecard. Undefined on a refresh means "not requested", like
    *  options. */
   vhService?: VhServiceStats;
   /** The first hard failure among the panels. They share a range and a
@@ -845,8 +847,8 @@ export async function getDashboardBundle(
     comparison && range.from
       ? readTruckVariance(supabase, 2000, { from: null, to: addDays(range.from, -1) })
       : Promise.resolve({ trucks: undefined, error: undefined }),
-    // The sixth scorecard, same round trip, same scope — the Vh Service
-    // pot the other five aggregates filter out.
+    // The sixth scorecard, same round trip, same scope — the staff &
+    // service pot the other five aggregates filter out.
     readVhServiceStats(supabase, range, scope),
   ]);
 

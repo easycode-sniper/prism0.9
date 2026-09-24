@@ -290,6 +290,24 @@ export default function LoginPage() {
             {t("Contact on WhatsApp")}
           </a>
         </div>
+
+        {/* The maker's mark. The one screen a signed-out person sees, and
+            the only place in the product the author is named — a
+            dashboard someone reads all shift does not need it, a login
+            page is where an impression is formed. Name, app, version,
+            and when it started; everything after that is the app's own
+            work. Version 1.0.0 is the number the sheet header claimed
+            from the first commit, so it is stated rather than invented. */}
+        <div className="signin-signature">
+          <p className="signin-signature__author">{t("Designed & Developed by Ferdjallah Souhaib")}</p>
+          <p className="signin-signature__meta">
+            {t("App:")} <span>Prism</span>
+            {" · "}
+            {t("Version:")} <span>1.0.0</span>
+            {" · "}
+            {t("Created:")} <span>August 2026</span>
+          </p>
+        </div>
         </main>
       </section>
     </div>

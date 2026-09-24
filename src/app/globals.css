@@ -3749,6 +3749,31 @@ html[dir="rtl"] table { text-align: right; }
 /* Keeps the glyph on its own baseline so a wrapped label cannot squash it. */
 .signin-contact__link svg { flex: none; }
 
+/* The maker's mark, under the support row. Two lines, and the second
+   one is the dimmest text on the page: the name is the claim, the
+   metadata is the receipt. Achromatic like the support row above it —
+   nothing here is a vehicle state. */
+.signin-signature {
+  margin-top: 14px;
+  text-align: center;
+}
+
+.signin-signature__author {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.01em;
+}
+
+.signin-signature__meta {
+  margin: 3px 0 0;
+  font-size: 0.66rem;
+  color: var(--line);
+}
+
+.signin-signature__meta span { color: var(--text-dim); }
+
 /* ── Sign-in split ────────────────────────────────────────────
    Marketing left, task right. The left panel is a frozen illustration
    — see HERO_KPIS in the login page — over the existing animated map

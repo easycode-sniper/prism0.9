@@ -86,6 +86,8 @@ export const SAME_IN_FRENCH = new Set<string>([
   // English in French too: the pot is the same fleet whoever names it,
   // and the sheet itself writes VH SERVICE.
   "Staff & service",
+  // A signature, not a sentence — it keeps its spelling in French.
+  "Designed & Developed by Ferdjallah Souhaib",
   // French spells all three the same way.
   "Intelligence",
   "STABLE",
@@ -248,6 +250,11 @@ export const translations: Record<Language, Record<string, string>> = {
     "Request an invite": "Request an invite",
     "Send feedback": "Send feedback",
     "Contact on WhatsApp": "Contact on WhatsApp",
+    // ── Sign-in signature ──
+    "Designed & Developed by Ferdjallah Souhaib": "Designed & Developed by Ferdjallah Souhaib",
+    "App:": "App:",
+    "Version:": "Version:",
+    "Created:": "Created:",
     "Please enter both email and password.": "Please enter both email and password.",
     "Please enter a valid email address.": "Please enter a valid email address.",
     "Invalid login credentials": "Invalid login credentials",
@@ -674,6 +681,13 @@ export const translations: Record<Language, Record<string, string>> = {
     "Request an invite": "Demander un accès",
     "Send feedback": "Envoyer un retour",
     "Contact on WhatsApp": "Contacter sur WhatsApp",
+    // ── Sign-in signature ──
+    // The name stays in Latin script in French too: it is a signature,
+    // not a sentence, and a signature does not get translated.
+    "Designed & Developed by Ferdjallah Souhaib": "Designed & Developed by Ferdjallah Souhaib",
+    "App:": "App :",
+    "Version:": "Version :",
+    "Created:": "Créé :",
     "Please enter both email and password.": "Veuillez saisir votre adresse e-mail et votre mot de passe.",
     "Please enter a valid email address.": "Veuillez saisir une adresse e-mail valide.",
     "Invalid login credentials": "Identifiants incorrects",

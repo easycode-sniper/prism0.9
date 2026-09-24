@@ -436,44 +436,92 @@ function pick(cands: DateCandidate[], anchor: number, direction: 1 | -1): DateCa
 }
 
 /**
+ * A transaction number's own calendar day, as YYYYMMDD, or null.
+ *
+ * The number is `YYYYMMDDHHMMSS-<terminal seq>`, written by the pump, and
+ * it is the table's primary key. Its clock runs about two hours ahead of
+ * the sheet's (checked across the full paste on 2026-09-24: 13,320 of
+ * 13,330 same-month rows sit exactly +2h, three rows cross midnight by
+ * that gap), so the DAY is what agrees — almost always — and the time
+ * of day is not. The day alone is what a tiebreaker is allowed to use.
+ */
+function transactionDay(raw: unknown): string | null {
+  const m = String(raw ?? "").trim().match(/^(\d{4})(\d{2})(\d{2})\d{6}/);
+  return m ? `${m[1]}${m[2]}${m[3]}` : null;
+}
+
+/** An ISO instant's Africa/Algiers calendar day as YYYYMMDD — the
+ *  candidate's day, to compare with the transaction's. */
+function candidateDayKey(iso: string): string {
+  return new Date(new Date(iso).getTime() + 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+/** The reading the transaction number names, when the two cell readings
+ *  disagree across days and exactly one of them is the transaction's
+ *  day. Null whenever the day cannot settle it — both, neither, one
+ *  reading, or an unparseable number — and the sequence walk then
+ *  decides, exactly as it did before this tiebreaker existed. */
+function byTransactionDay(cands: DateCandidate[], raw: unknown): DateCandidate | null {
+  if (cands.length !== 2) return null;
+  const tDay = transactionDay(raw);
+  if (!tDay) return null;
+  const matches = cands.filter((c) => candidateDayKey(c.iso) === tDay);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
  * Resolve a whole column of date cells, in sheet order, to ISO instants.
  *
- * Anchored on the first cell that can only be read one way — a day above
- * 12 — and then walked outwards in both directions, each ambiguous cell
- * taking the reading that keeps the sequence moving in the direction the
- * sheet is written. A cell that is not a date at all resolves to null
- * and does not disturb its neighbours.
+ * Takes the raw rows, not just the date cells, because the TIEBREAKER
+ * needs the transaction number beside each cell: when a cell is
+ * ambiguous AND the sequence walk cannot be trusted — one out-of-order
+ * row makes every later ambiguous cell cascade the wrong way, which
+ * misdated 425 rows on 2026-09-23 — the reading whose DAY matches the
+ * transaction number wins. Everything else is unchanged: unambiguous
+ * cells are the sheet's own, the walk still decides what the tiebreaker
+ * leaves open, and a bad cell still resolves to null without touching
+ * its neighbours.
  *
- * With no unambiguous cell anywhere, every reading is as good as every
- * other and it falls back to day-first, which is how the office writes
- * them and what the column will be once it is normalised.
+ * With no unambiguous cell anywhere and no transaction day to match,
+ * every reading is as defensible as any other and it falls back to
+ * day-first, which is how the office writes them.
  */
-export function resolveOccurredAt(cells: unknown[]): (string | null)[] {
+export function resolveOccurredAt(rows: unknown[][]): (string | null)[] {
+  const cells = rows.map((r) => r[COL.dateTime]);
   const candidates = cells.map(candidatesFor);
-  const resolved: (string | null)[] = candidates.map((c) => (c.length === 1 ? c[0].iso : null));
+  const resolved: (string | null)[] = candidates.map((c, i) => {
+    if (c.length === 1) return c[0].iso;
+    if (c.length === 0) return null;
+    return byTransactionDay(c, rows[i]?.[COL.transactionNo])?.iso ?? null;
+  });
 
-  const anchor = candidates.findIndex((c) => c.length === 1);
-  if (anchor === -1) {
-    return candidates.map((c) => (c.length > 0 ? c[0].iso : null));
+  // A cell the tiebreaker settled is a WALL, not a lever: the walk steps
+  // past it without taking its instant as the reference, so a row the
+  // paste put a few seconds out of order cannot drag the open cells
+  // after it sideways the way it did on 2026-09-23.
+  const anchor = candidates.findIndex((c, i) => c.length === 1 && resolved[i] === c[0].iso);
+
+  if (anchor >= 0) {
+    let prev = candidates[anchor][0].ms;
+    for (let i = anchor + 1; i < candidates.length; i++) {
+      const c = candidates[i];
+      if (c.length === 0 || resolved[i] != null) continue;
+      const chosen = pick(c, prev, 1);
+      resolved[i] = chosen.iso;
+      prev = chosen.ms;
+    }
+
+    let next = candidates[anchor][0].ms;
+    for (let i = anchor - 1; i >= 0; i--) {
+      const c = candidates[i];
+      if (c.length === 0 || resolved[i] != null) continue;
+      const chosen = pick(c, next, -1);
+      resolved[i] = chosen.iso;
+      next = chosen.ms;
+    }
   }
 
-  let prev = candidates[anchor][0].ms;
-  for (let i = anchor + 1; i < candidates.length; i++) {
-    const c = candidates[i];
-    if (c.length === 0) continue;
-    const chosen = c.length === 1 ? c[0] : pick(c, prev, 1);
-    resolved[i] = chosen.iso;
-    prev = chosen.ms;
-  }
-
-  let next = candidates[anchor][0].ms;
-  for (let i = anchor - 1; i >= 0; i--) {
-    const c = candidates[i];
-    if (c.length === 0) continue;
-    const chosen = c.length === 1 ? c[0] : pick(c, next, -1);
-    resolved[i] = chosen.iso;
-    next = chosen.ms;
-  }
-
-  return resolved;
+  // No anchor, or an open cell the walk never reached (it ran out of
+  // column). Day-first, which is how the office writes them.
+  return candidates.map((c, i) => resolved[i] ?? (c.length > 0 ? c[0].iso : null));
 }

@@ -164,7 +164,9 @@ async function runSync(): Promise<NextResponse> {
     // The sheet changed format partway down — month-first above row 511,
     // day-first below — and the only thing that distinguishes them is
     // that the sheet is append-only, so its rows are in time order.
-    const resolvedDates = resolveOccurredAt(rawRows.map(dateCellOf));
+    // The WHOLE rows, not just the date cells: the resolver's tiebreaker
+    // reads the transaction number beside an ambiguous date (2026-09-24).
+    const resolvedDates = resolveOccurredAt(rawRows as unknown[][]);
     // How many rows the order-based reading disagreed with the naive
     // day-first one on. Logged because it is the number that should fall
     // to zero once the sheet's own column is normalised — if it does

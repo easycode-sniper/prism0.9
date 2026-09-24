@@ -380,6 +380,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "No budget set for this month.": "No budget set for this month.",
     "Average consumption": "Average consumption",
     "Total variance": "Total variance",
+    // ── Vh Service scorecard (migration 076) ──
+    "Vh Service": "Vh Service",
+    "Pool, workshop and generator — not in the figures above": "Pool, workshop and generator — not in the figures above",
     "Today is still counting.": "Today is still counting.",
     "Deliveries per day": "Deliveries per day",
     "{n} fills": "{n} fills",
@@ -793,6 +796,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "No budget set for this month.": "Aucun budget défini pour ce mois.",
     "Average consumption": "Consommation moyenne",
     "Total variance": "Écart total",
+    // ── Vh Service scorecard (migration 076) ──
+    "Vh Service": "VH de service",
+    "Pool, workshop and generator — not in the figures above": "Pool, atelier et groupe électrogène — hors chiffres ci-dessus",
     "Today is still counting.": "La journée est encore en cours.",
     "Deliveries per day": "Livraisons par jour",
     "{n} fills": "{n} pleins",

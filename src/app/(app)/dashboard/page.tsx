@@ -35,6 +35,7 @@ import {
   type DriverVariance,
   type TruckVariance,
   type DriverSpeeding,
+  type VhServiceStats,
 } from "@/lib/supabase/dashboard";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
@@ -391,6 +392,10 @@ export default function DashboardPage() {
   // running a second queued action (and second getUser) on its own mount.
   const [budget, setBudget] = useState<FuelBudget | null>(null);
   const [canEditBudget, setCanEditBudget] = useState(false);
+  // The sixth scorecard's pot. Null is "not read yet" — the skeleton,
+  // not a zero; a window with no Vh Service fills legitimately reads 0
+  // once the bundle lands.
+  const [vhService, setVhService] = useState<VhServiceStats | null>(null);
   // Whether the last load actually succeeded. Without this a failed RPC
   // is INDISTINGUISHABLE from a slow one: every panel keeps its skeleton
   // and its "reading the sheet…" caption forever, which is exactly what
@@ -537,6 +542,7 @@ export default function DashboardPage() {
       setSpeeding(b.speeding ?? null);
       setBudget(b.budget ?? null);
       setCanEditBudget(b.canEdit === true);
+      setVhService(b.vhService ?? null);
       // Only when they were asked for. `undefined` on a refresh means
       // "not requested", never "the roster is empty", so the picker
       // keeps the list it already holds.
@@ -1148,6 +1154,22 @@ export default function DashboardPage() {
           deltaLabel={comparisonLabel}
           failed={dataError != null}
         />
+        {/* The sixth tile, and the only one whose money is in none of the
+            five above it: every other aggregate on this page reads the
+            cargo fleet, because a Vh Service fill carries no odometer
+            and no distance. The workshop, generator and pool vehicles
+            cost real dinars — ~1% of the bill — and until this tile
+            existed that money was in no panel at all. No delta: the
+            comparison half would double a query to draw a number off a
+            pot of ~1,000 DA a month, and the third line says what the
+            figure IS rather than pretending to be a trend. */}
+        <Kpi
+          label={t("Vh Service")}
+          value={vhService ? nf(vhService.amountDa) : null}
+          unit="DA"
+          footNote={t("Pool, workshop and generator — not in the figures above")}
+          failed={dataError != null}
+        />
       </div>
 
       {/* ── Two zones ─────────────────────────────────────────
@@ -1733,6 +1755,7 @@ function Kpi({
   unit,
   delta,
   deltaLabel,
+  footNote,
   failed,
 }: {
   label: string;
@@ -1744,6 +1767,10 @@ function Kpi({
   delta?: PeriodDelta | null;
   /** What the comparison is against, e.g. "vs the previous 7 days". */
   deltaLabel?: string;
+  /** Shown on the third line when there is no delta — the one tile
+   *  whose money is in none of the others says what it IS instead of
+   *  drawing a comparison it cannot earn. */
+  footNote?: string;
   /** True when the load finished and failed. A skeleton then is a lie:
    *  nothing is still coming. */
   failed?: boolean;
@@ -1787,6 +1814,8 @@ function Kpi({
           <span>{delta.text}</span>
           {deltaLabel && <span className="dash-kpi__delta-vs">{deltaLabel}</span>}
         </div>
+      ) : footNote ? (
+        <div className="dash-kpi__delta t-dim">{footNote}</div>
       ) : null}
     </div>
   );

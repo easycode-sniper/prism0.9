@@ -124,6 +124,43 @@ async function readFuelPeriodStats(
   };
 }
 
+// ── The Vh Service pot (migration 076) ────────────────────────
+//
+// The one fuel figure the scorecards could not show: the workshop,
+// generator and pool vehicles the parser buckets as category
+// 'vh_service'. They carry no odometer and no distance, so km,
+// L/100km and variance are null for every one of them — but they carry
+// money, and until this read existed that money was in no panel at all.
+// One aggregate, same scope as fuel_period_stats so the sixth tile and
+// the five beside it always describe the same window.
+
+export interface VhServiceStats {
+  fills: number;
+  amountDa: number;
+}
+
+async function readVhServiceStats(
+  supabase: Db,
+  range: OpsRange = ALL_TIME,
+  scope: Scope = FLEET
+): Promise<{ stats?: VhServiceStats; error?: string }> {
+  const { driver, truck } = scopeArgs(scope);
+  const { data, error } = await supabase.rpc("vh_service_fuel_totals", {
+    p_from: range.from,
+    p_to: range.to,
+    p_driver: driver,
+    p_truck: truck,
+  });
+  if (error) return { error: error.message };
+  const r = (data ?? {}) as Record<string, unknown>;
+  return {
+    stats: {
+      fills: r.fills == null ? 0 : Number(r.fills),
+      amountDa: r.amount_da == null ? 0 : Number(r.amount_da),
+    },
+  };
+}
+
 // ── The fuel budget ──────────────────────────────────────────
 //
 // The budget gauge on the right rail rides INSIDE the dashboard bundle
@@ -736,6 +773,10 @@ export interface DashboardBundle {
   budget?: FuelBudget;
   /** Whether the caller may edit the budget. */
   canEdit?: boolean;
+  /** The Vh Service fleet's fills and money for the window — the sixth
+   *  scorecard. Undefined on a refresh means "not requested", like
+   *  options. */
+  vhService?: VhServiceStats;
   /** The first hard failure among the panels. They share a range and a
    *  round trip, so if one signature is wrong they all are; reporting
    *  seven copies of one sentence would only bury it. */
@@ -769,7 +810,7 @@ export async function getDashboardBundle(
   const speedingLimit = limits.speeding ?? 100;
   const stationSlices = limits.stations ?? 6;
 
-  const [f, s, dv, tv, sp, pf, st, mm, opt, bg, be, pt, ht] = await Promise.all([
+  const [f, s, dv, tv, sp, pf, st, mm, opt, bg, be, pt, ht, vh] = await Promise.all([
     readFuelPeriodStats(supabase, range, scope),
     readDashboardSeries(supabase, range, scope),
     readDriverVariance(supabase, variance, range),
@@ -795,6 +836,9 @@ export async function getDashboardBundle(
     comparison && range.from
       ? readTruckVariance(supabase, 2000, { from: null, to: addDays(range.from, -1) })
       : Promise.resolve({ trucks: undefined, error: undefined }),
+    // The sixth scorecard, same round trip, same scope — the Vh Service
+    // pot the other five aggregates filter out.
+    readVhServiceStats(supabase, range, scope),
   ]);
 
   return {
@@ -815,6 +859,7 @@ export async function getDashboardBundle(
     budget: bg.budget,
     canEdit: be.canEdit,
     options: opt.options,
-    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? mm.error ?? bg.error ?? be.error ?? undefined,
+    vhService: vh.stats,
+    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? mm.error ?? bg.error ?? be.error ?? vh.error ?? undefined,
   };
 }

@@ -1439,7 +1439,7 @@ hr {
    rules to write, and none to get wrong at the ends. */
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 1px;
   background: var(--line);
   border: 1px solid var(--line);
@@ -1987,13 +1987,19 @@ hr {
    reading this at 67% was that the type went with the layout — so the
    height comes out of padding, margins and the leading on the two label
    lines, which carry no information in their whitespace. 101px to 79px
-   at identical type sizes. */
-.dash-kpi { padding: 10px 14px 11px; min-width: 0; }
+   at identical type sizes.
+
+   SIX columns, not five, since the Vh Service tile (076) joined on
+   2026-09-24. The horizontal padding comes down and the label's letter
+   spacing tightens with it, because at six the cell is a sixth narrower
+   and the figures are the width that has to survive — "1,173,255" in a
+   mono face is the longest string in the strip. */
+.dash-kpi { padding: 10px 11px 11px; min-width: 0; }
 
 .dash-kpi__label {
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   /* 1.25 rather than the inherited 1.5: a single uppercase line at
      0.66rem has nothing below the baseline to clear. */

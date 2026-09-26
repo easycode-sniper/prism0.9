@@ -45,6 +45,13 @@ import {
 // all live in a plain module so scripts/check-months.mts can pin them.
 // See lib/fuel/months.ts for why each of them fails silently.
 import {
+  countBands,
+  intelBand,
+  varianceBand,
+  INTEL_BANDS,
+  VARIANCE_BANDS,
+} from "@/lib/dashboard/breakdown";
+import {
   isCurrentMonth,
   monthAxisLabel,
   monthBarColour,
@@ -289,6 +296,95 @@ function SortableTable<T>({
     </>
   );
 }
+/**
+ * One ring, for the rail. The shape the two panels at the top of the
+ * column already use, and nothing about it is new.
+ *
+ * NO LEGEND, deliberately — the station ring's reasoning, which is the
+ * strongest argument on the page for leaving it out: 32px of legend is
+ * a fifth of a 190px plot, and at 350px wide the names would have to be
+ * abbreviated past the point of being words. The ring carries the shape,
+ * the tooltip carries the count, and the foot line carries the one
+ * number the panel exists to deliver. Three places to say three things,
+ * none of them doing two jobs.
+ *
+ * The slices are handed in already coloured and already in order. This
+ * component draws; it does not decide what a "watch" truck is, because a
+ * component that picked the colour of a fleet state would be a second
+ * place for the taxonomy to live.
+ */
+type CaptionedDoughnutDataset = ChartData<"doughnut", number[], string>["datasets"][number] & {
+  /** Read by doughnutCentrePlugin for the resting caption. It casts for
+   *  this property itself, so Chart.js's own dataset type has no reason
+   *  to know it exists — hence the intersection rather than a widened
+   *  type or an `as unknown as`. */
+  centreCaption: string;
+};
+
+function RailRing({
+  title,
+  sub,
+  centre,
+  slices,
+  foot,
+  waiting,
+  empty,
+}: {
+  title: string;
+  sub: string;
+  /** What the hole reads at rest. The centre plugin takes the rest off
+   *  the dataset, and swaps in "label · N%" on hover. */
+  centre: string;
+  slices: { label: string; value: number; color: string }[];
+  foot: string;
+  waiting: boolean;
+  empty: string;
+}) {
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+
+  return (
+    <section className="panel dash-panel">
+      <header className="dash-panel__head">
+        <div style={{ minWidth: 0 }}>
+          <div className="dash-panel__title">{title}</div>
+          <div className="dash-panel__sub">{sub}</div>
+        </div>
+      </header>
+      <div className="dash-panel__body">
+        {waiting ? (
+          <div className="skeleton" style={{ height: 190, borderRadius: "var(--r-md)" }} />
+        ) : total === 0 ? (
+          <p className="dash-empty">
+            <span>
+              <Fuel size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+              {empty}
+            </span>
+          </p>
+        ) : (
+          <div className="dash-chart dash-chart--donut">
+            <Doughnut
+              data={{
+                labels: slices.map((s) => s.label),
+                datasets: [
+                  {
+                    data: slices.map((s) => s.value),
+                    backgroundColor: slices.map((s) => s.color),
+                    borderWidth: 0,
+                    centreCaption: centre,
+                  } as CaptionedDoughnutDataset,
+                ],
+              }}
+              options={doughnutOptions}
+              plugins={[doughnutCentrePlugin]}
+            />
+          </div>
+        )}
+      </div>
+      {total > 0 && <div className="dash-panel__foot dash-ring-foot">{foot}</div>}
+    </section>
+  );
+}
+
 /**
  * A small round button that reveals an explanation, and the explanation.
  *
@@ -1029,6 +1125,24 @@ export default function DashboardPage() {
     return truckVariance.filter((r) => mine.has(r.truckId));
   }, [truckVariance, variance, scope]);
 
+  // ── The two rail rings ──
+  //
+  // Both are aggregations of rows the bundle already has, so neither
+  // costs a query. Both obey the scope picker, because both are built
+  // from the SCOPED lists — a ring that ignored the picker would keep
+  // describing the whole fleet while every panel above it described one
+  // truck, which is the exact confusion the picker exists to prevent.
+  //
+  // The bucketing itself is in lib/dashboard/breakdown.ts, and the reason
+  // it is not a reduce written here is in that file's comment: a ring
+  // cannot show you that it dropped a row.
+  const varianceRing = useMemo(() => {
+    if (scopedDriverVariance === null) return null;
+    const counts = countBands(scopedDriverVariance, (d) => varianceBand(d.varianceDa), VARIANCE_BANDS);
+    const total = scopedDriverVariance.length;
+    return { counts, total };
+  }, [scopedDriverVariance]);
+
   // ── Prism Intelligence ──
   //
   // The comparison window is the SAME value the load effect passes to
@@ -1066,6 +1180,25 @@ export default function DashboardPage() {
     }
     return out;
   }, [truckVariance, previousTrucks, historyTrucks]);
+
+  // The second rail ring, and the reason it lives HERE rather than beside
+  // varianceRing above: it reads truckIntel, so it has to be declared
+  // after the map that builds it. A useMemo above a const it references
+  // is a temporal dead zone error at render, and tsc does not catch it
+  // because the reference type-checks fine.
+  //
+  // Built from scopedTruckVariance, which already resolves all three
+  // scope cases — fleet, one truck, one driver's trucks. Re-deriving the
+  // scope here would be a fourth copy of a rule three panels share.
+  const intelRing = useMemo(() => {
+    if (scopedTruckVariance === null) return null;
+    const counts = countBands(
+      scopedTruckVariance,
+      (r) => intelBand(truckIntel.get(r.truckId)?.state),
+      INTEL_BANDS
+    );
+    return { counts, total: scopedTruckVariance.length };
+  }, [scopedTruckVariance, truckIntel]);
 
   // The open panel's inputs, resolved from the same state the column
   // reads: the visible row (scoped or whole-roster), its previous
@@ -2161,6 +2294,58 @@ export default function DashboardPage() {
               </Link>
             </div>
           </section>
+          {/* The two rings, closing the rail. Sized to what was actually
+              measured in the browser rather than to a guess: the main
+              column stands 2396px and this one 1757px, so the gap is
+              639px, and a ring panel on this column measures 264px
+              (that is "What the fleet is doing" above, not a computed
+              figure). Two panels plus their gaps is 556px, which leaves
+              the columns within 83px of level - 3.5% of the page, which
+              reads as even. A third would need 834px and does not fit,
+              which is also why there are two here and not three.
+
+              Neither ring costs a query: both aggregate rows the bundle
+              has already fetched. Both follow the range selector and the
+              scope picker, so neither can describe a different
+              population than the panels above it. */}
+          <RailRing
+            title={t("Driver variance, in bands")}
+            sub={t("Where each driver's money landed against the assumed rate. Every driver in this range.")}
+            centre={t("drivers")}
+            waiting={varianceRing === null}
+            empty={t("No fill carries a variance yet.")}
+            slices={[
+              { label: t("Saving"), value: varianceRing?.counts.saving ?? 0, color: CHART_COLORS.green },
+              { label: t("At the limit"), value: varianceRing?.counts.atLimit ?? 0, color: CHART_COLORS.dim },
+              { label: t("Losing"), value: varianceRing?.counts.losing ?? 0, color: CHART_COLORS.red },
+              { label: t("No rate"), value: varianceRing?.counts.unrated ?? 0, color: CHART_COLORS.empty },
+            ]}
+            foot={t("{saving} of {total} drivers are under the assumed {rate} L/100km.", {
+              saving: nf(varianceRing?.counts.saving ?? 0),
+              total: nf(varianceRing?.total ?? 0),
+              rate: ASSUMED_L_PER_100KM,
+            })}
+          />
+
+          <RailRing
+            title={t("Fleet intelligence, in states")}
+            sub={t("Every truck against its own previous window. The same words and colours as the table above.")}
+            centre={t("trucks")}
+            waiting={intelRing === null}
+            empty={t("No fill carries a variance yet.")}
+            slices={[
+              { label: t("Improving"), value: intelRing?.counts.improving ?? 0, color: CHART_COLORS.green },
+              { label: t("Steady"), value: intelRing?.counts.stable ?? 0, color: CHART_COLORS.dim },
+              { label: t("Watch"), value: intelRing?.counts.watch ?? 0, color: CHART_COLORS.amber },
+              { label: t("Worsening"), value: intelRing?.counts.up ?? 0, color: CHART_COLORS.red },
+              { label: t("No verdict"), value: intelRing?.counts.unclassified ?? 0, color: CHART_COLORS.empty },
+            ]}
+            foot={t("{steady} of {total} trucks are steady, {improving} improving.", {
+              steady: nf(intelRing?.counts.stable ?? 0),
+              total: nf(intelRing?.total ?? 0),
+              improving: nf(intelRing?.counts.improving ?? 0),
+            })}
+          />
         </aside>
       </div>
     </div>

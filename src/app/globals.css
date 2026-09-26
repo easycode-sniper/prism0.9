@@ -2229,6 +2229,17 @@ hr {
   max-height: calc(var(--row-h) * 10 + 40px);
 }
 
+/* The ring panels' foot line. Same slot and same hairline as the budget
+   gauge's legend and the station panel's #1, because all three are
+   answering the same question — "which slice should I care about" — and
+   they should not look like three different inventions. */
+.dash-ring-foot {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── The rating, and how it is worked out ─────────────────────
    The star glyph and the number beside it. The glyph is AMBER, not the
    cream of a value or the red of a loss, because it is not a vehicle

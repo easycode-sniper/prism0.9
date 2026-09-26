@@ -378,6 +378,14 @@ export function TruckIntelWindow({
             </div>
             <div className="intel-card">
               <div className="t-faint intel-card__label">{t("Behavior change")}</div>
+              {/* No level argument, DELIBERATELY: the dashboard's table
+                  column passes one (so a steady truck over the limit
+                  reads red there) but this card must not. The current
+                  consumption beside it already states the level in its
+                  own colour and the conclusion below states both facts,
+                  so colouring this by level too would say it twice — and
+                  a figure labelled STABLE painted red is the one
+                  misreading the whole feature is built to prevent. */}
               <div className={`intel-card__value ${intelClass(intel.state)}`}>{intelLabel(intel, t)}</div>
               <div className="t-faint intel-card__sub">{t("vs previous period")}</div>
             </div>
@@ -461,6 +469,7 @@ export function TruckIntelWindow({
                     <span className="t-faint" style={{ display: "block", fontSize: ".64rem" }}>{t("Current average")}</span>
                     <strong>{current.litresPer100Km != null ? current.litresPer100Km.toFixed(2) : "—"}</strong>
                   </span>
+                  {/* Direction only, for the same reason as the card above. */}
                   <span className={intelClass(intel.state)} style={{ fontWeight: 800 }}>{intelLabel(intel, t)}</span>
                 </div>
                 {current.litresPer100Km != null && (

@@ -16,6 +16,7 @@ import {
   classifyIntel,
   deriveDriverRuns,
   fillRate,
+  intelClass,
   limitDelta,
   INTEL_CHART_CEILING,
   INTEL_MIN_FILLS,
@@ -86,6 +87,36 @@ console.log("\nclassifier:");
     "zero previous rate → insufficient, never a divide-by-zero",
     classifyIntel({ fills: 9, litresPer100Km: 60 }, { fills: 9, litresPer100Km: 0 }, 20).state === "insufficient"
   );
+}
+
+console.log("\ncell colour:");
+
+{
+  // Direction states keep their colour whether or not a level is passed:
+  // the split below applies to STABLE alone, because STABLE is the only
+  // state whose colour would otherwise be saying nothing at all.
+  check("up is red, level or not", intelClass("up") === "c-red" && intelClass("up", 30) === "c-red");
+  check("watch is amber, level or not", intelClass("watch") === "c-amber" && intelClass("watch", 60) === "c-amber");
+  check("improving is green, level or not", intelClass("improving") === "c-green" && intelClass("improving", 60) === "c-green");
+
+  // The split the owner asked for (spec §25): steady must not read as
+  // fine when the level is excessive. 50.48 is the real case.
+  check("stable above 45 is red", intelClass("stable", 50.48) === "c-red", intelClass("stable", 50.48));
+  check("stable below 45 is green", intelClass("stable", 44.9) === "c-green", intelClass("stable", 44.9));
+  // Same boundary the L/100km column already draws, so the two cells
+  // in a row can never disagree about the same number.
+  check("stable exactly at 45 is green (boundary matches consumptionClass)", intelClass("stable", 45) === "c-green");
+  check("stable just above 45 is red", intelClass("stable", 45.01) === "c-red");
+
+  // A truck that never logged a distance has no rate to measure against
+  // the limit. Green would be a claim of health nobody showed.
+  check("stable with no rate stays dim", intelClass("stable", null) === "t-dim", intelClass("stable", null));
+  check("stable with no level argument stays dim (the window's rule)", intelClass("stable") === "t-dim");
+
+  // No-data states are never dressed in a level colour.
+  check("no_baseline stays dim", intelClass("no_baseline", 60) === "t-dim");
+  check("insufficient stays dim", intelClass("insufficient", 60) === "t-dim");
+  check("new_vehicle is primary, not a status hue", intelClass("new_vehicle", 60) === "t-primary");
 }
 
 console.log("\nlimit + ceiling:");

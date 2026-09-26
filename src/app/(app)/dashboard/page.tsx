@@ -1308,6 +1308,12 @@ export default function DashboardPage() {
                           // has to LOOK like one. .intel-signal carries
                           // the hover and open states — see the block in
                           // globals.css, which spends no new hue.
+                          //
+                          // The level is passed HERE and not in the window:
+                          // this column is a scanning surface, and a steady
+                          // truck over the 45 limit is the row most worth
+                          // spotting. The window's own behaviour figure
+                          // stays direction-only (see intelClass).
                           <button
                             type="button"
                             onClick={() => {
@@ -1315,13 +1321,14 @@ export default function DashboardPage() {
                             }}
                             aria-expanded={open}
                             title={open ? t("Close intelligence") : t("Open intelligence")}
-                            className={`status-pill intel-signal ${intelClass(intel.state)}`}
+                            className={`status-pill intel-signal ${intelClass(intel.state, r.litresPer100Km)}`}
                           >
                             {intelLabel(intel, t)}
                           </button>
                         );
                       },
-                      cellClass: (r) => intelClass(truckIntel.get(r.truckId)?.state ?? "no_baseline"),
+                      cellClass: (r) =>
+                        intelClass(truckIntel.get(r.truckId)?.state ?? "no_baseline", r.litresPer100Km),
                     },
                   ]}
                 />

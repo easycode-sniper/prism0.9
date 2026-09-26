@@ -147,7 +147,39 @@ export function intelLabel(intel: IntelResult, t: (key: string) => string): stri
   }
 }
 
-export function intelClass(state: IntelState): string {
+/**
+ * The cell's colour.
+ *
+ * For every state but one, the colour IS the state: a rise is red, an
+ * improvement green, a watch amber. STABLE carries no direction, so it
+ * has nothing to colour — and that is the trap. Dim grey on a truck
+ * burning 57 L/100km reads as "nothing to see here", which is the
+ * single most expensive misreading the table can make: the truck is
+ * steady, which is exactly why nobody is looking at it.
+ *
+ * So stable is split by LEVEL, and the owner's spec says as much (§25:
+ * stable behaviour at an excessive consumption level is not "normal").
+ * Above the management limit it goes red; at or below it, green.
+ *
+ * A stable truck with NO rate keeps the dim. A truck that never logged
+ * a distance cannot be measured against the limit, and colouring it
+ * green would be claiming a health it has not been shown.
+ *
+ * The boundary is `> limit`, the same comparison the L/100km column
+ * already makes (see consumptionClass), so the two cells in a row can
+ * never disagree about the same number.
+ *
+ * `level` is optional precisely so the FLOATING WINDOW can keep
+ * colouring by direction alone: there the current-consumption card
+ * already states the level and the conclusion sentence carries both
+ * facts, so a red "STABLE" beside a red consumption would say it twice
+ * — and a behaviour row going red while the word reads STABLE is the
+ * misreading this whole function exists to prevent.
+ */
+export function intelClass(state: IntelState, level?: number | null): string {
+  if (state === "stable" && level != null) {
+    return level > ASSUMED_L_PER_100KM ? "c-red" : "c-green";
+  }
   switch (state) {
     case "up":
       return "c-red";

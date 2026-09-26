@@ -1303,22 +1303,19 @@ export default function DashboardPage() {
                         const intel = truckIntel.get(r.truckId) ?? { state: "no_baseline", pct: null };
                         const open = intelTruck === r.truckId;
                         return (
+                          // The status-pill anatomy, not bare text: this
+                          // is the only clickable cell in the table and it
+                          // has to LOOK like one. .intel-signal carries
+                          // the hover and open states — see the block in
+                          // globals.css, which spends no new hue.
                           <button
                             type="button"
                             onClick={() => {
                               setIntelTruck(open ? null : r.truckId);
                             }}
                             aria-expanded={open}
-                            title={t("Open intelligence")}
-                            className={intelClass(intel.state)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              padding: 0,
-                              cursor: "pointer",
-                              font: "inherit",
-                              whiteSpace: "nowrap",
-                            }}
+                            title={open ? t("Close intelligence") : t("Open intelligence")}
+                            className={`status-pill intel-signal ${intelClass(intel.state)}`}
                           >
                             {intelLabel(intel, t)}
                           </button>

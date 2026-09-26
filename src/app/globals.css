@@ -1079,6 +1079,81 @@ input::placeholder, textarea::placeholder {
 .status-pill.stopped { background: rgba(255, 179, 0, 0.15); color: var(--amber); }
 .status-pill.dispatched { background: rgba(0, 207, 255, 0.15); color: var(--cyan); }
 
+/* ── Prism Intelligence signal cell ───────────────────────────
+   The one interactive cell in the variance table, and until 2026-09-26
+   it was invisible: `background:none; border:none; padding:0` left bare
+   coloured text flush against the number, so a pointer cursor and a
+   delayed tooltip were the ONLY cue — nothing at all on touch, and
+   nothing for a keyboard user beyond the ring that only appears once
+   focus has already arrived.
+
+   It now wears the status-pill anatomy above rather than a new shape:
+   that anatomy is fixed for a reason, and this cell is a status with a
+   hue, which is precisely what a status pill is for. What the pill
+   anatomy does not carry is the two affordances a CONTROL needs, and
+   those are what this block adds — a hover that answers, and an open
+   state that is readable rather than inferable, since a second click
+   closes the window and the user has to know which one is up.
+
+   NO NEW HUE IS SPENT. Each state wears the exact colour intelClass()
+   has given it since the first version (green/amber/red for the
+   behaviour states, dim for the no-data ones); a pill only makes that
+   existing decision legible. The tints are the same 0.15 alpha the
+   status pills use, and the hairline is the same low-alpha
+   currentColor ring, so the two elements read as one family. */
+.intel-signal {
+  /* The pill supplies radius, padding, tint, hairline and type. This
+     resets only what a <button> brings that a status tag does not. */
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* At rest, one tint per state, matching the .status-pill variants
+   above value for value. */
+.intel-signal.c-red     { background: rgba(255, 45, 63, 0.15); }
+.intel-signal.c-green   { background: rgba(0, 255, 123, 0.15); }
+.intel-signal.c-amber   { background: rgba(255, 179, 0, 0.15); }
+.intel-signal.t-dim     { background: rgba(149, 149, 138, 0.18); }
+.intel-signal.t-primary { background: rgba(255, 252, 225, 0.07); }
+
+/* Hover lives inside the media query the rest of the system uses, so a
+   touch device is not left with a tint it can never clear. The ring
+   thickens with it: on a 0.15 tint a border change alone is too quiet
+   to notice, which is the fault being fixed. */
+@media (hover: hover) and (pointer: fine) {
+  .intel-signal:hover {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
+  }
+  .intel-signal.c-red:hover     { background: rgba(255, 45, 63, 0.26); }
+  .intel-signal.c-green:hover   { background: rgba(0, 255, 123, 0.26); }
+  .intel-signal.c-amber:hover   { background: rgba(255, 179, 0, 0.26); }
+  .intel-signal.t-dim:hover     { background: rgba(149, 149, 138, 0.28); }
+  .intel-signal.t-primary:hover { background: rgba(255, 252, 225, 0.12); }
+}
+
+/* Open — the signal whose window is up. Declared after the hover block
+   at equal-ish specificity so "open" wins over "hovered": an open cell
+   must not lose its state colour because the cursor is still on it. */
+.intel-signal[aria-expanded="true"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 50%, transparent);
+}
+.intel-signal[aria-expanded="true"].c-red     { background: rgba(255, 45, 63, 0.28); }
+.intel-signal[aria-expanded="true"].c-green   { background: rgba(0, 255, 123, 0.28); }
+.intel-signal[aria-expanded="true"].c-amber   { background: rgba(255, 179, 0, 0.28); }
+.intel-signal[aria-expanded="true"].t-dim     { background: rgba(149, 149, 138, 0.3); }
+.intel-signal[aria-expanded="true"].t-primary { background: rgba(255, 252, 225, 0.13); }
+
+/* The global :focus-visible rule sets box-shadow, which would wipe the
+   hairline that carries the state colour while focused. Re-state it
+   alongside the ring so keyboard focus keeps both. */
+.intel-signal:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent),
+    0 0 0 2px var(--bg), 0 0 0 3px var(--accent);
+}
+
 /* Totals pills — the Carburant page's five month figures, at a glance.
    The anatomy is the status pill's: pill radius, a hairline, a panel
    surface. The difference is the content: these are quantities, not

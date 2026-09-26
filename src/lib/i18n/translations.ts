@@ -462,6 +462,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "Possible explanations include driving behavior, operating conditions, load differences, mechanical condition, route differences, or data quality.": "Possible explanations include driving behavior, operating conditions, load differences, mechanical condition, route differences, or data quality.",
     // ── Intelligence floating window ──
     "Open intelligence": "Open intelligence",
+    "Close intelligence": "Close intelligence",
     "No previous period": "No previous period",
     "vs previous period": "vs previous period",
     "{x} above limit (45 L/100km)": "{x} above limit (45 L/100km)",
@@ -884,6 +885,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "Possible explanations include driving behavior, operating conditions, load differences, mechanical condition, route differences, or data quality.": "Explications possibles : style de conduite, conditions d'exploitation, différences de charge, état mécanique, différences d'itinéraires ou qualité des données.",
     // ── Intelligence floating window ──
     "Open intelligence": "Ouvrir Intelligence",
+    "Close intelligence": "Fermer Intelligence",
     "No previous period": "Pas de période précédente",
     "vs previous period": "par rapport à la période précédente",
     "{x} above limit (45 L/100km)": "{x} au-dessus de la limite (45 L/100km)",

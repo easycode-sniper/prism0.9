@@ -435,8 +435,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "Litres": "Litres",
     "L/100km": "L/100km",
     "Cost per km": "Cost per km",
-    "Fuel variance by truck": "Fuel variance by truck",
-    "The same écart, per vehicle. A truck that is thirsty under several drivers is a truck, not a run of unlucky people.": "The same écart, per vehicle. A truck that is thirsty under several drivers is a truck, not a run of unlucky people.",
+    "A deep dive into each vehicle's variance: what changed, by how much — and never who to blame.": "A deep dive into each vehicle's variance: what changed, by how much — and never who to blame.",
     "Fuel variance by driver": "Fuel variance by driver",
     "No fill carries a variance yet.": "No fill carries a variance yet.",
     // ── Prism Intelligence ──
@@ -858,8 +857,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "Litres": "Litres",
     "L/100km": "L/100km",
     "Cost per km": "Coût par km",
-    "Fuel variance by truck": "Écart carburant par camion",
-    "The same écart, per vehicle. A truck that is thirsty under several drivers is a truck, not a run of unlucky people.": "Le même écart, par véhicule. Un camion gourmand avec plusieurs chauffeurs est un problème de camion, pas une série de malchances.",
+    "A deep dive into each vehicle's variance: what changed, by how much — and never who to blame.": "Plongée dans l'écart de chaque véhicule : ce qui a changé, de combien — et jamais qui est responsable.",
     "Fuel variance by driver": "Écart carburant par chauffeur",
     "No fill carries a variance yet.": "Aucun plein ne présente encore d'écart.",
     // ── Prism Intelligence ──

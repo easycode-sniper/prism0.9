@@ -1233,9 +1233,16 @@ export default function DashboardPage() {
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div>
-                <div className="dash-panel__title">{t("Fuel variance by truck")}</div>
+                {/* The panel is the feature's front door: the same brand
+                    the floating window carries, so a reader who opens one
+                    and then the other sees one product. The sub-line
+                    promises what the INTELLIGENCE column actually
+                    delivers — the change, its size, and the refusal to
+                    name a culprit, which is the rule the whole feature
+                    is built on (see intelligence.ts). */}
+                <div className="dash-panel__title">{t("PRISM INTELLIGENCE")}</div>
                 <div className="dash-panel__sub">
-                  {t("The same écart, per vehicle. A truck that is thirsty under several drivers is a truck, not a run of unlucky people.")}
+                  {t("A deep dive into each vehicle's variance: what changed, by how much — and never who to blame.")}
                 </div>
               </div>
             </header>

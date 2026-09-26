@@ -15,13 +15,19 @@ import {
   buildConclusion,
   classifyIntel,
   deriveDriverRuns,
+  driverRating,
   fillRate,
   intelClass,
+  leaderboardFloorKm,
   limitDelta,
   INTEL_CHART_CEILING,
   INTEL_MIN_FILLS,
   INTEL_STABLE_PCT,
   INTEL_WATCH_PCT,
+  RATING_AT_LIMIT,
+  RATING_DA_PER_STAR,
+  RATING_MAX,
+  RATING_MIN,
 } from "../src/lib/fuel/intelligence.ts";
 
 let failures = 0;
@@ -208,6 +214,72 @@ console.log("\ndriver runs:");
   ]);
   check("driverless fills form one unknown run, not zero", runs.length === 1 && runs[0].driver === null);
 }
+
+// ── The star rating (the "Best performing drivers" panel) ──
+//
+// A star rating over named people is the one number on this dashboard
+// that a colleague will read as a verdict on them, so the scale is
+// pinned here rather than left to whatever the arithmetic happens to
+// produce. Three properties matter and none of them are visible in the
+// code that consumes this function:
+//
+//   1. 3.0 STANDS FOR THE ASSUMED RATE. Zero variance per 100km means
+//      the driver burned exactly the 45 the sheet budgets for, and that
+//      is the only defensible midpoint. If this drifts, every rating on
+//      the panel silently reinterprets what "average" means.
+//   2. IT CLAMPS. The worst rate on record is +2,822 DA/100km, which
+//      unclamped would print as "-25.2 stars".
+//   3. NULL STAYS NULL. A driver with no distance-logged fill has no
+//      rate, and a made-up 3.0 for them would be the panel inventing an
+//      opinion about someone it knows nothing about.
+
+check("zero variance per 100km is exactly 3.0 stars", driverRating(0) === RATING_AT_LIMIT);
+check("100 DA/100km over the limit is one star down", driverRating(100) === 2);
+check("saving 100 DA per 100km is one star up", driverRating(-100) === 4);
+check("saving 200 DA per 100km reaches the ceiling", driverRating(-200) === RATING_MAX);
+check("losing 200 DA per 100km reaches the floor", driverRating(200) === RATING_MIN);
+
+// The measured anchors from the sheet: the real top of the leaderboard.
+check("the leader's real rate of -183 DA/100km reads 4.8", driverRating(-183) === 4.8);
+check("the tenth-place rate of -147 DA/100km reads 4.5", driverRating(-147) === 4.5);
+
+// The clamp, at both ends, with the real worst case.
+check("the worst rate on record clamps to the floor, not -25.2", driverRating(2822) === RATING_MIN);
+check("an absurd saving still clamps to the ceiling", driverRating(-99999) === RATING_MAX);
+check("nothing prints above the ceiling", driverRating(-273) === 5);
+
+// One decimal, always — a two-decimal star is a decimal place of noise.
+check("a rating is one decimal", /^\d\.\d$/.test(String(driverRating(-137))));
+
+// The float trap. 4.65 in binary lands just under 4.65, so a naive
+// toFixed(1) prints "4.6" and the column disagrees with itself by a
+// tenth depending on which side of the boundary a driver falls.
+check("4.65 rounds up to 4.7, not down to 4.6", driverRating(-165) === 4.7);
+
+// No rate is no rating. Null, NaN and Infinity all mean the same thing:
+// the sheet could not produce a rate for this driver.
+check("a driver with no rate is not rated", driverRating(null) === null);
+check("NaN is not rated", driverRating(NaN) === null);
+check("Infinity is not rated", driverRating(Infinity) === null);
+check("zero is rated, not treated as missing", driverRating(0) !== null);
+
+// The constants the panel's explanation quotes must be the ones the
+// arithmetic uses, or the info pop-up documents a different scale.
+check("the scale is 1 to 5", RATING_MIN === 1 && RATING_MAX === 5);
+check("one star per 100 DA/100km", RATING_DA_PER_STAR === 100);
+
+// ── The distance floor ──
+//
+// Measured against the live sheet: on a fill-count floor the top-rated
+// driver had covered 5,124km while the man who covered 64,838km and
+// saved 109,610 DA rated lower. The floor is what stops that.
+
+check("the floor is half the median", leaderboardFloorKm(31894) === 15947);
+check("the median itself qualifies", leaderboardFloorKm(2) === 1);
+check("no median means no floor, not a floor of NaN", leaderboardFloorKm(null) === 0);
+check("a zero median means no floor", leaderboardFloorKm(0) === 0);
+check("a negative median means no floor", leaderboardFloorKm(-5) === 0);
+check("NaN median means no floor", leaderboardFloorKm(NaN) === 0);
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED.\n`);

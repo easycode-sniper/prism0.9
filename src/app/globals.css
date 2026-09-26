@@ -2216,6 +2216,140 @@ hr {
   max-height: calc(var(--row-h) * 5.5 + 40px);
 }
 
+/* The driver roster, in the rail. Same rule as the cap above — a row
+   sliced at the fold is the cue that there is more — at roughly twice
+   the rows, because this is the one table on the page whose whole job
+   is to be scrolled: 199 drivers do not fit at any height, and a
+   five-row window on a full-width panel was a scrollbar for its own
+   sake. Ten rows is also the most a reader will scan before deciding to
+   sort or filter, so a taller cap would be height spent on rows nobody
+   looks at. */
+.table-wrap--capped-tall {
+  --row-h: calc(0.87rem * 1.5 + 23px);
+  max-height: calc(var(--row-h) * 10 + 40px);
+}
+
+/* ── The rating, and how it is worked out ─────────────────────
+   The star glyph and the number beside it. The glyph is AMBER, not the
+   cream of a value or the red of a loss, because it is not a vehicle
+   state: amber is the only hue on this dashboard that means "a reading
+   on a scale" rather than "this thing is wrong", and the reading here
+   is a rating. Nothing in the taxonomy spends amber on a state, so
+   nothing else can be mistaken for it.
+
+   The number is always printed next to the glyph, never encoded in it.
+   A half-filled star would have to be explained, and "4.7" cannot be
+   misread as 4.5 — which on a panel that ranks named colleagues is the
+   whole point. */
+.rating {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.rating__star {
+  color: var(--amber);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.rating__n {
+  color: var(--text);
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+/* The disclosure that explains the scale. A <button> so it is reachable
+   by keyboard and announces its own state, wrapped in a positioned
+   span so the pop-over can escape the panel's own stacking without
+   moving anything when it opens. */
+.explain {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.explain__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.explain__btn[aria-expanded="true"] {
+  color: var(--text);
+  background: rgba(255, 252, 225, 0.08);
+}
+
+/* The ring thickens on hover because at 12px a colour change alone is
+   too quiet to notice, and the target is small. Inside the pointer
+   media query the rest of the system uses, so a touch device is not
+   left with a hover state it can never clear. */
+@media (hover: hover) and (pointer: fine) {
+  .explain__btn:hover {
+    color: var(--text);
+    background: rgba(255, 252, 225, 0.08);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
+  }
+}
+
+.explain__pop {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 40;
+  width: 288px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  text-align: left;
+  cursor: default;
+}
+
+.explain__pop p { margin: 0 0 7px; }
+.explain__pop p:last-child { margin-bottom: 0; }
+
+/* The first line is the one that has to land: it says what the rating
+   is NOT, which is the sentence a reader of a star next to a
+   colleague's name needs before the arithmetic. */
+.explain__lede { color: var(--text); }
+
+.explain__scale {
+  margin: 0 0 7px;
+  padding: 0;
+  list-style: none;
+}
+
+.explain__scale li {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.explain__scale b {
+  flex: none;
+  width: 26px;
+  color: var(--amber);
+}
+
 .table-foot-note {
   padding: 9px 15px;
   font-size: 0.68rem;

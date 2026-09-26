@@ -20,7 +20,7 @@ import type { ChartData } from "chart.js";
 // <Chart>, not <Bar>, for the mixed cost chart: <Bar> is typed to "bar"
 // datasets only, and that one carries a line dataset on a second axis.
 import { Bar, Chart, Doughnut, Line } from "react-chartjs-2";
-import { ArrowRight, Fuel, Gauge, MapPinOff, Pencil } from "lucide-react";
+import { ArrowRight, Fuel, Gauge, Info, MapPinOff, Pencil } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import {
   getDashboardBundle,
@@ -89,7 +89,18 @@ import {
 import type { PeriodDelta } from "@/lib/dashboard/delta";
 import { opsToday } from "@/lib/format";
 import { ASSUMED_L_PER_100KM } from "@/lib/fuel/parse";
-import { classifyIntel, intelClass, intelLabel, type IntelResult } from "@/lib/fuel/intelligence";
+import {
+  classifyIntel,
+  driverRating,
+  intelClass,
+  intelLabel,
+  leaderboardFloorKm,
+  RATING_AT_LIMIT,
+  RATING_DA_PER_STAR,
+  RATING_MAX,
+  RATING_MIN,
+  type IntelResult,
+} from "@/lib/fuel/intelligence";
 import { TruckIntelWindow } from "@/components/dashboard/TruckIntelWindow";
 import { SPEED_LIMIT_KMH } from "@/lib/constants";
 
@@ -122,6 +133,21 @@ installChartDefaults();
 // historical panel, not just the charts.
 
 const nf = (n: number) => Math.round(n).toLocaleString("en-GB");
+
+/** The median of a list, or null when there is nothing to take one of.
+ *
+ *  `percentile_disc(0.5)` semantics on purpose, so this and the SQL
+ *  median used to explore the data cannot be compared and found to
+ *  disagree: the first value whose 1-based position is at least half the
+ *  count, which for an even count is the LOWER of the two middle values
+ *  and not their average. Null rather than 0 for an empty list, because
+ *  the callers turn null into "no floor" and 0 into "everyone
+ *  qualifies" — two opposite readings of the same empty array. */
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.ceil(sorted.length / 2) - 1];
+}
 
 /** Budget figures carry cents — 11,234,123.31, not 11,234,123 — so they
  *  round to the dinar, not to the whole. The two formatters sit apart
@@ -166,6 +192,7 @@ function SortableTable<T>({
   rowKey,
   unit,
   noteSuffix,
+  capClass = "table-wrap--capped",
 }: {
   rows: T[];
   columns: SortColumn<T>[];
@@ -176,6 +203,11 @@ function SortableTable<T>({
   /** Appended to the count line when sorted on the initial column, so the
    *  panel can say "worst first" in its own words. */
   noteSuffix?: (dir: "asc" | "desc") => string;
+  /** Which scroll cap to put on the table. The driver roster in the
+   *  rail asks for the taller one, because a 199-row list in a
+   *  five-row window is a scroll for its own sake; every other table
+   *  takes the default so this cannot leak. */
+  capClass?: string;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({
     key: initialKey,
@@ -212,7 +244,7 @@ function SortableTable<T>({
 
   return (
     <>
-      <div className="table-wrap table-wrap--capped" style={{ border: "none", borderRadius: 0 }}>
+      <div className={`table-wrap ${capClass}`} style={{ border: "none", borderRadius: 0 }}>
         <table>
           <thead>
             <tr>
@@ -263,6 +295,205 @@ function SortableTable<T>({
     </>
   );
 }
+/**
+ * A small round button that reveals an explanation, and the explanation.
+ *
+ * WHY A BUTTON AND NOT A TITLE ATTRIBUTE. Every other explanation on this
+ * dashboard is a `title`, which means it appears on hover, disappears on
+ * touch, is unreachable by keyboard, and cannot hold a paragraph. This
+ * one has to carry the rating scale — four anchors and a formula — and
+ * that is a panel, not a tooltip.
+ *
+ * WHY `Info` AND NOT AN EXCLAMATION. An exclamation circle is a warning
+ * glyph, and this dashboard spends red and amber on vehicle states: a
+ * reader who has learned that vocabulary sees a warning icon next to
+ * their colleagues' names and reads a warning into it. The circle is the
+ * same shape; the mark inside it says "here is how this was worked out",
+ * which is what it does.
+ */
+function ExplainButton({ children, label }: { children: React.ReactNode; label: string }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLSpanElement>(null);
+
+  // Dismiss on Escape and on a click anywhere else. Without the second,
+  // the panel stays open over the table after the reader has moved on,
+  // and there is no visible control left to close it — the button is
+  // behind the panel it opened.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onDown = (e: MouseEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [open]);
+
+  return (
+    <span className="explain" ref={wrap}>
+      <button
+        type="button"
+        className="explain__btn"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Info size={12} aria-hidden="true" />
+      </button>
+      {open && <div className="explain__pop">{children}</div>}
+    </span>
+  );
+}
+
+/**
+ * Best performing drivers — the podium.
+ *
+ * The only panel here that puts a RANK on a named person, so three
+ * things are deliberate and none of them is styling:
+ *
+ *   - IT IS A TOP SEVEN, not the roster. The full sortable list of every
+ *     driver is the panel directly above this one; a leaderboard that
+ *     showed all 196 would be a league table, and a league table with
+ *     named colleagues at the bottom of it is a different instrument
+ *     from a shortlist. There is no "worst performers" panel anywhere in
+ *     this app and there is not going to be one.
+ *
+ *   - THE RATING IS NOT A SCORE FOR THE PERSON. It measures one thing —
+ *     fuel cost per 100km against the rate the sheet assumes — and the
+ *     pop-up says so in those words, because a star next to a colleague's
+ *     name will otherwise be read as a grade. driverRating's own comment
+ *     is the long version of the same argument.
+ *
+ *   - THE FLOOR IS STATED, not applied silently. A driver below it is
+ *     absent rather than ranked last, and the sub-line says what the
+ *     threshold is in dinars and kilometres, so "why isn't X on here" has
+ *     an answer on the page.
+ */
+function DriverLeaderboard({
+  board,
+  ASSUMED,
+}: {
+  board: {
+    floorKm: number;
+    eligible: number;
+    rows: (DriverVariance & { rating: number | null })[];
+  } | null;
+  /** The sheet's assumed rate, passed in rather than imported: this is a
+   *  server prop on the page's own data and the pop-up quotes the number
+   *  the RANGE was measured against. */
+  ASSUMED: number;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <section className="panel dash-panel">
+      <header className="dash-panel__head">
+        <div style={{ minWidth: 0 }}>
+          <div className="dash-panel__title">
+            {t("Best performing drivers")}
+            <ExplainButton label={t("How the rating is calculated")}>
+              <p className="explain__lede">
+                {t(
+                  "The rating measures fuel cost against the {rate} L/100km the sheet assumes. It is not a score for the driver: it says nothing about safety, punctuality or hours, and it does not judge the truck.",
+                  { rate: ASSUMED }
+                )}
+              </p>
+              <p>
+                {t("One star per {da} DA of variance per 100km.", { da: RATING_DA_PER_STAR })}
+              </p>
+              <ul className="explain__scale">
+                <li>
+                  <b>{RATING_MAX.toFixed(1)}</b>{" "}
+                  {t("at {da} DA saved per 100km or better", { da: RATING_DA_PER_STAR * 2 })}
+                </li>
+                <li>
+                  <b>{RATING_AT_LIMIT.toFixed(1)}</b>{" "}
+                  {t("exactly the assumed rate — neither saved nor lost")}
+                </li>
+                <li>
+                  <b>{RATING_MIN.toFixed(1)}</b>{" "}
+                  {t("at {da} DA lost per 100km or more", { da: RATING_DA_PER_STAR * 2 })}
+                </li>
+              </ul>
+              <p>
+                {t("Ranked on that rate, not on total variance: a driver who barely drives loses almost nothing, and standing still is not a performance.")}
+              </p>
+            </ExplainButton>
+          </div>
+          <div className="dash-panel__sub">
+            {board === null
+              ? t("Least overspend per 100km, among the drivers who drove far enough to be ranked.")
+              : t("Least overspend per 100km, among the {n} drivers who covered at least {km} km in this range.", {
+                  n: nf(board.eligible),
+                  km: nf(board.floorKm),
+                })}
+            {" "}
+            {t("The full list of every driver is above.")}
+          </div>
+        </div>
+      </header>
+      <div className="dash-panel__body dash-panel__body--flush">
+        {board === null ? (
+          <VarianceWaiting />
+        ) : board.rows.length === 0 ? (
+          <p className="dash-empty">
+            {t("No driver covered enough ground in this range to be ranked.")}
+          </p>
+        ) : (
+          <div className="table-wrap" style={{ border: "none", borderRadius: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>{t("Trucks")}</th>
+                  <th>{t("Driver name")}</th>
+                  <th>{t("Distance")}</th>
+                  <th>{t("Variance")}</th>
+                  <th>{t("Rating")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {board.rows.map((d) => (
+                  <tr key={d.driverName}>
+                    <td className="t-dim">{d.truckCount}</td>
+                    <td className="t-primary">{d.driverName}</td>
+                    <td>{`${nf(d.km)} km`}</td>
+                    <td className={signedClass(d.varianceDa)}>{signed(d.varianceDa, "DA")}</td>
+                    <td>
+                      {/* The star is decoration for a number beside it,
+                          never the number itself: a half-filled star
+                          would have to be explained, and "4.7" cannot. */}
+                      <span className="rating">
+                        <span className="rating__star" aria-hidden="true">★</span>
+                        <span className="rating__n">
+                          {d.rating == null ? "—" : d.rating.toFixed(1)}
+                        </span>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {board !== null && board.rows.length > 0 && (
+        <div className="table-foot-note">
+          {t("Top {shown} of {eligible} drivers who cleared the floor.", {
+            shown: board.rows.length,
+            eligible: nf(board.eligible),
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /**
  * Who crossed the limit most often this month, as a ranked bar list.
  *
@@ -743,6 +974,52 @@ export default function DashboardPage() {
       (r.trucks ?? "").split(",").map((x) => x.trim()).includes(scope.id)
     );
   }, [variance, scope]);
+
+  // ── The driver's podium ──
+  //
+  // Seven rows out of ~196, so this is a LEADERBOARD and not another
+  // table: the reader is meant to take the top of it and stop. The full
+  // sortable roster is the panel this one sits above, one screen away.
+  //
+  // Built from `scopedDriverVariance` rather than from `variance`, so it
+  // obeys the same scope picker the rest of the fuel panels do. Scoped
+  // to one driver it collapses to that driver or to nothing, which is
+  // correct: a leaderboard of one is that driver's own row, and the
+  // empty state says why.
+  //
+  // THREE RULES, in this order, and the order is the argument:
+  //
+  //   1. A rate or nothing. variancePer100Km is null for a driver with
+  //      no fill that logged a distance, and a rate is the only thing
+  //      this panel ranks or rates. Such a driver is not "unrated", they
+  //      are absent — the roster carries them.
+  //   2. The distance floor. Half the median driver's distance for this
+  //      range, so a three-fill sample cannot win a panel whose whole
+  //      claim is "who drove the most". See leaderboardFloorKm for why
+  //      the threshold is the median and not a number.
+  //   3. The rate itself, ascending. Least overspend per 100km first.
+  //
+  // The median is taken over the SCOPED rows, not the whole fleet: when
+  // the picker is on one truck the floor has to describe that truck's
+  // drivers, or a short week would leave the panel empty for a fleet
+  // that has simply been filtered.
+  const leaderboard = useMemo(() => {
+    if (scopedDriverVariance === null) return null;
+    const rated = scopedDriverVariance.filter((d) => d.variancePer100Km != null);
+    const floorKm = leaderboardFloorKm(median(rated.map((d) => d.km)));
+    const eligible = rated.filter((d) => d.km >= floorKm);
+    return {
+      floorKm,
+      eligible: eligible.length,
+      // Ties on the rate are common — 4.5 is a whole band of drivers —
+      // and the tiebreak is distance, so equal rates read as "these two
+      // were equally efficient, this one just drove more of it".
+      rows: eligible
+        .sort((a, b) => a.variancePer100Km! - b.variancePer100Km! || b.km - a.km)
+        .slice(0, 7)
+        .map((d) => ({ ...d, rating: driverRating(d.variancePer100Km) })),
+    };
+  }, [scopedDriverVariance]);
 
   const scopedTruckVariance = useMemo(() => {
     if (!truckVariance) return null;
@@ -1705,68 +1982,11 @@ export default function DashboardPage() {
           </section>
         </div>
 
-          <section className="panel dash-panel">
-            <header className="dash-panel__head">
-              <div>
-                <div className="dash-panel__title">{t("Fuel variance by driver")}</div>
-                <div className="dash-panel__sub">
-                  Against the sheet&rsquo;s assumed {ASSUMED_L_PER_100KM} L/100km. Click a column to sort.
-                  The truck column matters: a driver with one truck cannot be told apart from it.
-                </div>
-              </div>
-            </header>
-            <div className="dash-panel__body dash-panel__body--flush">
-              {scopedDriverVariance === null ? (
-                <VarianceWaiting />
-              ) : scopedDriverVariance.length === 0 ? (
-                <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
-              ) : (
-                <SortableTable
-                  rows={scopedDriverVariance}
-                  rowKey={(d) => d.driverName}
-                  initialKey="varianceDa"
-                  unit="drivers"
-                  noteSuffix={(dir) => (dir === "desc" ? t(" — worst first") : t(" — best first"))}
-                  columns={[
-                    {
-                      key: "driverName",
-                      label: t("Driver"),
-                      value: (d) => d.driverName,
-                      render: (d) => d.driverName,
-                      cellClass: () => "t-primary",
-                    },
-                    {
-                      key: "trucks",
-                      label: t("Truck"),
-                      value: (d) => d.trucks,
-                      // One truck is named, because that is the row's
-                      // confound and the reader should see which vehicle to
-                      // check. More than one and the count is the point:
-                      // the figure is no longer one truck's.
-                      render: (d) =>
-                        d.truckCount > 1 ? `${d.truckCount} trucks` : (d.trucks ?? "—"),
-                      cellClass: (d) => (d.truckCount > 1 ? "t-dim" : "truck-id"),
-                    },
-                    { key: "km", label: t("Distance"), value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
-                    {
-                      key: "litresPer100Km",
-                      label: t("L/100km"),
-                      value: (d) => d.litresPer100Km,
-                      render: (d) => (d.litresPer100Km != null ? d.litresPer100Km.toFixed(2) : "—"),
-                      cellClass: (d) => consumptionClass(d.litresPer100Km),
-                    },
-                    {
-                      key: "varianceDa",
-                      label: t("Variance"),
-                      value: (d) => d.varianceDa,
-                      render: (d) => signed(d.varianceDa, "DA"),
-                      cellClass: (d) => signedClass(d.varianceDa),
-                    },
-                  ]}
-                />
-              )}
-            </div>
-          </section>
+          {/* The podium, in the slot the full roster used to hold. The
+              roster itself is now the last panel in the rail, which is
+              where a 199-row scrollable list belongs — and where the
+              column had 700px of nothing to put it. */}
+          <DriverLeaderboard board={leaderboard} ASSUMED={ASSUMED_L_PER_100KM} />
 
         </div>
 
@@ -1900,6 +2120,80 @@ export default function DashboardPage() {
               <Link href="/drivers" className="dash-more">
                 All drivers <ArrowRight size={12} />
               </Link>
+            </div>
+          </section>
+
+          {/* The full roster, last in the rail.
+              A 199-row sortable list is the one panel on this page that
+              wants to be scrolled rather than read, which is what a
+              narrow column is for; at full width it was a short panel
+              with a scrollbar in it and 700px of rail below it doing
+              nothing. `--tall` gives it twice the rows the capped
+              tables get, which is still a scroll — there is no height at
+              which all 199 fit, and pretending otherwise was the reason
+              it was capped in the first place. */}
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div style={{ minWidth: 0 }}>
+                <div className="dash-panel__title">{t("Fuel variance by driver")}</div>
+                <div className="dash-panel__sub">
+                  {t("Against the sheet's assumed {rate} L/100km. Click a column to sort. A driver with one truck cannot be told apart from it.", { rate: ASSUMED_L_PER_100KM })}
+                </div>
+              </div>
+            </header>
+            <div className="dash-panel__body dash-panel__body--flush">
+              {scopedDriverVariance === null ? (
+                <VarianceWaiting />
+              ) : scopedDriverVariance.length === 0 ? (
+                <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
+              ) : (
+                <SortableTable
+                  rows={scopedDriverVariance}
+                  rowKey={(d) => d.driverName}
+                  initialKey="varianceDa"
+                  unit="drivers"
+                  capClass="table-wrap--capped-tall"
+                  noteSuffix={(dir) => (dir === "desc" ? t(" — worst first") : t(" — best first"))}
+                  columns={[
+                    {
+                      key: "driverName",
+                      label: t("Driver"),
+                      value: (d) => d.driverName,
+                      render: (d) => d.driverName,
+                      cellClass: () => "t-primary",
+                    },
+                    {
+                      key: "trucks",
+                      label: t("Truck"),
+                      value: (d) => d.trucks,
+                      // One truck is named, because that is the row's
+                      // confound and the reader should see which vehicle to
+                      // check. More than one and the count is the point:
+                      // the figure is no longer one truck's. This is also
+                      // why the leaderboard's Trucks column is a count —
+                      // 121 of 199 drivers drove more than one.
+                      render: (d) =>
+                        d.truckCount > 1 ? `${d.truckCount} trucks` : (d.trucks ?? "—"),
+                      cellClass: (d) => (d.truckCount > 1 ? "t-dim" : "truck-id"),
+                    },
+                    { key: "km", label: t("Distance"), value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
+                    {
+                      key: "litresPer100Km",
+                      label: t("L/100km"),
+                      value: (d) => d.litresPer100Km,
+                      render: (d) => (d.litresPer100Km != null ? d.litresPer100Km.toFixed(2) : "—"),
+                      cellClass: (d) => consumptionClass(d.litresPer100Km),
+                    },
+                    {
+                      key: "varianceDa",
+                      label: t("Variance"),
+                      value: (d) => d.varianceDa,
+                      render: (d) => signed(d.varianceDa, "DA"),
+                      cellClass: (d) => signedClass(d.varianceDa),
+                    },
+                  ]}
+                />
+              )}
             </div>
           </section>
         </aside>

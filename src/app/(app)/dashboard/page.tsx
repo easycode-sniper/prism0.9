@@ -36,7 +36,20 @@ import {
   type TruckVariance,
   type DriverSpeeding,
   type VhServiceStats,
+  type MonthlyVariance,
 } from "@/lib/supabase/dashboard";
+// The month panel's formatting and its three deliberate drawing rules —
+// oldest-first, the pale current month, green for a month that saved —
+// all live in a plain module so scripts/check-months.mts can pin them.
+// See lib/fuel/months.ts for why each of them fails silently.
+import {
+  isCurrentMonth,
+  monthAxisLabel,
+  monthBarColour,
+  monthFullLabel,
+  monthKey,
+  totalVariance,
+} from "@/lib/fuel/months";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n/I18nProvider";
 import {
@@ -396,6 +409,10 @@ export default function DashboardPage() {
   // not a zero; a window with no Vh Service fills legitimately reads 0
   // once the bundle lands.
   const [vhService, setVhService] = useState<VhServiceStats | null>(null);
+  // Every month in the sheet, oldest first. Range-INDEPENDENT (078) and
+  // deliberately not cleared by a range change — unlike everything else
+  // in this bundle, it does not describe the selected window.
+  const [months, setMonths] = useState<MonthlyVariance[] | null>(null);
   // Whether the last load actually succeeded. Without this a failed RPC
   // is INDISTINGUISHABLE from a slow one: every panel keeps its skeleton
   // and its "reading the sheet…" caption forever, which is exactly what
@@ -543,6 +560,7 @@ export default function DashboardPage() {
       setBudget(b.budget ?? null);
       setCanEditBudget(b.canEdit === true);
       setVhService(b.vhService ?? null);
+      setMonths(b.months ?? null);
       // Only when they were asked for. `undefined` on a refresh means
       // "not requested", never "the roster is empty", so the picker
       // keeps the list it already holds.
@@ -948,6 +966,79 @@ export default function DashboardPage() {
     ],
   };
 
+  // The fleet's arc, oldest month first (toMonthlyVariance reverses the
+  // RPC's newest-first LIMIT). Three things make it different from
+  // costChart and every other series on this page:
+  //
+  //   1. NOT a function of `range`. It is the whole record, always.
+  //   2. The current month is drawn in a lighter wash. September is 24
+  //      days of fills against August's 31, and its bar is low for that
+  //      reason alone — without the wash the panel's last bar reads as a
+  //      recovery, which is a number still moving.
+  //   3. The tooltip names the month IN FULL, because a bar labelled
+  //      "Aug" next to one labelled "Sep" invites a reader to compare
+  //      them without noticing the year is the same.
+  const today = opsToday();
+  // The sub-line's caveat. Keyed on the LAST month rather than on "any
+  // month is the current one", because a month in the future cannot
+  // happen and a month in the past is not still counting — the panel
+  // stops being provisional the moment the sheet rolls over.
+  const lastMonthIsCurrent = isCurrentMonth(months?.at(-1)?.month ?? "", today);
+  const monthTotal = totalVariance(months ?? []);
+
+  const monthVarianceChart: ChartData<"bar" | "line", (number | null)[], string> = {
+    labels: (months ?? []).map((m) => monthAxisLabel(m.month)),
+    datasets: [
+      {
+        label: t("Variance"),
+        data: (months ?? []).map((m) => m.varianceDa),
+        type: "bar" as const,
+        yAxisID: "y",
+        order: 2,
+        ...BAR_SERIES,
+        // Per-bar, because two of the three rules are per-bar. Chart.js
+        // takes an array here without complaint, and spreading BAR_SERIES
+        // first means this is the only dataset key set twice — which is
+        // the intent: the shared series style is the baseline, the array
+        // is the exception that means something.
+        backgroundColor: (months ?? []).map((m) =>
+          monthBarColour(m.varianceDa, monthKey(m.month) === monthKey(today))
+        ),
+      },
+      {
+        label: t("L/100km"),
+        data: (months ?? []).map((m) => (m.litresPer100Km == null ? null : m.litresPer100Km)),
+        type: "line" as const,
+        yAxisID: "y1",
+        // Drawn over the bars, not through them.
+        order: 1,
+        ...LINE_SERIES,
+        // Bigger points than the daily consumption line: this plot holds
+        // a dozen points across a full-width panel, not 30 across a
+        // third-width one, so a 3px dot would be a speck.
+        pointRadius: 3,
+        pointHoverRadius: 5,
+      },
+    ],
+  };
+
+  // The tooltip title, which dualAxisTimeSeriesOptions would otherwise
+  // build from a daily `days` array this chart has no use for — months
+  // are not days, and formatting "2026-08-01" as a weekday would be
+  // worse than useless. Hence the helper's own `fullName` hook rather
+  // than patching the returned object, which also widens its inferred
+  // type and breaks every other chart that shares the components.
+  const monthChartOptions = dualAxisTimeSeriesOptions({
+    units: [" DA", " L/100km"],
+    // Compact: a six-digit monthly figure is most of a full-width axis
+    // label's width, and there can be sixty of them.
+    compactLeft: true,
+    fullName: (i) => {
+      const m = (months ?? [])[i];
+      return m ? monthFullLabel(m.month) : "";
+    },
+  });
+
   // ── Drivers on duty: anyone the fleet feed can name, moving first ──
   const duty = useMemo(() => {
     const rank = { moving: 0, idle: 1, offline: 2 } as const;
@@ -1187,6 +1278,79 @@ export default function DashboardPage() {
             overscroll rule in globals.css, which is written for the
             outermost scroller only. */}
         <div className="dash-main">
+          {/* ── The fleet's arc ───────────────────────────────────
+              The top of the main column, and the only fuel panel that
+              ignores the range selector: it answers "how have we been
+              doing", which is a question about the whole record. Placed
+              here so the column reads as a funnel — what it has cost us
+              across the year, then the distance chart for the selected
+              window, then PRISM INTELLIGENCE's per-truck table as the
+              drill-down. Selecting September does not collapse it to one
+              bar, because a one-bar version of this panel is a number
+              the scorecard strip already shows.
+
+              Bars are the money; the line is WHY. Variance tracks
+              consumption almost mechanically — litres over the assumed
+              45 is the écart by definition — so a bars-only panel makes
+              a manager ask why August is tall, and a line beside the
+              bars answers it in the same glance. Both are the dual-axis
+              shape the cost panel already uses, so nothing new was
+              invented to draw it. */}
+          <section className="panel dash-panel">
+            <header className="dash-panel__head">
+              <div style={{ minWidth: 0 }}>
+                <div className="dash-panel__title">{t("Variance by month")}</div>
+                <div className="dash-panel__sub">
+                  {t("Dinars lost to variance per calendar month, against the 45 L/100km the sheet assumes. Every month in the sheet — not the selected range.")}
+                  {/* The current month is a partial month and always
+                      will be, so saying so is the difference between
+                      "September recovered 600,000 DA" and a number that
+                      will keep moving. Same convention as the distance
+                      panel below. */}
+                  {lastMonthIsCurrent ? " " + t("This month is still counting.") : ""}
+                </div>
+              </div>
+              {months && months.length > 0 && (
+                <div style={{ textAlign: "right" }}>
+                  <div className="t-faint" style={{ fontSize: ".66rem", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                    {t("Total over {n} months", { n: String(months.length) })}
+                  </div>
+                  <div style={{ fontSize: "1.15rem", fontWeight: 800, fontFamily: "var(--font-mono)" }}>
+                    {nf(monthTotal)} DA
+                  </div>
+                </div>
+              )}
+            </header>
+            <div className="dash-panel__body">
+              {!months ? (
+                <div className="dash-chart dash-chart--tall">
+                  <ChartWaiting />
+                </div>
+              ) : months.length === 0 ? (
+                <p className="dash-empty">
+                  <span>
+                    <Fuel size={15} style={{ display: "block", margin: "0 auto 7px" }} />
+                    {t("No fills logged yet.")}
+                  </span>
+                </p>
+              ) : (
+                <>
+                  <div className="dash-chart dash-chart--tall">
+                    <Chart<"bar" | "line", (number | null)[], string>
+                      type="bar"
+                      data={monthVarianceChart}
+                      options={monthChartOptions}
+                      plugins={[crosshairPlugin]}
+                    />
+                  </div>
+                  <p className="t-faint" style={{ fontSize: ".68rem", margin: "6px 0 0" }}>
+                    {t("Bars are the écart the sheet booked; the line is what the fleet actually burned that month. Variance is the area between them.")}
+                  </p>
+                </>
+              )}
+            </div>
+          </section>
+
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div style={{ minWidth: 0 }}>

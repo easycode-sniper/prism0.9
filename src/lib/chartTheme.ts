@@ -1,4 +1,4 @@
-import { Chart as ChartJS, type Plugin } from "chart.js";
+import { Chart as ChartJS, type Chart, type Plugin } from "chart.js";
 
 /**
  * Chart.js paints to a canvas, so it cannot read the CSS custom properties
@@ -154,6 +154,14 @@ const AXIS_GRID = "rgba(66, 67, 61, 0.55)";
 export function timeSeriesOptions(opts?: {
   /** Suffix appended to the tooltip value, e.g. " km". */
   unit?: string;
+  /**
+   * Full name for a point, for the tooltip title, where there is room
+   * for what the axis abbreviates. The variance-by-month panel passes
+   * this so a bar reads "Aug" on the axis and "August 2026" under the
+   * cursor — a reader comparing two bars should not have to notice the
+   * year is the same. Takes precedence over `days`.
+   */
+  fullName?: (dataIndex: number) => string;
   /** Y axis starts at zero unless a series never approaches it. */
   beginAtZero?: boolean;
   /**
@@ -173,6 +181,7 @@ export function timeSeriesOptions(opts?: {
 }) {
   const unit = opts?.unit ?? "";
   const days = opts?.days;
+  const fullName = opts?.fullName;
   const nullLabel = opts?.nullLabel ?? "no fill logged";
   return {
     responsive: true,
@@ -199,6 +208,10 @@ export function timeSeriesOptions(opts?: {
         displayColors: false,
         callbacks: {
           title: (items: { dataIndex: number; label: string }[]) => {
+            // The caller's own naming wins: a monthly series has months,
+            // not days, and formatting "2026-08-01" as a weekday would
+            // be worse than useless.
+            if (fullName) return fullName(items[0]?.dataIndex ?? -1);
             const iso = days?.[items[0]?.dataIndex ?? -1];
             if (!iso) return items[0]?.label ?? "";
             // Noon UTC, and formatted in UTC, so the day cannot slip a
@@ -262,8 +275,16 @@ export function dualAxisTimeSeriesOptions(opts: {
    * chart is busy enough to need it; in a third-width one it is not.
    */
   legend?: boolean;
+  /**
+   * Full name for a point, for the tooltip title, where there is room
+   * for what the axis abbreviates. The variance-by-month panel passes
+   * this so a bar reads "Aug" on the axis and "August 2026" under the
+   * cursor — a reader comparing two bars should not have to notice the
+   * year is the same. Takes precedence over `days`.
+   */
+  fullName?: (dataIndex: number) => string;
 }) {
-  const base = timeSeriesOptions({ days: opts.days });
+  const base = timeSeriesOptions({ days: opts.days, fullName: opts.fullName });
   const compact = (v: number) =>
     Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v);
 
@@ -400,8 +421,31 @@ export const LINE_SERIES = {
  * Passed per chart via react-chartjs-2's `plugins` prop rather than
  * registered globally: the doughnut has active elements too, and would
  * otherwise get a vertical line ruled across it.
+ *
+ * TYPED BY WHAT IT READS, not as `Plugin<"line" | "bar">`. That annotation
+ * compiles only by luck: `Plugin<TType>`'s `install` takes a
+ * `Chart<TType>`, so a plugin declared for the union is not assignable to
+ * the `Plugin<"line">` a `<Line>` prop demands — the hook parameters are
+ * contravariant and `Chart<"line">` is not a `Chart<"line" | "bar">`. It
+ * passed `tsc` anyway because the comparison is deep enough to hit
+ * TypeScript's relation-depth limiter, which returns "maybe" rather than
+ * "no" once the program is large enough — so whether it passed depended on
+ * how much else the project compiled. Adding an unrelated chart in
+ * September 2026 made four of the seven call sites fail at once, in a
+ * file the new chart never touched.
+ *
+ * Naming the three members instead (a supertype of every `Chart<TType>`,
+ * so the hooks stay fully checked) removes the question: the plugin is
+ * valid on any chart type, and the seven call sites that say otherwise
+ * were never right.
  */
-export const crosshairPlugin: Plugin<"line" | "bar"> = {
+type CrosshairChart = Pick<Chart<"line" | "bar">, "getActiveElements" | "chartArea" | "ctx">;
+
+/** The crosshair itself. See {@link CrosshairChart} for the type. */
+export const crosshairPlugin: {
+  id: string;
+  beforeDatasetsDraw: (chart: CrosshairChart, args: object) => void;
+} = {
   id: "prismCrosshair",
   beforeDatasetsDraw(chart) {
     const active = chart.getActiveElements();

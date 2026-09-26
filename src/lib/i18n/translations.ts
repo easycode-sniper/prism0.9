@@ -520,6 +520,17 @@ export const translations: Record<Language, Record<string, string>> = {
     "The live panels on the right still show the whole fleet.": "The live panels on the right still show the whole fleet.",
     "Trucks": "Trucks",
     "one source only": "one source only",
+    // ── Variance by month (migration 078) ──
+    "Variance by month": "Variance by month",
+    "Dinars lost to variance per calendar month, against the 45 L/100km the sheet assumes. Every month in the sheet — not the selected range.": "Dinars lost to variance per calendar month, against the 45 L/100km the sheet assumes. Every month in the sheet — not the selected range.",
+    "This month is still counting.": "This month is still counting.",
+    "Total over {n} months": "Total over {n} months",
+    "Bars are the écart the sheet booked; the line is what the fleet actually burned that month. Variance is the area between them.": "Bars are the écart the sheet booked; the line is what the fleet actually burned that month. Variance is the area between them.",
+    // Not the "in this period" wording the other fuel panels use: this
+    // one is range-independent, so an empty chart means the SHEET is
+    // empty, and saying "this period" would name a window the panel does
+    // not have.
+    "No fills logged yet.": "No fills logged yet.",
     "Distance between fills": "Distance between fills",
     "Kilometres covered between two fills, plotted on the day of the later fill — not distance driven that day.": "Kilometres covered between two fills, plotted on the day of the later fill — not distance driven that day.",
     "Moving": "Moving",
@@ -943,6 +954,13 @@ export const translations: Record<Language, Record<string, string>> = {
     "The live panels on the right still show the whole fleet.": "Les panneaux en direct à droite affichent toujours toute la flotte.",
     "Trucks": "Camions",
     "one source only": "une seule source",
+    // ── Variance par mois (migration 078) ──
+    "Variance by month": "Écart par mois",
+    "Dinars lost to variance per calendar month, against the 45 L/100km the sheet assumes. Every month in the sheet — not the selected range.": "Dinars perdus en écart mois par mois, par rapport aux 45 L/100 km supposés par la feuille. Tous les mois de la feuille — et non la période sélectionnée.",
+    "This month is still counting.": "Ce mois-ci est encore en cours.",
+    "Total over {n} months": "Total sur {n} mois",
+    "Bars are the écart the sheet booked; the line is what the fleet actually burned that month. Variance is the area between them.": "Les barres sont l'écart enregistré par la feuille ; la ligne est ce que la flotte a réellement consommé ce mois-là. L'écart est l'aire entre les deux.",
+    "No fills logged yet.": "Aucun plein enregistré pour l'instant.",
     "Distance between fills": "Distance entre deux pleins",
     "Kilometres covered between two fills, plotted on the day of the later fill — not distance driven that day.": "Kilomètres parcourus entre deux pleins, reportés au jour du second plein — et non la distance parcourue ce jour-là.",
     "Moving": "En marche",

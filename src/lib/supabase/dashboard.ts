@@ -16,6 +16,12 @@ import { UNLOADED_MIN_SECONDS } from "@/lib/constants";
 // Same reasoning as OpsRange above: a plain module, because this file is
 // "use server" and may only export async functions.
 import { type Scope, type ScopeOption, FLEET, scopeArgs } from "@/lib/dashboard/scope";
+// The month panel's row mapping and ordering are pure, so they live in a
+// plain module the check can import — see lib/fuel/months.ts. Re-exported
+// here because this is where the rest of the bundle's shapes are declared
+// and the page already imports its siblings from this file.
+import { type MonthlyVariance, toMonthlyVariance } from "@/lib/fuel/months";
+export type { MonthlyVariance };
 
 /** The caller's own Supabase client, created once per request by the one
  *  exported action below and handed to every reader. */
@@ -122,6 +128,30 @@ async function readFuelPeriodStats(
       unpairedAmountDa: num(r.unpaired_amount_da),
     },
   };
+}
+
+// ── The fleet's arc: variance by month (migration 078) ─────────
+//
+// The one fuel panel that does NOT take a range. Every other aggregate
+// here answers "what happened in the window the reader picked"; this one
+// answers "how have we been doing", which is a question about the whole
+// record — and handing it a range would let a reader select September
+// and watch it collapse to one bar, which is the entire reason the panel
+// exists. The fuel budget gauge (065) is the other range-independent
+// figure on the page, and both say so in their own sub-line.
+//
+// Ordered OLDEST FIRST for display, by toMonthlyVariance — the ordering
+// and the row mapping are one tested unit in lib/fuel/months.ts, because
+// a dropped reversal renders a correct set of numbers right-to-left and
+// nothing else in the build would notice.
+
+async function readMonthlyVariance(
+  supabase: Db,
+  limit = 24
+): Promise<{ months?: MonthlyVariance[]; error?: string }> {
+  const { data, error } = await supabase.rpc("fuel_variance_by_month", { p_limit: limit });
+  if (error) return { error: error.message };
+  return { months: toMonthlyVariance((data ?? []) as Record<string, unknown>[]) };
 }
 
 // ── The Staff & service pot (migration 076) ──────────────────
@@ -788,6 +818,9 @@ export interface DashboardBundle {
    *  sixth scorecard. Undefined on a refresh means "not requested", like
    *  options. */
   vhService?: VhServiceStats;
+  /** Every month in the sheet, oldest first. Range-independent by
+   *  design (078) — the "Variance by month" panel. */
+  months?: MonthlyVariance[];
   /** The first hard failure among the panels. They share a range and a
    *  round trip, so if one signature is wrong they all are; reporting
    *  seven copies of one sentence would only bury it. */
@@ -821,7 +854,7 @@ export async function getDashboardBundle(
   const speedingLimit = limits.speeding ?? 100;
   const stationSlices = limits.stations ?? 6;
 
-  const [f, s, dv, tv, sp, pf, st, mm, opt, bg, be, pt, ht, vh] = await Promise.all([
+  const [f, s, dv, tv, sp, pf, st, mm, opt, bg, be, pt, ht, vh, mo] = await Promise.all([
     readFuelPeriodStats(supabase, range, scope),
     readDashboardSeries(supabase, range, scope),
     readDriverVariance(supabase, variance, range),
@@ -850,6 +883,8 @@ export async function getDashboardBundle(
     // The sixth scorecard, same round trip, same scope — the staff &
     // service pot the other five aggregates filter out.
     readVhServiceStats(supabase, range, scope),
+    // The fleet's arc, same round trip and deliberately WITHOUT a range.
+    readMonthlyVariance(supabase),
   ]);
 
   return {
@@ -871,6 +906,7 @@ export async function getDashboardBundle(
     canEdit: be.canEdit,
     options: opt.options,
     vhService: vh.stats,
-    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? mm.error ?? bg.error ?? be.error ?? vh.error ?? undefined,
+    months: mo.months,
+    error: f.error ?? s.error ?? dv.error ?? tv.error ?? sp.error ?? st.error ?? mm.error ?? bg.error ?? be.error ?? vh.error ?? mo.error ?? undefined,
   };
 }

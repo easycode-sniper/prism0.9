@@ -86,19 +86,26 @@ check(
 
 // ── countBands ──
 //
-// The measured shape of the fleet on 2026-09-26, so the buckets are
-// pinned to something real rather than to a tidy example.
+// A shape, not a transcript. An earlier draft of this file claimed these
+// were the live figures and they were not: the tally that produced them
+// counted every 5-cell row on the page, which swept in the seven rows of
+// the leaderboard sitting directly above the roster. The leaderboard's
+// rows are all savings by construction — it is sorted by the rate — so
+// they inflated "saving" by exactly seven. The assertions below are
+// about ADDITIVITY and that does not depend on the numbers being real;
+// these are a plausible fleet, not a recorded one, and the comment says
+// so rather than implying a measurement that never happened.
 
 const DRIVERS = [
   ...Array(51).fill(-31720), // saving
   ...Array(7).fill(0), // at the limit
-  ...Array(45).fill(+40408), // losing
+  ...Array(38).fill(+40408), // losing
 ];
 const bands = countBands(DRIVERS, (v) => varianceBand(v), VARIANCE_BANDS);
 
 check("51 drivers are saving", bands.saving === 51, String(bands.saving));
 check("7 are exactly at the limit", bands.atLimit === 7, String(bands.atLimit));
-check("45 are losing", bands.losing === 45, String(bands.losing));
+check("38 are losing", bands.losing === 38, String(bands.losing));
 check(
   "the bands sum to the roster",
   Object.values(bands).reduce((a, b) => a + b, 0) === DRIVERS.length,
@@ -130,7 +137,8 @@ check(
 );
 check("and the nulls went to unrated, not at the limit", noisy.unrated === 3, JSON.stringify(noisy));
 
-// The 77-truck shape from the live page.
+// A 77-truck shape, likewise illustrative. What matters is that the
+// state nobody has heard of is counted rather than dropped.
 const TRUCKS = [
   ...Array(36).fill("improving"),
   ...Array(23).fill("stable"),

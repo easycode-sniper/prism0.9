@@ -300,13 +300,23 @@ function SortableTable<T>({
  * One ring, for the rail. The shape the two panels at the top of the
  * column already use, and nothing about it is new.
  *
- * NO LEGEND, deliberately — the station ring's reasoning, which is the
- * strongest argument on the page for leaving it out: 32px of legend is
- * a fifth of a 190px plot, and at 350px wide the names would have to be
- * abbreviated past the point of being words. The ring carries the shape,
- * the tooltip carries the count, and the foot line carries the one
- * number the panel exists to deliver. Three places to say three things,
- * none of them doing two jobs.
+ * THE LEGEND IS ON, which reverses the station ring's decision and
+ * needs the reason, because the two look like the same choice and are
+ * not. "Where we fill up" is seven arcs whose labels are station names
+ * — the current leader is 46 characters — so its legend could only be
+ * abbreviated past being words, and it turns the legend off and puts one
+ * ranked name in the foot instead. These bands are four and five short
+ * common words, and here the legend is the ONLY place they appear: a
+ * green arc and a red arc with nothing naming them is a picture of the
+ * taxonomy rather than a reading of it. Two lines is what it costs, and
+ * the ring is still 190px.
+ *
+ * `doughnutOptions` brings the legend with it, so the first draft of
+ * this panel had one by accident rather than by argument. It is now the
+ * argument above, and the band names are short enough that four fit a
+ * line at 350px — which is the constraint that decided them. "No verdict"
+ * was "No data" at one point and became "None" for the same reason: it
+ * was the one label that wrapped onto a line of its own.
  *
  * The slices are handed in already coloured and already in order. This
  * component draws; it does not decide what a "watch" truck is, because a
@@ -2338,7 +2348,7 @@ export default function DashboardPage() {
               { label: t("Steady"), value: intelRing?.counts.stable ?? 0, color: CHART_COLORS.dim },
               { label: t("Watch"), value: intelRing?.counts.watch ?? 0, color: CHART_COLORS.amber },
               { label: t("Worsening"), value: intelRing?.counts.up ?? 0, color: CHART_COLORS.red },
-              { label: t("No verdict"), value: intelRing?.counts.unclassified ?? 0, color: CHART_COLORS.empty },
+              { label: t("None"), value: intelRing?.counts.unclassified ?? 0, color: CHART_COLORS.empty },
             ]}
             foot={t("{steady} of {total} trucks are steady, {improving} improving.", {
               steady: nf(intelRing?.counts.stable ?? 0),

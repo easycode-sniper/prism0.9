@@ -178,6 +178,15 @@ export function timeSeriesOptions(opts?: {
    * Defaults to the fuel series' reading, which is the common case.
    */
   nullLabel?: string;
+  /**
+   * Pin the value axis, from seriesBounds(). Left off, Chart.js scales to
+   * the maximum — which is wrong whenever one reading sits far outside
+   * the rest. See lib/dashboard/bounds.ts for the row that made this
+   * necessary and for why the fix is to move the axis rather than to
+   * drop the point.
+   */
+  min?: number;
+  max?: number;
 }) {
   const unit = opts?.unit ?? "";
   const days = opts?.days;
@@ -196,6 +205,10 @@ export function timeSeriesOptions(opts?: {
       },
       y: {
         beginAtZero: opts?.beginAtZero ?? true,
+        // Undefined rather than omitted, so a caller that does not pin
+        // the axis gets Chart.js's own scaling and not a hardcoded 0.
+        min: opts?.min,
+        max: opts?.max,
         grid: { color: AXIS_GRID, drawTicks: false },
         border: { display: false },
         ticks: { color: CHART_COLORS.dim, maxTicksLimit: 5, padding: 8, font: { size: 10 } },
@@ -283,6 +296,12 @@ export function dualAxisTimeSeriesOptions(opts: {
    * year is the same. Takes precedence over `days`.
    */
   fullName?: (dataIndex: number) => string;
+  /** Pin the RIGHT axis, for the same reason as `min`/`max` on the left.
+   *  The rate is the series that suffers: it is a small number beside a
+   *  large one, so an outlier on it costs far more of the plot's height
+   *  than an outlier on the bars does. */
+  rightMin?: number;
+  rightMax?: number;
 }) {
   const base = timeSeriesOptions({ days: opts.days, fullName: opts.fullName });
   const compact = (v: number) =>
@@ -304,6 +323,12 @@ export function dualAxisTimeSeriesOptions(opts: {
       y1: {
         position: "right" as const,
         beginAtZero: opts.rightBeginAtZero ?? false,
+        // The same outlier problem as the left axis, and it is worse
+        // here: the right axis is the RATE, so a single prepaid-fuel row
+        // moves it while the bars beside it stay ordinary, and the line
+        // vanishes into the floor. See lib/dashboard/bounds.ts.
+        min: opts.rightMin,
+        max: opts.rightMax,
         grid: { display: false },
         border: { display: false },
         ticks: { color: CHART_COLORS.dim, maxTicksLimit: 5, padding: 8, font: { size: 10 } },
@@ -383,11 +408,34 @@ export const AREA_SERIES = {
   tension: 0.35,
 } as const;
 
-/** Bars, for a count per day. Rounded on top only, like the reference. */
+/** Bars, for a count per day. Rounded on top only, like the reference.
+ *
+ *  THE RADIUS IS SCRIPTABLE, and it has to be. A static 3px radius on a
+ *  bar narrower than 3px is not a rounded bar, it is a rendering fault:
+ *  the corner arcs overlap their neighbours and the row of bars comes out
+ *  as vertical streaks with gaps between them. On All time the trio
+ *  cells are 351px wide and the daily series is 259 days, so each bar is
+ *  about 1.35px — a third of the radius — and the "Litres bought per day"
+ *  panel looked broken rather than dense. The radius now drops to zero
+ *  below 6px of bar width, which is also where rounding stops reading as
+ *  rounding and starts reading as noise.
+ *
+ *  Read from the chart rather than passed in, because only the chart
+ *  knows how many bars it drew and how wide the plot ended up: the same
+ *  series is 22px per bar at 30 days in a full-width panel and 1.35px at
+ *  All time in a third-width one. */
 export const BAR_SERIES = {
   backgroundColor: "rgba(255, 252, 225, 0.22)",
   hoverBackgroundColor: "rgba(255, 252, 225, 0.42)",
-  borderRadius: 3,
+  borderRadius: (ctx: {
+    chart: { data: { datasets: { data: unknown[] }[] }; chartArea?: { width: number } };
+    datasetIndex: number;
+  }) => {
+    const count = ctx.chart.data.datasets[ctx.datasetIndex]?.data?.length ?? 0;
+    const width = ctx.chart.chartArea?.width ?? 0;
+    if (count <= 0 || width <= 0) return 3;
+    return width / count < 6 ? 0 : 3;
+  },
   borderSkipped: "bottom" as const,
   maxBarThickness: 22,
 } as const;

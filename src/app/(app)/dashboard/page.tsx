@@ -103,6 +103,7 @@ import {
   driverRating,
   intelClass,
   intelLabel,
+  INTEL_CHART_CEILING,
   leaderboardFloorKm,
   RATING_AT_LIMIT,
   RATING_DA_PER_STAR,
@@ -110,6 +111,9 @@ import {
   RATING_MIN,
   type IntelResult,
 } from "@/lib/fuel/intelligence";
+// Data-derived axis bounds. See the module for why the axis moves rather
+// than the offending point being dropped.
+import { seriesBounds } from "@/lib/dashboard/bounds";
 import { TruckIntelWindow } from "@/components/dashboard/TruckIntelWindow";
 import { SPEED_LIMIT_KMH } from "@/lib/constants";
 
@@ -1166,6 +1170,30 @@ export default function DashboardPage() {
     return { counts, total };
   }, [scopedDriverVariance]);
 
+  // ── The two daily charts that a single row could break ──
+  //
+  // Both of these draw the L/100km rate, and on 2026-09-26 they were
+  // unreadable over All time because of sheet row 9: a 10,000 DA prepaid
+  // fill on 2 January booked as 322.58 litres against 51km, which is
+  // 632 L/100km for that day. One reading out of 259 stretched the axis
+  // to 800 and flattened the other 258 into the bottom 5% of the plot.
+  //
+  // The row is real — a bulk purchase measured over the distance since
+  // the last fill, not a tank top-up — and nothing on this page adjusts a
+  // figure to look better, so the AXIS moves instead. The point is not
+  // deleted: it is drawn running off the top edge, which is visible.
+  //
+  // These bounds are NULL whenever the series is short or flat, and the
+  // chart options treat null as "do not pin", so a 7-day or 30-day view
+  // is exactly what it was before this existed. INTEL_CHART_CEILING is
+  // the hard cap: the percentile is the first line of defence and this is
+  // the one that holds when the sample is too small to have a percentile
+  // worth trusting.
+  const consumptionBounds = useMemo(
+    () => seriesBounds((series?.consumption ?? []).map((p) => p.value), { hardMax: INTEL_CHART_CEILING }),
+    [series]
+  );
+
   // ── Prism Intelligence ──
   //
   // The comparison window is the SAME value the load effect passes to
@@ -2100,6 +2128,11 @@ export default function DashboardPage() {
                       // same thing in a third of the width.
                       compactLeft: true,
                       legend: false,
+                      // Only the RIGHT axis, which carries the rate. The
+                      // bars are counts and start at zero, so their own
+                      // maximum is the right ceiling for them.
+                      rightMin: consumptionBounds?.min,
+                      rightMax: consumptionBounds?.max,
                     })}
                     plugins={[crosshairPlugin]}
                   />
@@ -2128,6 +2161,12 @@ export default function DashboardPage() {
                       unit: " L/100km",
                       beginAtZero: false,
                       days: consumptionDays,
+                      // The whole point of this panel. Unpinned it runs
+                      // 0-800 and the 45 L/100km the sheet assumes — the
+                      // one number the panel exists to compare against —
+                      // sits four pixels off the floor.
+                      min: consumptionBounds?.min,
+                      max: consumptionBounds?.max,
                     })}
                     plugins={[crosshairPlugin]}
                   />

@@ -17,9 +17,11 @@ import {
   Tooltip,
 } from "chart.js";
 import type { ChartData } from "chart.js";
-// <Chart>, not <Bar>, for the mixed cost chart: <Bar> is typed to "bar"
-// datasets only, and that one carries a line dataset on a second axis.
-import { Bar, Chart, Doughnut, Line } from "react-chartjs-2";
+// <Chart>, not <Bar>, for the mixed charts: <Bar> is typed to "bar"
+// datasets only, and those carry a line dataset on a second axis. <Bar>
+// itself was the deliveries panel's component and went with it; the two
+// bar-drawing charts on this page are both mixed, so both use <Chart>.
+import { Chart, Doughnut, Line } from "react-chartjs-2";
 import { ArrowRight, Fuel, Gauge, Info, MapPinOff, Pencil } from "lucide-react";
 import { useFleet } from "@/components/providers/FleetProvider";
 import {
@@ -105,12 +107,10 @@ import { TruckIntelWindow } from "@/components/dashboard/TruckIntelWindow";
 import { SPEED_LIMIT_KMH } from "@/lib/constants";
 
 // BarController and LineController are registered EXPLICITLY, not left to
-// react-chartjs-2's per-component auto-registration. The cost chart is a
-// mixed dataset — bars on one axis, a line on the other — rendered
-// through <Bar>, so it needs the line controller too; that arrives for
-// free today only because this page also renders a <Line> elsewhere.
-// Naming both here means dropping that other chart cannot silently break
-// this one.
+// react-chartjs-2's per-component auto-registration. Two charts here are
+// mixed datasets — bars on one axis, a line on the other — and they need
+// both controllers whichever component draws them. Naming both here means
+// dropping any single chart cannot silently break the others.
 ChartJS.register(
   ArcElement,
   BarController,
@@ -192,7 +192,6 @@ function SortableTable<T>({
   rowKey,
   unit,
   noteSuffix,
-  capClass = "table-wrap--capped",
 }: {
   rows: T[];
   columns: SortColumn<T>[];
@@ -203,11 +202,6 @@ function SortableTable<T>({
   /** Appended to the count line when sorted on the initial column, so the
    *  panel can say "worst first" in its own words. */
   noteSuffix?: (dir: "asc" | "desc") => string;
-  /** Which scroll cap to put on the table. The driver roster in the
-   *  rail asks for the taller one, because a 199-row list in a
-   *  five-row window is a scroll for its own sake; every other table
-   *  takes the default so this cannot leak. */
-  capClass?: string;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({
     key: initialKey,
@@ -244,7 +238,7 @@ function SortableTable<T>({
 
   return (
     <>
-      <div className={`table-wrap ${capClass}`} style={{ border: "none", borderRadius: 0 }}>
+      <div className="table-wrap table-wrap--capped" style={{ border: "none", borderRadius: 0 }}>
         <table>
           <thead>
             <tr>
@@ -1124,18 +1118,6 @@ export default function DashboardPage() {
 
   const labels = (series?.km ?? []).map((p) => axisLabel(p.day));
 
-  // The same sentence for deliveries, and for the same reason: client
-  // sites were not logged at all before runSiteZoneCheck shipped, so the
-  // early days of a long range are a gap rather than a fleet that
-  // delivered nothing. Only shown while the range actually reaches back
-  // past that boundary — inside the logged period there is nothing on
-  // screen to explain.
-  const deliveryGapDay = useMemo(() => {
-    const d = series?.deliveries;
-    if (!d || d.length === 0 || d[0].value != null) return null;
-    return d.find((p) => p.value != null)?.day ?? null;
-  }, [series]);
-
   // The ISO days behind each series, handed to the tooltip so it can name
   // the day in full where the axis only has room to abbreviate it. The
   // RPC returns every series dense over the same range, so these are the
@@ -1145,7 +1127,6 @@ export default function DashboardPage() {
   const litreDays = (series?.litres ?? []).map((p) => p.day);
   const consumptionDays = (series?.consumption ?? []).map((p) => p.day);
   const costDays = (series?.amountDa ?? []).map((p) => p.day);
-  const deliveryDays = (series?.deliveries ?? []).map((p) => p.day);
 
   const kmChart = {
     labels,
@@ -1159,14 +1140,19 @@ export default function DashboardPage() {
     ],
   };
 
-  // What the fleet DELIVERED, against the cost every other panel here
-  // measures. Bars rather than a line: this is a count of discrete
-  // events, and a line between two days would draw a slope through hours
-  // in which nothing happened.
-  const deliveriesChart = {
-    labels: (series?.deliveries ?? []).map((p) => axisLabel(p.day)),
-    datasets: [{ data: (series?.deliveries ?? []).map((p) => p.value), ...BAR_SERIES }],
-  };
+  // DELIVERIES IS NOT DRAWN, and that is a decision rather than an
+  // omission. The panel was here until the roster needed the width, and
+  // `series.deliveries` is still fetched every refresh and used nowhere.
+  //
+  // The series itself is intact and still in the bundle: migration 056
+  // counts it into dashboard_daily_series, the RPC returns it, and no
+  // migration is needed to bring the panel back. What went with it is
+  // this memo, the gap-day finder, and three translation keys — all
+  // removed rather than left orphaned, so the i18n check does not carry
+  // three permanent warnings that train the next reader to ignore it.
+  // It was cut because a complete, sortable, 199-row driver table at
+  // full width was judged worth more than the fleet's only output
+  // measure, and that is a judgement the owner made and can reverse.
 
   // Litres bought against what they bought — the same bars-plus-rate
   // shape as the cost panel. The rate is L/100km, NOT litres per
@@ -1834,48 +1820,100 @@ export default function DashboardPage() {
               the question this panel exists to raise.
 
               No new query. Migration 056 adds the count to
-              dashboard_daily_series, which this page already fetches. */}
+              dashboard_daily_series, which this page already fetches.
+
+              THE PANEL THAT RAISED THAT QUESTION IS GONE. It stood here
+              until the roster below needed the width, so the argument
+              above now describes the whole fuel side of this dashboard
+              rather than one panel of it: every remaining figure is a
+              numerator with no denominator. That is worth knowing, and it
+              is the first thing to fix if the roster ever moves again. */}
+          {/* The full driver roster, in the slot "Deliveries per day"
+              held, at the main column's full width.
+
+              DELIVERIES WENT HERE ON PURPOSE, twice over. It is the only
+              series on this page that cannot be recovered from anywhere
+              else on the dashboard — every other panel is fuel or fleet
+              state, and deliveries was the fleet's OUTPUT, the one
+              measure on the page of what the trucks are FOR. Losing it
+              is a real cost and it is written down here so nobody
+              rediscovers it later as a mystery.
+
+              What it bought: a 199-row, five-column, sortable table at
+              900px instead of 350px. Both attempts to put this table in
+              the rail failed the same way — five columns and a wrapping
+              driver name do not fit 320px, and putting the leaderboard
+              next to it does not make the table any narrower. At full
+              width every column is legible, the name never wraps, and a
+              row is a row.
+
+              The consequence, accepted knowingly: the rail goes back to
+              being roughly 700px short of this column. The alternative
+              was a complete table nobody could read, and that is the
+              worse instrument. The rail's dead space is the cheaper
+              mistake, and it is a mistake rather than a plan. */}
           <section className="panel dash-panel">
             <header className="dash-panel__head">
               <div style={{ minWidth: 0 }}>
-                <div className="dash-panel__title">{t("Deliveries per day")}</div>
+                <div className="dash-panel__title">{t("Fuel variance by driver")}</div>
                 <div className="dash-panel__sub">
-                  {/* Names the rule rather than leaving it implied. Site
-                      visits are logged with strict containment and no
-                      edge buffer, so a road clipping a geofence logs a
-                      truck that merely drove past — 67 of 264 rows are
-                      under the threshold, several of them about a minute.
-                      The same 25 minutes as Rapport Livraisons and the
-                      Déchargés panel, from one constant, so the three
-                      cannot disagree about what a delivery is. */}
-                  {t("A stop of more than 25 minutes at a client site. The plant is not a delivery.")}
-                  {range.to == null || range.to >= opsToday() ? " " + t("Today is still counting.") : ""}
-                  {deliveryGapDay ? " " + t("No site tracking before {day} — those days are a gap, not zero.", { day: deliveryGapDay }) : ""}
+                  {t("Against the sheet's assumed {rate} L/100km. Click a column to sort. A driver with one truck cannot be told apart from it.", { rate: ASSUMED_L_PER_100KM })}
                 </div>
               </div>
             </header>
-            <div className="dash-panel__body">
-              <div className="dash-chart dash-chart--tall">
-                {series ? (
-                  <Bar
-                    data={deliveriesChart}
-                    options={timeSeriesOptions({
-                      // No unit suffix, like the alerts panel: this is a
-                      // bare count, and "29 deliveries" in a tooltip is
-                      // an English word on a page that ships in French.
-                      days: deliveryDays,
-                      // The default reading is the fuel series'. A null
-                      // here is a day before client sites were logged at
-                      // all, and the tooltip has to say so or hovering an
-                      // empty slot reinstates the zero the gap avoids.
-                      nullLabel: t("not tracked yet"),
-                    })}
-                    plugins={[crosshairPlugin]}
-                  />
-                ) : (
-                  <ChartWaiting />
-                )}
-              </div>
+            <div className="dash-panel__body dash-panel__body--flush">
+              {scopedDriverVariance === null ? (
+                <VarianceWaiting />
+              ) : scopedDriverVariance.length === 0 ? (
+                <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
+              ) : (
+                <SortableTable
+                  rows={scopedDriverVariance}
+                  rowKey={(d) => d.driverName}
+                  initialKey="varianceDa"
+                  unit="drivers"
+                  noteSuffix={(dir) => (dir === "desc" ? t(" — worst first") : t(" — best first"))}
+                  columns={[
+                    {
+                      key: "driverName",
+                      label: t("Driver"),
+                      value: (d) => d.driverName,
+                      render: (d) => d.driverName,
+                      cellClass: () => "t-primary",
+                    },
+                    {
+                      key: "trucks",
+                      label: t("Truck"),
+                      value: (d) => d.trucks,
+                      // One truck is named, because that is the row's
+                      // confound and the reader should see which vehicle to
+                      // check. More than one and the count is the point:
+                      // the figure is no longer one truck's. This is also
+                      // why the leaderboard's Trucks column is a count and
+                      // not a plate — 121 of 199 drivers drove more than
+                      // one over the record.
+                      render: (d) =>
+                        d.truckCount > 1 ? `${d.truckCount} trucks` : (d.trucks ?? "—"),
+                      cellClass: (d) => (d.truckCount > 1 ? "t-dim" : "truck-id"),
+                    },
+                    { key: "km", label: t("Distance"), value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
+                    {
+                      key: "litresPer100Km",
+                      label: t("L/100km"),
+                      value: (d) => d.litresPer100Km,
+                      render: (d) => (d.litresPer100Km != null ? d.litresPer100Km.toFixed(2) : "—"),
+                      cellClass: (d) => consumptionClass(d.litresPer100Km),
+                    },
+                    {
+                      key: "varianceDa",
+                      label: t("Variance"),
+                      value: (d) => d.varianceDa,
+                      render: (d) => signed(d.varianceDa, "DA"),
+                      cellClass: (d) => signedClass(d.varianceDa),
+                    },
+                  ]}
+                />
+              )}
             </div>
           </section>
 
@@ -1982,10 +2020,11 @@ export default function DashboardPage() {
           </section>
         </div>
 
-          {/* The podium, in the slot the full roster used to hold. The
-              roster itself is now the last panel in the rail, which is
-              where a 199-row scrollable list belongs — and where the
-              column had 700px of nothing to put it. */}
+          {/* The podium, last in the main column, directly under the
+              complete roster above it. Podium then full list, in that
+              order: the seven names are the answer, the 199 rows two
+              inches below are the evidence, and a reader who disagrees
+              with the ranking can check it without leaving the page. */}
           <DriverLeaderboard board={leaderboard} ASSUMED={ASSUMED_L_PER_100KM} />
 
         </div>
@@ -2122,83 +2161,10 @@ export default function DashboardPage() {
               </Link>
             </div>
           </section>
-
-          {/* The full roster, last in the rail.
-              A 199-row sortable list is the one panel on this page that
-              wants to be scrolled rather than read, which is what a
-              narrow column is for; at full width it was a short panel
-              with a scrollbar in it and 700px of rail below it doing
-              nothing. `--tall` gives it twice the rows the capped
-              tables get, which is still a scroll — there is no height at
-              which all 199 fit, and pretending otherwise was the reason
-              it was capped in the first place. */}
-          <section className="panel dash-panel">
-            <header className="dash-panel__head">
-              <div style={{ minWidth: 0 }}>
-                <div className="dash-panel__title">{t("Fuel variance by driver")}</div>
-                <div className="dash-panel__sub">
-                  {t("Against the sheet's assumed {rate} L/100km. Click a column to sort. A driver with one truck cannot be told apart from it.", { rate: ASSUMED_L_PER_100KM })}
-                </div>
-              </div>
-            </header>
-            <div className="dash-panel__body dash-panel__body--flush">
-              {scopedDriverVariance === null ? (
-                <VarianceWaiting />
-              ) : scopedDriverVariance.length === 0 ? (
-                <p className="dash-empty">{t("No fill carries a variance yet.")}</p>
-              ) : (
-                <SortableTable
-                  rows={scopedDriverVariance}
-                  rowKey={(d) => d.driverName}
-                  initialKey="varianceDa"
-                  unit="drivers"
-                  capClass="table-wrap--capped-tall"
-                  noteSuffix={(dir) => (dir === "desc" ? t(" — worst first") : t(" — best first"))}
-                  columns={[
-                    {
-                      key: "driverName",
-                      label: t("Driver"),
-                      value: (d) => d.driverName,
-                      render: (d) => d.driverName,
-                      cellClass: () => "t-primary",
-                    },
-                    {
-                      key: "trucks",
-                      label: t("Truck"),
-                      value: (d) => d.trucks,
-                      // One truck is named, because that is the row's
-                      // confound and the reader should see which vehicle to
-                      // check. More than one and the count is the point:
-                      // the figure is no longer one truck's. This is also
-                      // why the leaderboard's Trucks column is a count —
-                      // 121 of 199 drivers drove more than one.
-                      render: (d) =>
-                        d.truckCount > 1 ? `${d.truckCount} trucks` : (d.trucks ?? "—"),
-                      cellClass: (d) => (d.truckCount > 1 ? "t-dim" : "truck-id"),
-                    },
-                    { key: "km", label: t("Distance"), value: (d) => d.km, render: (d) => `${nf(d.km)} km` },
-                    {
-                      key: "litresPer100Km",
-                      label: t("L/100km"),
-                      value: (d) => d.litresPer100Km,
-                      render: (d) => (d.litresPer100Km != null ? d.litresPer100Km.toFixed(2) : "—"),
-                      cellClass: (d) => consumptionClass(d.litresPer100Km),
-                    },
-                    {
-                      key: "varianceDa",
-                      label: t("Variance"),
-                      value: (d) => d.varianceDa,
-                      render: (d) => signed(d.varianceDa, "DA"),
-                      cellClass: (d) => signedClass(d.varianceDa),
-                    },
-                  ]}
-                />
-              )}
-            </div>
-          </section>
         </aside>
       </div>
     </div>
+
       {intelDetail && (
         <TruckIntelWindow
           truckId={intelDetail.truckId}

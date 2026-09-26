@@ -1242,7 +1242,7 @@ export default function DashboardPage() {
                     is built on (see intelligence.ts). */}
                 <div className="dash-panel__title">{t("PRISM INTELLIGENCE")}</div>
                 <div className="dash-panel__sub">
-                  {t("A deep dive into each vehicle's variance: what changed, by how much — and never who to blame.")}
+                  {t("PRISM INTELLIGENCE leverages an algorithmic deep dive to uncover the truth behind variance.")}
                 </div>
               </div>
             </header>

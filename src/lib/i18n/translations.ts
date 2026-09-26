@@ -435,7 +435,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "Litres": "Litres",
     "L/100km": "L/100km",
     "Cost per km": "Cost per km",
-    "A deep dive into each vehicle's variance: what changed, by how much — and never who to blame.": "A deep dive into each vehicle's variance: what changed, by how much — and never who to blame.",
+    "PRISM INTELLIGENCE leverages an algorithmic deep dive to uncover the truth behind variance.": "PRISM INTELLIGENCE leverages an algorithmic deep dive to uncover the truth behind variance.",
     "Fuel variance by driver": "Fuel variance by driver",
     "No fill carries a variance yet.": "No fill carries a variance yet.",
     // ── Prism Intelligence ──
@@ -857,7 +857,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "Litres": "Litres",
     "L/100km": "L/100km",
     "Cost per km": "Coût par km",
-    "A deep dive into each vehicle's variance: what changed, by how much — and never who to blame.": "Plongée dans l'écart de chaque véhicule : ce qui a changé, de combien — et jamais qui est responsable.",
+    "PRISM INTELLIGENCE leverages an algorithmic deep dive to uncover the truth behind variance.": "PRISM INTELLIGENCE s'appuie sur une analyse algorithmique approfondie pour révéler la vérité derrière l'écart.",
     "Fuel variance by driver": "Écart carburant par chauffeur",
     "No fill carries a variance yet.": "Aucun plein ne présente encore d'écart.",
     // ── Prism Intelligence ──

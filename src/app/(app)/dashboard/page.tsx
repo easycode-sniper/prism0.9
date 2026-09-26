@@ -457,7 +457,7 @@ function ExplainButton({ children, label }: { children: React.ReactNode; label: 
  * The only panel here that puts a RANK on a named person, so three
  * things are deliberate and none of them is styling:
  *
- *   - IT IS A TOP SEVEN, not the roster. The full sortable list of every
+ *   - IT IS A SHORTLIST, not the roster. The full sortable list of every
  *     driver is the panel directly above this one; a leaderboard that
  *     showed all 196 would be a league table, and a league table with
  *     named colleagues at the bottom of it is a different instrument
@@ -1075,11 +1075,24 @@ export default function DashboardPage() {
     );
   }, [variance, scope]);
 
+  // How many names the podium shows. Eight, and the number is a
+  // MEASUREMENT rather than a preference: the two dashboard columns are
+  // laid out to end level, and with seven rows the main column finished
+  // 37px short of the rail. One row is 44px, so eight overshoots by 7 —
+  // 0.3% of a 2396px page, against 37px of visible ragged edge at seven.
+  //
+  // It will not hold for every range, and cannot: a seven-day window
+  // leaves too few drivers clear the distance floor to fill a podium at
+  // all. This is tuned to the 30-day default, which is what the page
+  // opens on, and the empty state covers the short case.
+  const PODIUM_ROWS = 8;
+
   // ── The driver's podium ──
   //
-  // Seven rows out of ~196, so this is a LEADERBOARD and not another
-  // table: the reader is meant to take the top of it and stop. The full
-  // sortable roster is the panel this one sits above, one screen away.
+  // A handful of rows out of ~196, so this is a LEADERBOARD and not
+  // another table: the reader is meant to take the top of it and stop.
+  // The full sortable roster is the panel this one sits above, one
+  // screen away.
   //
   // Built from `scopedDriverVariance` rather than from `variance`, so it
   // obeys the same scope picker the rest of the fuel panels do. Scoped
@@ -1116,7 +1129,7 @@ export default function DashboardPage() {
       // were equally efficient, this one just drove more of it".
       rows: eligible
         .sort((a, b) => a.variancePer100Km! - b.variancePer100Km! || b.km - a.km)
-        .slice(0, 7)
+        .slice(0, PODIUM_ROWS)
         .map((d) => ({ ...d, rating: driverRating(d.variancePer100Km) })),
     };
   }, [scopedDriverVariance]);
@@ -2165,9 +2178,11 @@ export default function DashboardPage() {
 
           {/* The podium, last in the main column, directly under the
               complete roster above it. Podium then full list, in that
-              order: the seven names are the answer, the 199 rows two
-              inches below are the evidence, and a reader who disagrees
-              with the ranking can check it without leaving the page. */}
+              order: the eight names are the answer, the 199 rows two
+              inches above are the evidence, and a reader who disagrees
+              with the ranking can check it without leaving the page.
+              Eight rather than seven because that is what makes this
+              column end level with the rail — see PODIUM_ROWS. */}
           <DriverLeaderboard board={leaderboard} ASSUMED={ASSUMED_L_PER_100KM} />
 
         </div>
